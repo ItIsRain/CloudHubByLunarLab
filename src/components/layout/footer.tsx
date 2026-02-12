@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Github, Twitter, Linkedin, Instagram, Mail } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -46,14 +47,21 @@ export function Footer() {
         <div className="py-16 grid grid-cols-2 md:grid-cols-6 gap-8">
           {/* Brand & Newsletter */}
           <div className="col-span-2">
-            <Link href="/" className="flex items-center gap-2 mb-4">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                <span className="text-white font-display font-bold text-lg">C</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="font-display text-xl font-bold leading-tight">CloudHub</span>
-                <span className="text-xs text-muted-foreground">by Lunar Labs</span>
-              </div>
+            <Link href="/" className="flex items-center mb-4">
+              <Image
+                src="/CloudHubLight.svg"
+                alt="CloudHub"
+                width={140}
+                height={40}
+                className="h-9 w-auto dark:hidden"
+              />
+              <Image
+                src="/CloudHubDark.svg"
+                alt="CloudHub"
+                width={140}
+                height={40}
+                className="h-9 w-auto hidden dark:block"
+              />
             </Link>
             <p className="text-muted-foreground text-sm mb-6 max-w-xs">
               The modern platform for hosting events and hackathons. Build communities, manage participants, and create unforgettable experiences.

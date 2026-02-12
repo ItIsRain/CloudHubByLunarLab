@@ -28,7 +28,6 @@ import { HackathonCard } from "@/components/cards/hackathon-card";
 import {
   getFeaturedEvents,
   getActiveHackathons,
-  mockSponsors,
   mockPricingTiers,
 } from "@/lib/mock-data";
 
@@ -287,18 +286,23 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground">
                 Trusted by teams at
               </p>
-              <div className="flex items-center justify-center gap-8 opacity-60 grayscale">
-                {mockSponsors.slice(0, 5).map((sponsor) => (
-                  <Image
-                    key={sponsor.id}
-                    src={sponsor.logo}
-                    alt={sponsor.name}
-                    width={40}
-                    height={40}
-                    unoptimized
-                    className="h-8 w-auto"
-                  />
-                ))}
+              <div className="flex items-center justify-center gap-10 opacity-70">
+                {/* Ru'ya Logo */}
+                <Image
+                  src="/RuYaLogo.svg"
+                  alt="Ru'ya Careers UAE"
+                  width={120}
+                  height={40}
+                  className="h-8 w-auto brightness-0 dark:brightness-100"
+                />
+                {/* ADNOC Logo */}
+                <Image
+                  src="/AdnocLogo.svg"
+                  alt="ADNOC"
+                  width={120}
+                  height={40}
+                  className="h-8 w-auto brightness-0 dark:brightness-100"
+                />
               </div>
             </div>
           </motion.div>

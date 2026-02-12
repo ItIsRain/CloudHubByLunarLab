@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -101,14 +102,23 @@ export function Navbar() {
         <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2">
-              <div className="relative h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                <span className="text-white font-display font-bold text-lg">C</span>
-              </div>
-              <div className="hidden sm:flex flex-col">
-                <span className="font-display text-xl font-bold leading-tight">CloudHub</span>
-                <span className="text-[10px] text-muted-foreground leading-none">by Lunar Labs</span>
-              </div>
+            <Link href="/" className="flex items-center">
+              <Image
+                src="/CloudHubLight.svg"
+                alt="CloudHub"
+                width={140}
+                height={40}
+                className="h-9 w-auto dark:hidden"
+                priority
+              />
+              <Image
+                src="/CloudHubDark.svg"
+                alt="CloudHub"
+                width={140}
+                height={40}
+                className="h-9 w-auto hidden dark:block"
+                priority
+              />
             </Link>
 
             {/* Desktop Navigation */}
