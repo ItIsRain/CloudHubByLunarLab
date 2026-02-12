@@ -147,6 +147,7 @@ export default function HackathonDetailPage() {
           fill
           className="object-cover"
           priority
+          unoptimized
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
 
@@ -164,7 +165,7 @@ export default function HackathonDetailPage() {
                 </div>
                 {hackathon.logo && (
                   <div className="w-14 h-14 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center mb-3 overflow-hidden">
-                    <Image src={hackathon.logo} alt="" width={40} height={40} className="object-contain" />
+                    <Image src={hackathon.logo} alt="" width={40} height={40} className="object-contain" unoptimized/>
                   </div>
                 )}
                 <h1 className="font-display text-4xl sm:text-5xl font-bold mb-2">{hackathon.name}</h1>
@@ -544,6 +545,7 @@ export default function HackathonDetailPage() {
                                 alt={sponsor.name}
                                 width={tier === "platinum" ? 80 : 48}
                                 height={tier === "platinum" ? 80 : 48}
+                                unoptimized
                                 className="rounded-lg mb-3"
                               />
                               <p className="font-medium">{sponsor.name}</p>

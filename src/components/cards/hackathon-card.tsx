@@ -118,6 +118,7 @@ export function HackathonCard({
             src={hackathon.coverImage || "/placeholder-hackathon.jpg"}
             alt={hackathon.name}
             fill
+            unoptimized
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
 
@@ -158,6 +159,7 @@ export function HackathonCard({
                   alt={hackathon.name}
                   width={48}
                   height={48}
+                  unoptimized
                   className="object-contain"
                 />
               </div>
@@ -206,6 +208,7 @@ export function HackathonCard({
                       alt={sponsor.name}
                       width={20}
                       height={20}
+                      unoptimized
                       className="rounded-full"
                     />
                   </div>
@@ -246,6 +249,7 @@ export function HackathonCard({
             src={hackathon.coverImage || "/placeholder-hackathon.jpg"}
             alt={hackathon.name}
             fill
+            unoptimized
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />

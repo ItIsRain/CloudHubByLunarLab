@@ -24,7 +24,7 @@ const registerSchema = z.object({
     .min(8, "Password must be at least 8 characters")
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[0-9]/, "Password must contain at least one number"),
-  roles: z.array(z.string()).min(1, "Please select at least one role"),
+  role: z.string().min(1, "Please select a role"),
   acceptTerms: z.boolean().refine((val) => val === true, {
     message: "You must accept the terms and conditions",
   }),
@@ -69,19 +69,15 @@ export default function RegisterPage() {
       name: "",
       email: "",
       password: "",
-      roles: [],
+      role: "",
       acceptTerms: false,
     },
   });
 
-  const selectedRoles = watch("roles");
+  const selectedRole = watch("role");
 
-  const toggleRole = (role: string) => {
-    const current = selectedRoles || [];
-    const updated = current.includes(role)
-      ? current.filter((r) => r !== role)
-      : [...current, role];
-    setValue("roles", updated);
+  const selectRole = (role: string) => {
+    setValue("role", role);
   };
 
   const onSubmit = async (data: RegisterFormData) => {
@@ -90,7 +86,7 @@ export default function RegisterPage() {
         name: data.name,
         email: data.email,
         password: data.password,
-        roles: data.roles as UserRole[],
+        roles: [data.role] as UserRole[],
       });
       if (success) {
         toast.success("Account created successfully!");
@@ -262,17 +258,17 @@ export default function RegisterPage() {
         {/* Role Selection */}
         <div>
           <label className="block text-sm font-medium mb-2">
-            I want to... <span className="text-muted-foreground">(select all that apply)</span>
+            I want to...
           </label>
           <div className="grid grid-cols-2 gap-3">
             {roleOptions.map((role) => (
               <button
                 key={role.value}
                 type="button"
-                onClick={() => toggleRole(role.value)}
+                onClick={() => selectRole(role.value)}
                 className={cn(
                   "p-4 rounded-xl border-2 text-left transition-all",
-                  selectedRoles?.includes(role.value)
+                  selectedRole === role.value
                     ? "border-primary bg-primary/5"
                     : "border-border hover:border-primary/50"
                 )}
@@ -284,9 +280,9 @@ export default function RegisterPage() {
               </button>
             ))}
           </div>
-          {errors.roles && (
+          {errors.role && (
             <p className="text-sm text-destructive mt-1">
-              {errors.roles.message}
+              {errors.role.message}
             </p>
           )}
         </div>

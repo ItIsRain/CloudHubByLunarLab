@@ -51,6 +51,7 @@ export function EventCard({
               src={event.coverImage || "/placeholder-event.jpg"}
               alt={event.title}
               fill
+              unoptimized
               className="object-cover"
             />
           </div>
@@ -84,6 +85,7 @@ export function EventCard({
             src={event.coverImage || "/placeholder-event.jpg"}
             alt={event.title}
             fill
+            unoptimized
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
 
@@ -179,6 +181,7 @@ export function EventCard({
             src={event.coverImage || "/placeholder-event.jpg"}
             alt={event.title}
             fill
+            unoptimized
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
