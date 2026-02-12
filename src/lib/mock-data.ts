@@ -14,6 +14,9 @@ import {
   Prize,
   JudgingCriteria,
   Mentor,
+  Certificate,
+  Conversation,
+  Message,
 } from "./types";
 
 // Helper function to generate dates
@@ -829,7 +832,39 @@ Whether you're an AI expert or just getting started, BuildAI welcomes all skill 
       { id: "prize-6", name: "Community Choice", place: "special", value: 1000, currency: "USD", type: "cash" },
     ],
     sponsors: mockSponsors.slice(0, 6),
-    mentors: [],
+    mentors: [
+      {
+        id: "mentor-1",
+        user: mockUsers[2],
+        expertise: ["Machine Learning", "Python", "TensorFlow"],
+        availability: [
+          { id: "slot-1", date: addDays(21), startTime: "10:00", endTime: "11:00", isBooked: false },
+          { id: "slot-2", date: addDays(21), startTime: "14:00", endTime: "15:00", isBooked: true, bookedBy: "user-1" },
+          { id: "slot-3", date: addDays(22), startTime: "10:00", endTime: "11:00", isBooked: false },
+        ],
+        bio: "AI researcher with 15+ years of experience. Happy to help with ML architecture and model optimization.",
+      },
+      {
+        id: "mentor-2",
+        user: mockUsers[1],
+        expertise: ["UI/UX", "Design Systems", "Figma"],
+        availability: [
+          { id: "slot-4", date: addDays(21), startTime: "11:00", endTime: "12:00", isBooked: false },
+          { id: "slot-5", date: addDays(22), startTime: "13:00", endTime: "14:00", isBooked: false },
+        ],
+        bio: "Lead designer helping teams create polished, user-friendly interfaces.",
+      },
+      {
+        id: "mentor-3",
+        user: mockUsers[4],
+        expertise: ["DevOps", "Cloud", "Docker", "Kubernetes"],
+        availability: [
+          { id: "slot-6", date: addDays(22), startTime: "09:00", endTime: "10:00", isBooked: false },
+          { id: "slot-7", date: addDays(22), startTime: "15:00", endTime: "16:00", isBooked: true, bookedBy: "user-3" },
+        ],
+        bio: "DevOps engineer who can help you deploy and scale your hackathon project.",
+      },
+    ],
     judges: mockUsers.slice(2, 5),
     judgingCriteria: createJudgingCriteria(),
     rules: `# Rules
@@ -894,7 +929,37 @@ Over $100,000 in prizes from leading Web3 protocols. Free food, swag, and worksh
       { id: "eth-prize-3", name: "3rd Place", place: 3, value: 10000, currency: "USD", type: "cash" },
     ],
     sponsors: mockSponsors.filter(s => s.tier === "platinum" || s.tier === "gold"),
-    mentors: [],
+    mentors: [
+      {
+        id: "mentor-4",
+        user: mockUsers[3],
+        expertise: ["Solidity", "Web3", "Smart Contracts", "DeFi"],
+        availability: [
+          { id: "slot-8", date: addDays(0), startTime: "10:00", endTime: "11:00", isBooked: false },
+          { id: "slot-9", date: addDays(0), startTime: "16:00", endTime: "17:00", isBooked: false },
+        ],
+        bio: "Web3 engineer with deep expertise in Solidity and smart contract security.",
+      },
+      {
+        id: "mentor-5",
+        user: mockUsers[0],
+        expertise: ["React", "TypeScript", "Full-Stack"],
+        availability: [
+          { id: "slot-10", date: addDays(0), startTime: "11:00", endTime: "12:00", isBooked: true, bookedBy: "user-4" },
+          { id: "slot-11", date: addDays(1), startTime: "09:00", endTime: "10:00", isBooked: false },
+        ],
+        bio: "Full-stack developer helping teams build polished frontends for their dApps.",
+      },
+      {
+        id: "mentor-6",
+        user: mockUsers[4],
+        expertise: ["DevOps", "AWS", "Infrastructure"],
+        availability: [
+          { id: "slot-12", date: addDays(1), startTime: "14:00", endTime: "15:00", isBooked: false },
+        ],
+        bio: "Infrastructure specialist for deploying and scaling Web3 projects.",
+      },
+    ],
     judges: mockUsers.slice(3, 6),
     judgingCriteria: createJudgingCriteria(),
     rules: "Standard ETHGlobal rules apply. Check website for full details.",
@@ -1506,3 +1571,185 @@ export const getUpcomingEvents = () => mockEvents.filter(e => new Date(e.startDa
 export const getActiveHackathons = () => mockHackathons.filter(h => h.status !== "completed").slice(0, 4);
 export const getRecentSubmissions = () => mockSubmissions.slice(0, 8);
 export const getTopSponsors = () => mockSponsors.filter(s => s.tier === "platinum" || s.tier === "gold");
+
+// =====================================================
+// Mock Certificates
+// =====================================================
+export const mockCertificates: Certificate[] = [
+  {
+    id: "cert-1",
+    userId: "user-1",
+    hackathonId: "hack-3",
+    type: "winner",
+    title: "1st Place — Climate Hack 2024",
+    description: "Awarded for winning 1st place with the EcoTrack AI project at Climate Hack 2024.",
+    issuedAt: subtractDays(35),
+    verificationCode: "CH24-WIN-001",
+  },
+  {
+    id: "cert-2",
+    userId: "user-1",
+    hackathonId: "hack-1",
+    type: "participation",
+    title: "BuildAI 2024 Participant",
+    description: "Certificate of participation in BuildAI 2024 hackathon.",
+    issuedAt: subtractDays(10),
+    verificationCode: "BA24-PAR-047",
+  },
+  {
+    id: "cert-3",
+    userId: "user-1",
+    eventId: "event-1",
+    type: "participation",
+    title: "AI Summit 2024 Attendee",
+    description: "Attended the AI Summit 2024 conference in San Francisco.",
+    issuedAt: subtractDays(60),
+    verificationCode: "AIS24-ATT-123",
+  },
+  {
+    id: "cert-4",
+    userId: "user-2",
+    hackathonId: "hack-3",
+    type: "mentor",
+    title: "Climate Hack 2024 Mentor",
+    description: "Recognized for mentoring participants at Climate Hack 2024.",
+    issuedAt: subtractDays(35),
+    verificationCode: "CH24-MEN-008",
+  },
+  {
+    id: "cert-5",
+    userId: "user-3",
+    hackathonId: "hack-3",
+    type: "judge",
+    title: "Climate Hack 2024 Judge",
+    description: "Served as a judge for the Climate Hack 2024 hackathon.",
+    issuedAt: subtractDays(35),
+    verificationCode: "CH24-JDG-003",
+  },
+  {
+    id: "cert-6",
+    userId: "user-1",
+    hackathonId: "hack-2",
+    type: "participation",
+    title: "ETHGlobal SF Participant",
+    description: "Certificate of participation in ETHGlobal San Francisco hackathon.",
+    issuedAt: subtractDays(5),
+    verificationCode: "ETH24-PAR-234",
+  },
+  {
+    id: "cert-7",
+    userId: "user-3",
+    hackathonId: "hack-1",
+    type: "organizer",
+    title: "BuildAI 2024 Organizer",
+    description: "Lead organizer of the BuildAI 2024 hackathon.",
+    issuedAt: subtractDays(1),
+    verificationCode: "BA24-ORG-001",
+  },
+  {
+    id: "cert-8",
+    userId: "user-4",
+    hackathonId: "hack-2",
+    type: "winner",
+    title: "2nd Place — ETHGlobal SF",
+    description: "Awarded 2nd place at ETHGlobal San Francisco with the GreenChain project.",
+    issuedAt: subtractDays(3),
+    verificationCode: "ETH24-WIN-002",
+  },
+];
+
+// =====================================================
+// Mock Conversations & Messages
+// =====================================================
+export const mockMessages: Message[] = [
+  // Conversation 1 — Alex & Sarah
+  { id: "msg-1", conversationId: "conv-1", senderId: "user-1", sender: mockUsers[0], content: "Hey Sarah! Are you joining BuildAI 2024? We need a designer on our team.", isRead: true, createdAt: subtractDays(3) + "T10:00:00" },
+  { id: "msg-2", conversationId: "conv-1", senderId: "user-2", sender: mockUsers[1], content: "Hi Alex! Yes, I'm definitely interested. What track are you targeting?", isRead: true, createdAt: subtractDays(3) + "T10:15:00" },
+  { id: "msg-3", conversationId: "conv-1", senderId: "user-1", sender: mockUsers[0], content: "AI/ML Innovation track. We have a great idea for an AI-powered productivity tool.", isRead: true, createdAt: subtractDays(3) + "T10:20:00" },
+  { id: "msg-4", conversationId: "conv-1", senderId: "user-2", sender: mockUsers[1], content: "That sounds awesome! I'd love to handle the design and UX.", isRead: true, createdAt: subtractDays(3) + "T10:25:00" },
+  { id: "msg-5", conversationId: "conv-1", senderId: "user-1", sender: mockUsers[0], content: "Perfect! I'll send you the team invite. Welcome aboard! 🎉", isRead: false, createdAt: subtractDays(2) + "T09:00:00" },
+  // Conversation 2 — Alex & Marcus
+  { id: "msg-6", conversationId: "conv-2", senderId: "user-3", sender: mockUsers[2], content: "Hey Alex, just reviewed your Climate Hack submission. Amazing work on EcoTrack AI!", isRead: true, createdAt: subtractDays(40) + "T14:00:00" },
+  { id: "msg-7", conversationId: "conv-2", senderId: "user-1", sender: mockUsers[0], content: "Thanks Marcus! Your feedback during mentoring really helped us refine the ML model.", isRead: true, createdAt: subtractDays(40) + "T14:30:00" },
+  { id: "msg-8", conversationId: "conv-2", senderId: "user-3", sender: mockUsers[2], content: "Happy to help! Have you thought about turning it into a real product? I know some investors who might be interested.", isRead: true, createdAt: subtractDays(39) + "T10:00:00" },
+  { id: "msg-9", conversationId: "conv-2", senderId: "user-1", sender: mockUsers[0], content: "Absolutely! We've been discussing that as a team. Would love an intro.", isRead: true, createdAt: subtractDays(39) + "T11:00:00" },
+  { id: "msg-10", conversationId: "conv-2", senderId: "user-3", sender: mockUsers[2], content: "I'll set up a meeting next week. Let me know your availability.", isRead: false, createdAt: subtractDays(1) + "T16:00:00" },
+  // Conversation 3 — Alex & Emma
+  { id: "msg-11", conversationId: "conv-3", senderId: "user-4", sender: mockUsers[3], content: "Hey! Are you coming to ETHGlobal SF? I heard you're interested in Web3.", isRead: true, createdAt: subtractDays(10) + "T09:00:00" },
+  { id: "msg-12", conversationId: "conv-3", senderId: "user-1", sender: mockUsers[0], content: "Hi Emma! Yes, I registered yesterday. Still looking for a team though.", isRead: true, createdAt: subtractDays(10) + "T09:30:00" },
+  { id: "msg-13", conversationId: "conv-3", senderId: "user-4", sender: mockUsers[3], content: "We could team up! I'm working on a DeFi project and need a frontend dev.", isRead: true, createdAt: subtractDays(10) + "T09:45:00" },
+  { id: "msg-14", conversationId: "conv-3", senderId: "user-1", sender: mockUsers[0], content: "Sounds great! Let's chat more about it over coffee before the event.", isRead: true, createdAt: subtractDays(10) + "T10:00:00" },
+  // Conversation 4 — Alex & David
+  { id: "msg-15", conversationId: "conv-4", senderId: "user-5", sender: mockUsers[4], content: "Alex, can you help me set up the CI/CD pipeline for our hackathon project?", isRead: true, createdAt: subtractDays(5) + "T13:00:00" },
+  { id: "msg-16", conversationId: "conv-4", senderId: "user-1", sender: mockUsers[0], content: "Sure David! I'll push the GitHub Actions config tonight.", isRead: true, createdAt: subtractDays(5) + "T13:30:00" },
+  { id: "msg-17", conversationId: "conv-4", senderId: "user-5", sender: mockUsers[4], content: "Thanks! Also, do we need to containerize the ML model or can we use serverless?", isRead: true, createdAt: subtractDays(5) + "T14:00:00" },
+  { id: "msg-18", conversationId: "conv-4", senderId: "user-1", sender: mockUsers[0], content: "Let's go with serverless for the hackathon. Faster to deploy and cheaper.", isRead: true, createdAt: subtractDays(5) + "T14:15:00" },
+  { id: "msg-19", conversationId: "conv-4", senderId: "user-5", sender: mockUsers[4], content: "Good call. I'll set up the Lambda functions.", isRead: false, createdAt: subtractDays(4) + "T09:00:00" },
+  // Conversation 5 — Alex & James (user-6)
+  { id: "msg-20", conversationId: "conv-5", senderId: "user-6", sender: mockUsers[5], content: "Hi Alex! I saw your profile and I'm impressed by your hackathon record. Any tips for a first-timer?", isRead: true, createdAt: subtractDays(7) + "T11:00:00" },
+  { id: "msg-21", conversationId: "conv-5", senderId: "user-1", sender: mockUsers[0], content: "Hey James! My biggest tip: focus on a working demo over a perfect codebase. Judges want to see impact.", isRead: true, createdAt: subtractDays(7) + "T11:30:00" },
+  { id: "msg-22", conversationId: "conv-5", senderId: "user-6", sender: mockUsers[5], content: "That makes sense. Should I go solo or find a team?", isRead: true, createdAt: subtractDays(7) + "T12:00:00" },
+  { id: "msg-23", conversationId: "conv-5", senderId: "user-1", sender: mockUsers[0], content: "Definitely find a team! Diverse skills win hackathons. Check the Teams page to find open teams.", isRead: true, createdAt: subtractDays(7) + "T12:15:00" },
+];
+
+export const mockConversations: Conversation[] = [
+  {
+    id: "conv-1",
+    participants: [mockUsers[0], mockUsers[1]],
+    lastMessage: mockMessages[4],
+    unreadCount: 1,
+    updatedAt: subtractDays(2) + "T09:00:00",
+  },
+  {
+    id: "conv-2",
+    participants: [mockUsers[0], mockUsers[2]],
+    lastMessage: mockMessages[9],
+    unreadCount: 1,
+    updatedAt: subtractDays(1) + "T16:00:00",
+  },
+  {
+    id: "conv-3",
+    participants: [mockUsers[0], mockUsers[3]],
+    lastMessage: mockMessages[13],
+    unreadCount: 0,
+    updatedAt: subtractDays(10) + "T10:00:00",
+  },
+  {
+    id: "conv-4",
+    participants: [mockUsers[0], mockUsers[4]],
+    lastMessage: mockMessages[18],
+    unreadCount: 1,
+    updatedAt: subtractDays(4) + "T09:00:00",
+  },
+  {
+    id: "conv-5",
+    participants: [mockUsers[0], mockUsers[5]],
+    lastMessage: mockMessages[23],
+    unreadCount: 0,
+    updatedAt: subtractDays(7) + "T12:15:00",
+  },
+];
+
+// =====================================================
+// Additional Helpers
+// =====================================================
+export const getCertificatesForUser = (userId: string) =>
+  mockCertificates.filter((c) => c.userId === userId);
+
+export const getConversationsForUser = (_userId: string) =>
+  mockConversations;
+
+export const getMessagesForConversation = (conversationId: string) =>
+  mockMessages.filter((m) => m.conversationId === conversationId);
+
+export const getBookmarkedEvents = () =>
+  mockEvents.filter((e) => e.isBookmarked);
+
+export const getBookmarkedHackathons = () =>
+  mockHackathons.filter((h) => h.isBookmarked);
+
+export const getSubmissionsForUser = (_userId: string) =>
+  mockSubmissions.filter((_, i) => i < 5);
+
+export const getTeamsForUser = (_userId: string) =>
+  mockTeams.filter((_, i) => i < 4);
