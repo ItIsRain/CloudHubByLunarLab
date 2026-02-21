@@ -17,6 +17,11 @@ export const metadata: Metadata = {
     "ticketing",
     "community",
   ],
+  icons: {
+    icon: "/CloudHub-Favicon.svg",
+    shortcut: "/CloudHub-Favicon.svg",
+    apple: "/CloudHub-Favicon.svg",
+  },
 };
 
 export default function RootLayout({
