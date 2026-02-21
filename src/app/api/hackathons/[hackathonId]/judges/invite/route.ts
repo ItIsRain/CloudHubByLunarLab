@@ -71,7 +71,7 @@ export async function POST(
 
     const token = invitation.token as string;
     const hackathonName = hackathon.name as string;
-    const judgeUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://1i1.ae"}/judge/${hackathonId}?token=${token}`;
+    const judgeUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/judge/${hackathonId}?token=${token}`;
 
     await sendEmail({
       to: email,

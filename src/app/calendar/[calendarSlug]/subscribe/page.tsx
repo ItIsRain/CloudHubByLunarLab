@@ -68,7 +68,8 @@ export default function CalendarSubscribePage() {
 
   const [copied, setCopied] = React.useState(false);
 
-  const calendarUrl = `https://cloudhub.dev/api/calendars/${calendarSlug}/feed.ics`;
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const calendarUrl = `${baseUrl}/api/calendars/${calendarSlug}/feed.ics`;
 
   if (!community) {
     return (

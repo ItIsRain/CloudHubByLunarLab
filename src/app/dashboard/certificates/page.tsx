@@ -129,7 +129,7 @@ export default function CertificatesPage() {
         open={shareOpen}
         onOpenChange={setShareOpen}
         title={shareTitle}
-        url={`https://cloudhub.dev/verify/${shareTitle}`}
+        url={`${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/verify/${shareTitle}`}
       />
     </div>
   );

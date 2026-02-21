@@ -59,7 +59,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
       <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
         Your account is all set up. Start exploring events and hackathons, or create your own.
       </p>
-      <a href="https://1i1.ae/explore" style="display:inline-block;padding:12px 32px;background:#e8440a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">
+      <a href="${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/explore" style="display:inline-block;padding:12px 32px;background:#e8440a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">
         Explore Events
       </a>
     `),

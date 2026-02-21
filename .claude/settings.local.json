@@ -19,7 +19,8 @@
       "Bash(GIT_SEQUENCE_EDITOR=\"sed -i ''3s/pick/fixup/''\" git rebase -i HEAD~3)",
       "mcp__plugin_supabase_supabase__apply_migration",
       "Bash(head:*)",
-      "mcp__plugin_supabase_supabase__execute_sql"
+      "mcp__plugin_supabase_supabase__execute_sql",
+      "mcp__plugin_supabase_supabase__list_tables"
     ]
   }
 }

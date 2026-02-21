@@ -1,28 +1,11 @@
-import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { QueryProvider } from "@/providers/query-provider";
 import { AuthProvider } from "@/providers/auth-provider";
 import { Toaster } from "sonner";
+import { baseMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "CloudHub by Lunar Labs | Modern Event & Hackathon Platform",
-  description:
-    "The modern platform for hosting events and hackathons. Build communities, manage participants, and create unforgettable experiences.",
-  keywords: [
-    "events",
-    "hackathons",
-    "conferences",
-    "meetups",
-    "ticketing",
-    "community",
-  ],
-  icons: {
-    icon: "/CloudHub-Favicon.svg",
-    shortcut: "/CloudHub-Favicon.svg",
-    apple: "/CloudHub-Favicon.svg",
-  },
-};
+export const metadata = baseMetadata;
 
 export default function RootLayout({
   children,

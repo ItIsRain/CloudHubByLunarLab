@@ -100,7 +100,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripe_subscription_id: subscriptionId,
       subscription_tier: "pro",
       subscription_status: mapStripeStatus(subscription.status),
-      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
     }).eq("id", userId);
   }
 }
@@ -115,7 +115,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     stripe_subscription_id: subscription.id,
     subscription_tier: isActive ? "pro" : "free",
     subscription_status: mapStripeStatus(subscription.status),
-    current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+    current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
   }).eq("id", userId);
 }
 
@@ -132,12 +132,13 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  if (!invoice.subscription) return;
+  const sub = (invoice as unknown as { subscription: string | { id: string } | null }).subscription;
+  if (!sub) return;
 
   const subscriptionId =
-    typeof invoice.subscription === "string"
-      ? invoice.subscription
-      : invoice.subscription.id;
+    typeof sub === "string"
+      ? sub
+      : sub.id;
 
   // Look up user by subscription ID
   const { data: profile } = await supabaseAdmin
