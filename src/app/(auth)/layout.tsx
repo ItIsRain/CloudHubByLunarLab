@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
 
 export default function AuthLayout({
@@ -45,14 +46,15 @@ export default function AuthLayout({
         {/* Content */}
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-              <span className="font-display font-bold text-xl">C</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="font-display text-2xl font-bold leading-tight">CloudHub</span>
-              <span className="text-xs text-white/60">by Lunar Labs</span>
-            </div>
+          <Link href="/" className="flex items-center">
+            <Image
+              src="/CloudHubDark.svg"
+              alt="CloudHub"
+              width={180}
+              height={50}
+              className="h-12 w-auto"
+              priority
+            />
           </Link>
 
           {/* Main Content */}
@@ -100,14 +102,23 @@ export default function AuthLayout({
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden mb-8 text-center">
-            <Link href="/" className="inline-flex items-center gap-2">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                <span className="text-white font-display font-bold text-lg">C</span>
-              </div>
-              <div className="flex flex-col items-start">
-                <span className="font-display text-xl font-bold leading-tight">CloudHub</span>
-                <span className="text-xs text-muted-foreground">by Lunar Labs</span>
-              </div>
+            <Link href="/" className="inline-flex items-center">
+              <Image
+                src="/CloudHubLight.svg"
+                alt="CloudHub"
+                width={160}
+                height={45}
+                className="h-11 w-auto dark:hidden"
+                priority
+              />
+              <Image
+                src="/CloudHubDark.svg"
+                alt="CloudHub"
+                width={160}
+                height={45}
+                className="h-11 w-auto hidden dark:block"
+                priority
+              />
             </Link>
           </div>
 

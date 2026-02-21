@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,10 @@ import {
   CheckCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mockNotifications } from "@/lib/mock-data";
+import {
+  useNotifications,
+  useMarkAllNotificationsRead,
+} from "@/hooks/use-notifications";
 import type { NotificationType } from "@/lib/types";
 
 interface NotificationPanelProps {
@@ -85,14 +87,14 @@ export function NotificationPanel({
   open,
   onOpenChange,
 }: NotificationPanelProps) {
-  const [notifications, setNotifications] = useState(mockNotifications.slice(0, 10));
+  const { data, isLoading } = useNotifications({ pageSize: 10 });
+  const markAllRead = useMarkAllNotificationsRead();
 
+  const notifications = data?.data || [];
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const handleMarkAllRead = () => {
-    setNotifications((prev) =>
-      prev.map((n) => ({ ...n, isRead: true }))
-    );
+    markAllRead.mutate();
   };
 
   return (
@@ -154,7 +156,15 @@ export function NotificationPanel({
 
             {/* Notification list */}
             <div className="flex-1 overflow-y-auto">
-              {notifications.length === 0 ? (
+              {isLoading ? (
+                <div className="space-y-0 divide-y">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="px-5 py-3.5">
+                      <div className="shimmer rounded-lg h-14 w-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : notifications.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 py-16 text-center">
                   <div className="rounded-full bg-muted p-4">
                     <Bell className="h-8 w-8 text-muted-foreground" />

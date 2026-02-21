@@ -23,54 +23,73 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
 import { useAuthStore } from "@/store/auth-store";
-import { cn, formatDate } from "@/lib/utils";
-import {
-  mockEvents,
-  mockHackathons,
-  mockNotifications,
-  mockTeams,
-} from "@/lib/mock-data";
+import { toast } from "sonner";
+import { cn, formatDate, formatCurrency } from "@/lib/utils";
+import { useMyEvents } from "@/hooks/use-events";
+import { useMyHackathons } from "@/hooks/use-hackathons";
+import { useNotifications } from "@/hooks/use-notifications";
+import { useMyTeams } from "@/hooks/use-teams";
+import { useUsage } from "@/hooks/use-usage";
+import { UsageBar } from "@/components/ui/usage-bar";
 
-const stats = [
-  {
-    label: "Events Hosted",
-    value: "12",
-    change: "+2 this month",
-    trend: "up",
-    icon: Calendar,
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-  },
-  {
-    label: "Hackathons Joined",
-    value: "8",
-    change: "+3 this month",
-    trend: "up",
-    icon: Trophy,
-    color: "text-yellow-500",
-    bgColor: "bg-yellow-500/10",
-  },
-  {
-    label: "Total Attendees",
-    value: "2,847",
-    change: "+324 this month",
-    trend: "up",
-    icon: Users,
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-  },
-  {
-    label: "Prize Money Won",
-    value: "$15,500",
-    change: "+$5,000 this month",
-    trend: "up",
-    icon: Zap,
-    color: "text-purple-500",
-    bgColor: "bg-purple-500/10",
-  },
-];
+function buildStats(
+  events: { registrationCount: number; createdAt: string }[],
+  hackathons: { prizes?: { value: number; currency?: string }[]; createdAt: string }[]
+) {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const eventsThisMonth = events.filter((e) => e.createdAt >= monthStart).length;
+  const hackathonsThisMonth = hackathons.filter((h) => h.createdAt >= monthStart).length;
+  const totalAttendees = events.reduce((sum, e) => sum + (e.registrationCount || 0), 0);
+  const totalPrize = hackathons.reduce(
+    (sum, h) => sum + (h.prizes ?? []).reduce((s, p) => s + (p.value || 0), 0),
+    0
+  );
+  // Use the currency from the first hackathon's first prize, or default to USD
+  const firstPrize = hackathons.flatMap((h) => h.prizes ?? []).find((p) => p.currency);
+  const prizeCurrency = firstPrize?.currency || "USD";
 
-const quickActions = [
+  return [
+    {
+      label: "Events Hosted",
+      value: String(events.length),
+      change: eventsThisMonth > 0 ? `+${eventsThisMonth} this month` : "No change",
+      trend: "up" as const,
+      icon: Calendar,
+      color: "text-blue-500",
+      bgColor: "bg-blue-500/10",
+    },
+    {
+      label: "Hackathons Created",
+      value: String(hackathons.length),
+      change: hackathonsThisMonth > 0 ? `+${hackathonsThisMonth} this month` : "No change",
+      trend: "up" as const,
+      icon: Trophy,
+      color: "text-yellow-500",
+      bgColor: "bg-yellow-500/10",
+    },
+    {
+      label: "Total Attendees",
+      value: totalAttendees.toLocaleString(),
+      change: "",
+      trend: "up" as const,
+      icon: Users,
+      color: "text-green-500",
+      bgColor: "bg-green-500/10",
+    },
+    {
+      label: "Total Prize Pool",
+      value: formatCurrency(totalPrize, prizeCurrency),
+      change: "",
+      trend: "up" as const,
+      icon: Zap,
+      color: "text-purple-500",
+      bgColor: "bg-purple-500/10",
+    },
+  ];
+}
+
+const organizerActions = [
   {
     label: "Create Event",
     href: "/events/create",
@@ -83,6 +102,9 @@ const quickActions = [
     icon: Trophy,
     color: "bg-yellow-500",
   },
+];
+
+const commonActions = [
   {
     label: "Browse Events",
     href: "/explore",
@@ -98,9 +120,74 @@ function getGreeting() {
   return "Good evening";
 }
 
+function PlanUsageCard() {
+  const { eventsThisMonth, hackathonsThisMonth, attendeesPerEvent, tier, isLoading } = useUsage();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.4 }}
+    >
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Plan Usage</CardTitle>
+            <Badge variant={tier === "free" ? "outline" : "default"} className="capitalize">
+              {tier}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="space-y-1.5">
+                  <div className="shimmer h-4 w-full rounded" />
+                  <div className="shimmer h-2 w-full rounded-full" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <UsageBar
+                used={eventsThisMonth.used}
+                limit={eventsThisMonth.limit}
+                label="Events this month"
+              />
+              <UsageBar
+                used={hackathonsThisMonth.used}
+                limit={hackathonsThisMonth.limit}
+                label="Hackathons this month"
+              />
+              <UsageBar
+                used={attendeesPerEvent.used}
+                limit={attendeesPerEvent.limit}
+                label="Attendees (largest event)"
+              />
+              {tier === "free" && (
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <Link href="/dashboard/billing">
+                    <Zap className="h-3.5 w-3.5 mr-1.5" />
+                    Upgrade for more
+                  </Link>
+                </Button>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
 export default function DashboardPage() {
-  const { user } = useAuthStore();
+  const { user, hasRole } = useAuthStore();
   const firstName = user?.name?.split(" ")[0] || "there";
+  const canCreate = hasRole("organizer") || hasRole("admin");
+  const quickActions = canCreate
+    ? [...organizerActions, ...commonActions]
+    : commonActions;
   const [mounted, setMounted] = React.useState(false);
   const [greeting, setGreeting] = React.useState("Hello");
   const [dateStr, setDateStr] = React.useState("");
@@ -116,14 +203,27 @@ export default function DashboardPage() {
         year: "numeric",
       })
     );
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("verified") === "true") {
+      toast.success("Email verified successfully! Welcome to CloudHub.");
+      window.history.replaceState({}, "", "/dashboard");
+    }
   }, []);
 
-  const upcomingEvents = mockEvents.slice(0, 3);
-  const activeHackathons = mockHackathons
+  const { data: eventsData, isLoading: eventsLoading } = useMyEvents();
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useMyHackathons();
+  const { data: notificationsData, isLoading: notificationsLoading } = useNotifications({ pageSize: 5 });
+  const { data: teamsData, isLoading: teamsLoading } = useMyTeams();
+
+  const myEvents = eventsData?.data || [];
+  const myHackathons = hackathonsData?.data || [];
+  const upcomingEvents = myEvents.slice(0, 3);
+  const activeHackathons = myHackathons
     .filter((h) => h.status !== "completed")
     .slice(0, 2);
-  const recentNotifications = mockNotifications.slice(0, 5);
-  const userTeams = mockTeams.slice(0, 3);
+  const stats = buildStats(myEvents, myHackathons);
+  const recentNotifications = notificationsData?.data || [];
+  const userTeams = (teamsData?.data || []).slice(0, 3);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -218,11 +318,34 @@ export default function DashboardPage() {
                     </Link>
                   </Button>
                 </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {upcomingEvents.slice(0, 2).map((event) => (
-                    <EventCard key={event.id} event={event} />
-                  ))}
-                </div>
+                {eventsLoading ? (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="shimmer rounded-xl h-64 w-full" />
+                    ))}
+                  </div>
+                ) : upcomingEvents.length > 0 ? (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {upcomingEvents.slice(0, 2).map((event) => (
+                      <EventCard key={event.id} event={event} />
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="border-dashed">
+                    <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                      <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-4">
+                        <Calendar className="h-6 w-6 text-blue-500" />
+                      </div>
+                      <h3 className="font-semibold mb-1">No upcoming events</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Discover events happening near you or online
+                      </p>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href="/explore/events">Browse Events</Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
               </motion.div>
 
               {/* Active Hackathons */}
@@ -247,21 +370,47 @@ export default function DashboardPage() {
                     </Link>
                   </Button>
                 </div>
-                <div className="space-y-4">
-                  {activeHackathons.map((hackathon) => (
-                    <HackathonCard key={hackathon.id} hackathon={hackathon} />
-                  ))}
-                </div>
+                {hackathonsLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="shimmer rounded-xl h-40 w-full" />
+                    ))}
+                  </div>
+                ) : activeHackathons.length > 0 ? (
+                  <div className="space-y-4">
+                    {activeHackathons.map((hackathon) => (
+                      <HackathonCard key={hackathon.id} hackathon={hackathon} />
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="border-dashed">
+                    <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                      <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
+                        <Trophy className="h-6 w-6 text-yellow-500" />
+                      </div>
+                      <h3 className="font-semibold mb-1">No active hackathons</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Find hackathons to compete in and win prizes
+                      </p>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href="/explore/hackathons">Browse Hackathons</Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
               </motion.div>
             </div>
 
-            {/* Right Column - Notifications & Teams */}
+            {/* Right Column - Plan Usage, Notifications & Teams */}
             <div className="space-y-8">
+              {/* Plan Usage */}
+              <PlanUsageCard />
+
               {/* Notifications */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
+                transition={{ delay: 0.5 }}
               >
                 <Card>
                   <CardHeader className="pb-3">
@@ -275,7 +424,18 @@ export default function DashboardPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {recentNotifications.map((notification) => (
+                    {notificationsLoading ? (
+                      <div className="space-y-3">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="shimmer rounded-lg h-14 w-full" />
+                        ))}
+                      </div>
+                    ) : recentNotifications.length === 0 ? (
+                      <div className="text-center py-6">
+                        <Bell className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                        <p className="text-sm text-muted-foreground">No notifications yet</p>
+                      </div>
+                    ) : recentNotifications.map((notification) => (
                       <Link
                         key={notification.id}
                         href={notification.link || "#"}
@@ -304,11 +464,13 @@ export default function DashboardPage() {
                         </div>
                       </Link>
                     ))}
-                    <Button variant="ghost" className="w-full" size="sm" asChild>
-                      <Link href="/dashboard/notifications">
-                        View all notifications
-                      </Link>
-                    </Button>
+                    {!notificationsLoading && (
+                      <Button variant="ghost" className="w-full" size="sm" asChild>
+                        <Link href="/dashboard/notifications">
+                          View all notifications
+                        </Link>
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -317,7 +479,7 @@ export default function DashboardPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
+                transition={{ delay: 0.6 }}
               >
                 <Card>
                   <CardHeader className="pb-3">
@@ -331,7 +493,18 @@ export default function DashboardPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {userTeams.map((team) => (
+                    {teamsLoading ? (
+                      <div className="space-y-3">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="shimmer rounded-lg h-14 w-full" />
+                        ))}
+                      </div>
+                    ) : userTeams.length === 0 ? (
+                      <div className="text-center py-6">
+                        <Users className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                        <p className="text-sm text-muted-foreground">No teams yet</p>
+                      </div>
+                    ) : userTeams.map((team) => (
                       <Link
                         key={team.id}
                         href={`/dashboard/team/${team.id}`}
@@ -354,9 +527,11 @@ export default function DashboardPage() {
                         </Badge>
                       </Link>
                     ))}
-                    <Button variant="ghost" className="w-full" size="sm" asChild>
-                      <Link href="/dashboard/team">View all teams</Link>
-                    </Button>
+                    {!teamsLoading && (
+                      <Button variant="ghost" className="w-full" size="sm" asChild>
+                        <Link href="/dashboard/team">View all teams</Link>
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -365,7 +540,7 @@ export default function DashboardPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
+                transition={{ delay: 0.7 }}
               >
                 <Card>
                   <CardHeader className="pb-3">

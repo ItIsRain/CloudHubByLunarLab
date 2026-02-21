@@ -30,7 +30,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn, generateId, formatDate, formatCurrency, getInitials } from "@/lib/utils";
-import { categories } from "@/lib/mock-data";
+import { categories, currencies } from "@/lib/constants";
+import { useCreateEvent } from "@/hooks/use-events";
+import { useAuthStore } from "@/store/auth-store";
+import { eventFormToDbRow } from "@/lib/supabase/mappers";
+import { slugify } from "@/lib/utils";
+import { useUsage } from "@/hooks/use-usage";
+import { UpgradeDialog } from "@/components/dialogs/upgrade-dialog";
+import { PLAN_LIMITS } from "@/lib/constants";
 import type { EventType } from "@/lib/types";
 
 const wizardSteps: WizardStep[] = [
@@ -44,7 +51,11 @@ const wizardSteps: WizardStep[] = [
 export default function CreateEventPage() {
   const router = useRouter();
   const store = useEventFormStore();
+  const user = useAuthStore((s) => s.user);
+  const createEvent = useCreateEvent();
+  const { eventsThisMonth, tier } = useUsage();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [showSpeakerDialog, setShowSpeakerDialog] = useState(false);
   const [showSessionDialog, setShowSessionDialog] = useState(false);
 
@@ -52,6 +63,7 @@ export default function CreateEventPage() {
   const [ticketName, setTicketName] = useState("");
   const [ticketPrice, setTicketPrice] = useState("");
   const [ticketQty, setTicketQty] = useState("");
+  const [ticketCurrency, setTicketCurrency] = useState("USD");
 
   // FAQ form state
   const [faqQ, setFaqQ] = useState("");
@@ -78,12 +90,32 @@ export default function CreateEventPage() {
   };
 
   const handlePublish = async () => {
+    if (!user) {
+      toast.error("You must be logged in to create an event");
+      return;
+    }
+    if (eventsThisMonth.isAtLimit) {
+      setShowUpgradeDialog(true);
+      return;
+    }
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    toast.success("Event published successfully!");
-    store.resetForm();
-    setIsSubmitting(false);
-    router.push("/explore");
+    try {
+      const slug = slugify(store.title || "event");
+      const payload = eventFormToDbRow(store, user.id, slug);
+      const result = await createEvent.mutateAsync(payload);
+      toast.success("Event published successfully!");
+      store.resetForm();
+      router.push(`/events/${result.data.slug}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create event";
+      if (message.includes("PLAN_LIMIT_REACHED")) {
+        setShowUpgradeDialog(true);
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const addTicket = () => {
@@ -92,7 +124,7 @@ export default function CreateEventPage() {
       id: generateId(),
       name: ticketName,
       price: Number(ticketPrice) || 0,
-      currency: "USD",
+      currency: ticketCurrency,
       quantity: Number(ticketQty) || 100,
       sold: 0,
       maxPerOrder: 5,
@@ -122,6 +154,43 @@ export default function CreateEventPage() {
           <p className="text-muted-foreground mb-8">
             Fill in the details to create your event. You can save and come back later.
           </p>
+
+          {tier === "free" && (
+            <div
+              className={cn(
+                "mb-6 flex items-center gap-3 rounded-xl border p-4",
+                eventsThisMonth.isAtLimit
+                  ? "border-red-500/30 bg-red-500/5"
+                  : eventsThisMonth.isNearLimit
+                    ? "border-amber-500/30 bg-amber-500/5"
+                    : "border-border bg-muted/50"
+              )}
+            >
+              <div className="flex-1 flex items-center gap-2 text-sm">
+                {eventsThisMonth.isAtLimit ? (
+                  <>
+                    <Badge variant="destructive">Limit reached</Badge>
+                    <span>Monthly event limit reached. Upgrade to continue creating events.</span>
+                  </>
+                ) : (
+                  <>
+                    <Badge variant={eventsThisMonth.isNearLimit ? "outline" : "secondary"} className={cn(eventsThisMonth.isNearLimit && "border-amber-500 text-amber-600")}>
+                      {eventsThisMonth.used}/{eventsThisMonth.limit}
+                    </Badge>
+                    <span className="text-muted-foreground">events used this month</span>
+                    {eventsThisMonth.isNearLimit && (
+                      <Badge variant="outline" className="border-amber-500 text-amber-600">Almost at limit</Badge>
+                    )}
+                  </>
+                )}
+              </div>
+              {eventsThisMonth.isAtLimit && (
+                <Button size="sm" onClick={() => setShowUpgradeDialog(true)}>
+                  Upgrade
+                </Button>
+              )}
+            </div>
+          )}
 
           <StepWizard
             steps={wizardSteps}
@@ -258,7 +327,7 @@ export default function CreateEventPage() {
                     <Plus className="h-4 w-4" />
                     Add Ticket Type
                   </h3>
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-4">
                     <Input
                       value={ticketName}
                       onChange={(e) => setTicketName(e.target.value)}
@@ -271,6 +340,17 @@ export default function CreateEventPage() {
                       placeholder="Price (0 = free)"
                       icon={<DollarSign className="h-4 w-4" />}
                     />
+                    <select
+                      value={ticketCurrency}
+                      onChange={(e) => setTicketCurrency(e.target.value)}
+                      className="rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    >
+                      {currencies.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
                     <Input
                       type="number"
                       value={ticketQty}
@@ -547,6 +627,12 @@ export default function CreateEventPage() {
         onOpenChange={setShowSessionDialog}
         onAdd={store.addSession}
         speakers={store.speakers}
+      />
+      <UpgradeDialog
+        open={showUpgradeDialog}
+        onOpenChange={setShowUpgradeDialog}
+        limitType="events"
+        currentLimit={PLAN_LIMITS[tier].eventsPerMonth}
       />
     </div>
   );

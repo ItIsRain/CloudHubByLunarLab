@@ -21,7 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn, formatDate, getInitials } from "@/lib/utils";
-import { mockHackathons, mockUsers } from "@/lib/mock-data";
+import { mockUsers } from "@/lib/mock-data";
+import { useHackathons } from "@/hooks/use-hackathons";
 
 const stats = [
   { label: "Active Hackathons", value: 2, icon: Calendar, color: "text-blue-500" },
@@ -29,8 +30,6 @@ const stats = [
   { label: "Total Sessions", value: 15, icon: Video, color: "text-green-500" },
   { label: "Hours Mentored", value: 22, icon: Timer, color: "text-primary" },
 ];
-
-const activeHackathons = [mockHackathons[0], mockHackathons[1]];
 
 const upcomingSessions = [
   {
@@ -77,11 +76,17 @@ const pastSessions = [
 ];
 
 export default function MentorDashboardPage() {
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons();
+  const hackathons = hackathonsData?.data || [];
+  const activeHackathons = hackathons.slice(0, 2);
+
   const handleJoin = (sessionId: string) => {
     toast.success("Joining session...", {
       description: "Opening video conference in a new tab.",
     });
   };
+
+  if (hackathonsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
 
   return (
     <>

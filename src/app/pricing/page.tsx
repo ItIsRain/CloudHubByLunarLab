@@ -36,7 +36,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { mockPricingTiers } from "@/lib/mock-data";
+import { PRICING_TIERS } from "@/lib/constants";
+import { useCheckout, useSubscriptionTier } from "@/hooks/use-subscription";
+import { useTestimonials } from "@/hooks/use-testimonials";
+import { usePlatformStats } from "@/hooks/use-stats";
+import { useAuthStore } from "@/store/auth-store";
 import { cn } from "@/lib/utils";
 
 /* ——— Feature comparison, grouped by category ——— */
@@ -217,7 +221,7 @@ const highlights = [
   {
     icon: Heart,
     title: "Loved by Organizers",
-    description: "4.9/5 average rating across 2,000+ reviews. Highest NPS in the event tech category.",
+    description: "Organizers rate us highly for ease of use, reliability, and all-in-one convenience.",
   },
   {
     icon: CreditCard,
@@ -226,30 +230,6 @@ const highlights = [
   },
 ];
 
-/* ——— Social proof for the pricing page ——— */
-const socialProof = [
-  {
-    quote: "We switched from Eventbrite and cut our costs by 60% while doubling our registration rate.",
-    author: "Sarah Chen",
-    role: "VP Events, TechCorp",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=sarah",
-    metric: "60% cost reduction",
-  },
-  {
-    quote: "The hackathon management alone is worth 10x the price. Nothing else comes close.",
-    author: "James Park",
-    role: "CTO, HackNation",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=james",
-    metric: "10x ROI",
-  },
-  {
-    quote: "Our team went from 3 tools to just CloudHub. The all-in-one approach saves us hours every week.",
-    author: "Maria Garcia",
-    role: "Community Lead, DevHub",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=maria",
-    metric: "3 tools replaced",
-  },
-];
 
 /* ——— FAQs ——— */
 const faqs = [
@@ -295,13 +275,11 @@ const faqs = [
   },
 ];
 
-/* ——— Trusted logos stats ——— */
-const trustStats = [
-  { value: "10,000+", label: "Organizers" },
-  { value: "500K+", label: "Attendees served" },
-  { value: "99.9%", label: "Uptime" },
-  { value: "4.9/5", label: "Rating" },
-];
+function formatStatValue(value: number, prefix = ""): string {
+  if (value >= 1_000_000) return `${prefix}${(value / 1_000_000).toFixed(1)}M+`;
+  if (value >= 1_000) return `${prefix}${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K+`;
+  return `${prefix}${value.toLocaleString()}`;
+}
 
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = React.useState(false);
@@ -309,11 +287,22 @@ export default function PricingPage() {
   const [expandedCategories, setExpandedCategories] = React.useState<Set<string>>(
     new Set(["Events & Hosting"])
   );
+  const [isCheckoutLoading, setIsCheckoutLoading] = React.useState(false);
 
-  const getPrice = (monthlyPrice: number) => {
-    if (monthlyPrice === 0) return 0;
-    return isAnnual ? Math.round(monthlyPrice * 0.8) : monthlyPrice;
-  };
+  const checkout = useCheckout();
+  const currentTier = useSubscriptionTier();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { data: testimonialsData, isLoading: testimonialsLoading } = useTestimonials(6);
+  const { data: statsData } = usePlatformStats();
+  const testimonials = testimonialsData?.data || [];
+  const platformStats = statsData?.data;
+
+  const trustStats = [
+    { value: formatStatValue(platformStats?.eventsHosted || 0), label: "Events Hosted" },
+    { value: formatStatValue(platformStats?.totalAttendees || 0), label: "Attendees Served" },
+    { value: "99.9%", label: "Uptime" },
+    { value: formatStatValue(platformStats?.hackathonsHosted || 0), label: "Hackathons" },
+  ];
 
   const toggleCategory = (name: string) => {
     setExpandedCategories((prev) => {
@@ -415,18 +404,42 @@ export default function PricingPage() {
       <section className="pb-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
-            {mockPricingTiers.map((tier, i) => {
+            {PRICING_TIERS.map((tier, i) => {
               const descriptions: Record<string, string> = {
                 Free: "Perfect for getting started. Host events and hackathons with zero cost — forever.",
                 Pro: "For serious organizers who need powerful tools, branding, and analytics.",
                 Enterprise: "For organizations that demand custom solutions, security, and scale.",
               };
 
-              const ctaLabels: Record<string, string> = {
-                Free: "Get Started Free",
-                Pro: "Start 14-Day Free Trial",
-                Enterprise: "Talk to Sales",
+              const isCurrentPlan = isAuthenticated && currentTier === tier.id;
+              const displayPrice = tier.isContactSales
+                ? null
+                : isAnnual
+                  ? tier.annualPrice
+                  : tier.monthlyPrice;
+
+              const handleCtaClick = async () => {
+                if (tier.isContactSales) return; // Link handles navigation
+                if (tier.id === "free") return; // Link handles navigation
+                if (isCurrentPlan) return;
+
+                setIsCheckoutLoading(true);
+                try {
+                  await checkout(isAnnual ? "annual" : "monthly");
+                } catch {
+                  // Error handled by checkout
+                } finally {
+                  setIsCheckoutLoading(false);
+                }
               };
+
+              const ctaLabel = isCurrentPlan
+                ? "Current Plan"
+                : tier.isContactSales
+                  ? "Talk to Sales"
+                  : tier.id === "free"
+                    ? "Get Started Free"
+                    : "Start Free Trial";
 
               return (
                 <motion.div
@@ -456,107 +469,110 @@ export default function PricingPage() {
                     )}
                   >
                     <CardContent className="pt-8 pb-8">
-                      <h3 className="font-display text-xl font-bold mb-1">
-                        {tier.name}
-                      </h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-display text-xl font-bold">
+                          {tier.name}
+                        </h3>
+                        {isCurrentPlan && (
+                          <Badge variant="outline" className="text-xs">Current</Badge>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground mb-5">
                         {descriptions[tier.name]}
                       </p>
 
                       <div className="mb-6">
                         <div className="flex items-baseline gap-1">
-                          {tier.price === 0 ? (
+                          {tier.isContactSales ? (
+                            <span className="font-display text-5xl font-bold">Custom</span>
+                          ) : displayPrice === 0 ? (
                             <span className="font-display text-5xl font-bold">Free</span>
                           ) : (
                             <>
+                              {isAnnual && tier.monthlyPrice !== null && tier.monthlyPrice > 0 && (
+                                <span className="text-2xl text-muted-foreground/50 line-through mr-1">
+                                  ${tier.monthlyPrice}
+                                </span>
+                              )}
                               <span className="font-display text-5xl font-bold">
-                                ${getPrice(tier.price)}
+                                ${displayPrice}
                               </span>
                               <span className="text-muted-foreground text-sm">/mo</span>
                             </>
                           )}
                         </div>
-                        {tier.price > 0 && isAnnual && (
+                        {!tier.isContactSales && displayPrice !== null && displayPrice > 0 && isAnnual && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            <span className="line-through text-muted-foreground/50">
-                              ${tier.price * 12}/yr
-                            </span>{" "}
-                            ${getPrice(tier.price) * 12}/yr
+                            Billed annually (${displayPrice * 12}/yr)
                           </p>
                         )}
-                        {tier.price === 0 && (
+                        {tier.isContactSales && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Tailored to your needs
+                          </p>
+                        )}
+                        {displayPrice === 0 && (
                           <p className="text-xs text-muted-foreground mt-1">
                             No credit card required
                           </p>
                         )}
                       </div>
 
-                      <Button
-                        className="w-full mb-6"
-                        variant={tier.isPopular ? "default" : "outline"}
-                        size="lg"
-                        asChild
-                      >
-                        <Link href={tier.name === "Enterprise" ? "/contact" : "/register"}>
-                          {ctaLabels[tier.name]}
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </Link>
-                      </Button>
+                      {tier.isContactSales || tier.id === "free" ? (
+                        <Button
+                          className="w-full mb-6"
+                          variant={tier.isPopular ? "default" : "outline"}
+                          size="lg"
+                          disabled={isCurrentPlan}
+                          asChild={!isCurrentPlan}
+                        >
+                          {isCurrentPlan ? (
+                            <span>{ctaLabel}</span>
+                          ) : (
+                            <Link href={tier.isContactSales ? "/contact" : "/register"}>
+                              {ctaLabel}
+                              <ArrowRight className="ml-2 h-4 w-4" />
+                            </Link>
+                          )}
+                        </Button>
+                      ) : (
+                        <Button
+                          className="w-full mb-6"
+                          variant={tier.isPopular ? "default" : "outline"}
+                          size="lg"
+                          disabled={isCurrentPlan || isCheckoutLoading}
+                          onClick={handleCtaClick}
+                        >
+                          {isCheckoutLoading ? "Redirecting..." : ctaLabel}
+                          {!isCurrentPlan && !isCheckoutLoading && (
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
 
-                      {/* Feature list with richer descriptions */}
+                      {/* Feature list */}
                       <div className="space-y-3">
-                        {tier.name === "Free" && (
+                        {tier.id === "free" && (
                           <>
-                            <FeatureLine>3 events per month</FeatureLine>
-                            <FeatureLine>Up to 100 attendees each</FeatureLine>
-                            <FeatureLine>1 hackathon with team formation</FeatureLine>
-                            <FeatureLine>Event page builder</FeatureLine>
-                            <FeatureLine>Ticketing (free tickets)</FeatureLine>
-                            <FeatureLine>Email notifications</FeatureLine>
-                            <FeatureLine>Basic analytics dashboard</FeatureLine>
-                            <FeatureLine>Submission portal</FeatureLine>
-                            <FeatureLine>Google Calendar sync</FeatureLine>
-                            <FeatureLine>SSL & 2FA security</FeatureLine>
-                            <FeatureLine>Community forum support</FeatureLine>
+                            {tier.features.map((f) => (
+                              <FeatureLine key={f}>{f}</FeatureLine>
+                            ))}
                           </>
                         )}
-                        {tier.name === "Pro" && (
+                        {tier.id === "pro" && (
                           <>
                             <FeatureLine highlight>Everything in Free, plus:</FeatureLine>
-                            <FeatureLine>Unlimited events & hackathons</FeatureLine>
-                            <FeatureLine>Up to 2,000 attendees per event</FeatureLine>
-                            <FeatureLine>Paid ticketing + Stripe payouts</FeatureLine>
-                            <FeatureLine>Promo codes & group discounts</FeatureLine>
-                            <FeatureLine>Custom branding & colors</FeatureLine>
-                            <FeatureLine>Advanced judging workflows</FeatureLine>
-                            <FeatureLine>Live streaming (RTMP)</FeatureLine>
-                            <FeatureLine>Recordings & replays</FeatureLine>
-                            <FeatureLine>Real-time analytics & reports</FeatureLine>
-                            <FeatureLine>10,000 emails/month</FeatureLine>
-                            <FeatureLine>Zapier + Slack integrations</FeatureLine>
-                            <FeatureLine>Live chat & polls</FeatureLine>
-                            <FeatureLine>Gamification & badges</FeatureLine>
-                            <FeatureLine>Priority support (24h SLA)</FeatureLine>
+                            {tier.features.map((f) => (
+                              <FeatureLine key={f}>{f}</FeatureLine>
+                            ))}
                           </>
                         )}
-                        {tier.name === "Enterprise" && (
+                        {tier.id === "enterprise" && (
                           <>
                             <FeatureLine highlight>Everything in Pro, plus:</FeatureLine>
-                            <FeatureLine>Unlimited attendees</FeatureLine>
-                            <FeatureLine>0% platform fee</FeatureLine>
-                            <FeatureLine>White-label experience</FeatureLine>
-                            <FeatureLine>SSO (SAML/OIDC)</FeatureLine>
-                            <FeatureLine>Unlimited API access + GraphQL</FeatureLine>
-                            <FeatureLine>Custom integrations (CRM, etc.)</FeatureLine>
-                            <FeatureLine>AI networking matchmaking</FeatureLine>
-                            <FeatureLine>Multi-stream CDN delivery</FeatureLine>
-                            <FeatureLine>Sponsor & prize portal</FeatureLine>
-                            <FeatureLine>Custom report builder</FeatureLine>
-                            <FeatureLine>SOC 2 & data residency</FeatureLine>
-                            <FeatureLine>Audit logs</FeatureLine>
-                            <FeatureLine>Dedicated account manager</FeatureLine>
-                            <FeatureLine>4h response SLA + phone</FeatureLine>
-                            <FeatureLine>99.9% uptime guarantee</FeatureLine>
+                            {tier.features.map((f) => (
+                              <FeatureLine key={f}>{f}</FeatureLine>
+                            ))}
                           </>
                         )}
                       </div>
@@ -659,44 +675,79 @@ export default function PricingPage() {
           </motion.div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            {socialProof.map((item, i) => (
-              <motion.div
-                key={item.author}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-              >
-                <Card className="h-full">
-                  <CardContent className="p-6">
-                    <Badge variant="outline" className="mb-4 text-xs font-semibold">
-                      {item.metric}
-                    </Badge>
-                    <div className="flex gap-0.5 mb-3">
-                      {Array.from({ length: 5 }).map((_, j) => (
-                        <Star
-                          key={j}
-                          className="h-4 w-4 fill-yellow-400 text-yellow-400"
-                        />
+            {testimonialsLoading
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl border p-6 space-y-4">
+                    <div className="shimmer h-5 w-28 rounded" />
+                    <div className="flex gap-0.5">
+                      {[...Array(5)].map((_, j) => (
+                        <div key={j} className="shimmer h-4 w-4 rounded" />
                       ))}
                     </div>
-                    <blockquote className="text-sm leading-relaxed mb-5">
-                      &ldquo;{item.quote}&rdquo;
-                    </blockquote>
-                    <div className="flex items-center gap-3">
-                      <Avatar size="sm">
-                        <AvatarImage src={item.avatar} />
-                        <AvatarFallback>{item.author[0]}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="text-sm font-semibold">{item.author}</div>
-                        <div className="text-xs text-muted-foreground">{item.role}</div>
+                    <div className="shimmer h-4 w-full rounded" />
+                    <div className="shimmer h-4 w-3/4 rounded" />
+                    <div className="flex items-center gap-3 pt-2">
+                      <div className="shimmer h-8 w-8 rounded-full" />
+                      <div className="space-y-2">
+                        <div className="shimmer h-3 w-20 rounded" />
+                        <div className="shimmer h-3 w-28 rounded" />
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+                  </div>
+                ))
+              : testimonials.length > 0
+                ? testimonials.slice(0, 3).map((item, i) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: i * 0.1 }}
+                    >
+                      <Card className="h-full">
+                        <CardContent className="p-6">
+                          {item.highlightStat && (
+                            <Badge variant="outline" className="mb-4 text-xs font-semibold text-primary border-primary/30">
+                              {item.highlightStat}
+                            </Badge>
+                          )}
+                          <div className="flex gap-0.5 mb-3">
+                            {Array.from({ length: 5 }).map((_, j) => (
+                              <Star
+                                key={j}
+                                className={`h-4 w-4 ${
+                                  j < item.rating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-muted-foreground/30"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <blockquote className="text-sm leading-relaxed mb-5">
+                            &ldquo;{item.quote}&rdquo;
+                          </blockquote>
+                          <div className="flex items-center gap-3">
+                            <Avatar size="sm">
+                              <AvatarImage src={item.user.avatar} />
+                              <AvatarFallback>{item.user.name?.charAt(0) || "?"}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="text-sm font-semibold">{item.user.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {item.role}, {item.company}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))
+                : (
+                    <div className="col-span-full text-center py-12">
+                      <Star className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
+                      <p className="text-muted-foreground">Testimonials coming soon from our organizers.</p>
+                    </div>
+                  )}
           </div>
         </div>
       </section>
@@ -932,7 +983,7 @@ export default function PricingPage() {
                   <span className="gradient-text">Starts Here</span>
                 </h2>
                 <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-                  Join 10,000+ organizers who chose CloudHub to host their events and hackathons.
+                  Join organizers who chose CloudHub to host their events and hackathons.
                   Start free, scale infinitely.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

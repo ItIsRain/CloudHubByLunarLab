@@ -1,30 +1,53 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Clock } from "lucide-react";
+import { CalendarIcon, Clock, Search } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-const timezones = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Berlin",
-  "Asia/Tokyo",
-  "Asia/Shanghai",
-  "Asia/Kolkata",
-  "Australia/Sydney",
-  "UTC",
-];
+function getUtcOffset(tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en", {
+      timeZone: tz,
+      timeZoneName: "shortOffset",
+    }).formatToParts(new Date());
+    const offsetPart = parts.find((p) => p.type === "timeZoneName");
+    return offsetPart?.value?.replace("GMT", "UTC") || "";
+  } catch {
+    return "";
+  }
+}
+
+function getAllTimezones(): { value: string; label: string; region: string }[] {
+  let zones: string[];
+  try {
+    zones = Intl.supportedValuesOf("timeZone");
+  } catch {
+    // Fallback for older environments
+    zones = [
+      "America/New_York", "America/Chicago", "America/Denver",
+      "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu",
+      "Europe/London", "Europe/Paris", "Europe/Berlin",
+      "Asia/Tokyo", "Asia/Shanghai", "Asia/Kolkata",
+      "Australia/Sydney", "UTC",
+    ];
+  }
+
+  return zones.map((tz) => {
+    const offset = getUtcOffset(tz);
+    const display = tz.replace(/_/g, " ");
+    const region = tz.includes("/") ? tz.split("/")[0] : "Other";
+    return {
+      value: tz,
+      label: `${display} (${offset})`,
+      region,
+    };
+  });
+}
 
 interface DateTimePickerProps {
   value?: string;
@@ -45,9 +68,31 @@ export function DateTimePicker({
   className,
 }: DateTimePickerProps) {
   const [showCalendar, setShowCalendar] = useState(false);
+  const [tzSearch, setTzSearch] = useState("");
   const calendarRef = useRef<HTMLDivElement>(null);
   const dateValue = value ? new Date(value) : undefined;
   const timeValue = dateValue ? format(dateValue, "HH:mm") : "";
+
+  const allTimezones = useMemo(() => getAllTimezones(), []);
+
+  const filteredTimezones = useMemo(() => {
+    if (!tzSearch.trim()) return allTimezones;
+    const q = tzSearch.toLowerCase();
+    return allTimezones.filter(
+      (tz) =>
+        tz.value.toLowerCase().includes(q) ||
+        tz.label.toLowerCase().includes(q)
+    );
+  }, [tzSearch, allTimezones]);
+
+  const groupedTimezones = useMemo(() => {
+    const groups: Record<string, typeof filteredTimezones> = {};
+    for (const tz of filteredTimezones) {
+      if (!groups[tz.region]) groups[tz.region] = [];
+      groups[tz.region].push(tz);
+    }
+    return groups;
+  }, [filteredTimezones]);
 
   // Close calendar on outside click
   useEffect(() => {
@@ -143,17 +188,31 @@ export function DateTimePicker({
 
       {/* Timezone selector */}
       {showTimezone && (
-        <select
-          value={timezone}
-          onChange={(e) => onTimezoneChange?.(e.target.value)}
-          className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm text-foreground transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-        >
-          {timezones.map((tz) => (
-            <option key={tz} value={tz}>
-              {tz.replace(/_/g, " ")}
-            </option>
-          ))}
-        </select>
+        <div className="space-y-2">
+          <div className="relative">
+            <Input
+              value={tzSearch}
+              onChange={(e) => setTzSearch(e.target.value)}
+              placeholder="Search timezones..."
+              icon={<Search className="h-4 w-4" />}
+            />
+          </div>
+          <select
+            value={timezone}
+            onChange={(e) => onTimezoneChange?.(e.target.value)}
+            className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm text-foreground transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          >
+            {Object.entries(groupedTimezones).map(([region, zones]) => (
+              <optgroup key={region} label={region}>
+                {zones.map((tz) => (
+                  <option key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
       )}
     </div>
   );

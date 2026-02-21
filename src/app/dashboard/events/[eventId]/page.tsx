@@ -2,324 +2,259 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  Users,
-  CheckCircle2,
-  DollarSign,
-  Eye,
-  Settings,
+  ExternalLink,
+  Share2,
+  LayoutDashboard,
   Edit,
   UserCheck,
   Ticket,
   ScanLine,
   Mail,
   BarChart3,
-  ExternalLink,
-  Share2,
-  Clock,
+  Settings,
+  FileText,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { cn, formatDate } from "@/lib/utils";
-import { mockEvents } from "@/lib/mock-data";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useEvent } from "@/hooks/use-events";
 import { toast } from "sonner";
 
-const navItems = [
-  { label: "Overview", href: "", icon: BarChart3 },
-  { label: "Edit", href: "/edit", icon: Edit },
-  { label: "Guests", href: "/guests", icon: UserCheck },
-  { label: "Tickets", href: "/tickets", icon: Ticket },
-  { label: "Check-in", href: "/check-in", icon: ScanLine },
-  { label: "Emails", href: "/emails", icon: Mail },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
-  { label: "Settings", href: "/settings", icon: Settings },
+import { OverviewTab } from "./_components/overview-tab";
+import { EditTab } from "./_components/edit-tab";
+import { GuestsTab } from "./_components/guests-tab";
+import { TicketsTab } from "./_components/tickets-tab";
+import { CheckInTab } from "./_components/check-in-tab";
+import { EmailsTab } from "./_components/emails-tab";
+import { AnalyticsTab } from "./_components/analytics-tab";
+import { SettingsTab } from "./_components/settings-tab";
+
+const statusConfig: Record<
+  string,
+  { label: string; variant: "muted" | "success" | "destructive" | "secondary" }
+> = {
+  draft: { label: "Draft", variant: "muted" },
+  published: { label: "Published", variant: "success" },
+  cancelled: { label: "Cancelled", variant: "destructive" },
+  completed: { label: "Completed", variant: "secondary" },
+};
+
+const tabs = [
+  { value: "overview", label: "Overview", icon: LayoutDashboard },
+  { value: "edit", label: "Edit", icon: Edit },
+  { value: "guests", label: "Guests", icon: UserCheck },
+  { value: "tickets", label: "Tickets", icon: Ticket },
+  { value: "check-in", label: "Check-In", icon: ScanLine },
+  { value: "emails", label: "Emails", icon: Mail },
+  { value: "analytics", label: "Analytics", icon: BarChart3 },
+  { value: "settings", label: "Settings", icon: Settings },
 ];
 
-const stats = [
-  {
-    label: "Registrations",
-    value: "156",
-    icon: Users,
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-  },
-  {
-    label: "Check-ins",
-    value: "89",
-    icon: CheckCircle2,
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-  },
-  {
-    label: "Revenue",
-    value: "$2,340",
-    icon: DollarSign,
-    color: "text-yellow-500",
-    bgColor: "bg-yellow-500/10",
-  },
-  {
-    label: "Page Views",
-    value: "1,234",
-    icon: Eye,
-    color: "text-purple-500",
-    bgColor: "bg-purple-500/10",
-  },
-];
-
-const recentActivity = [
-  {
-    id: 1,
-    message: "Sarah Kim registered for VIP Pass",
-    time: "2 minutes ago",
-    type: "registration",
-  },
-  {
-    id: 2,
-    message: "Marcus Johnson checked in",
-    time: "15 minutes ago",
-    type: "check-in",
-  },
-  {
-    id: 3,
-    message: "Emma Wilson purchased 2 General Admission tickets",
-    time: "1 hour ago",
-    type: "purchase",
-  },
-  {
-    id: 4,
-    message: "David Park cancelled their registration",
-    time: "3 hours ago",
-    type: "cancellation",
-  },
-  {
-    id: 5,
-    message: "New promo code EARLYBIRD applied 12 times",
-    time: "5 hours ago",
-    type: "promo",
-  },
-];
-
-export default function EventManagementPage() {
+function EventDashboardContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const eventId = params.eventId as string;
-  const event = mockEvents.find((e) => e.id === eventId);
+  const { data: eventData, isLoading } = useEvent(eventId);
+  const event = eventData?.data;
 
-  if (!event) {
+  const currentTab = searchParams.get("tab") || "overview";
+
+  const handleTabChange = (value: string) => {
+    const url = new URL(window.location.href);
+    if (value === "overview") {
+      url.searchParams.delete("tab");
+    } else {
+      url.searchParams.set("tab", value);
+    }
+    router.replace(url.pathname + url.search, { scroll: false });
+  };
+
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-muted/30">
+      <>
         <Navbar />
-        <main className="pt-24 pb-16">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="flex flex-col items-center justify-center py-20 text-center"
-            >
-              <h2 className="font-display text-2xl font-bold mb-2">
-                Event not found
-              </h2>
-              <p className="text-muted-foreground mb-6">
-                The event you are looking for does not exist or has been removed.
-              </p>
-              <Button asChild>
-                <Link href="/dashboard/events">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to My Events
-                </Link>
-              </Button>
-            </motion.div>
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+          <div className="space-y-4">
+            <div className="shimmer rounded-xl h-12 w-64" />
+            <div className="shimmer rounded-xl h-8 w-96" />
+            <div className="shimmer rounded-xl h-12 w-full" />
+            <div className="shimmer rounded-xl h-96 w-full" />
           </div>
         </main>
-      </div>
+      </>
     );
   }
 
-  const statusColor: Record<string, string> = {
-    draft: "secondary",
-    published: "success",
-    cancelled: "destructive",
-    completed: "muted",
+  if (!event) {
+    return (
+      <>
+        <Navbar />
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center py-20 text-center"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4">
+              <FileText className="h-8 w-8 text-destructive" />
+            </div>
+            <h2 className="font-display text-2xl font-bold mb-2">
+              Event Not Found
+            </h2>
+            <p className="text-muted-foreground mb-6">
+              The event you are looking for does not exist or has been removed.
+            </p>
+            <Link href="/dashboard/events">
+              <Button variant="outline">
+                <ArrowLeft className="h-4 w-4" />
+                Back to My Events
+              </Button>
+            </Link>
+          </motion.div>
+        </main>
+      </>
+    );
+  }
+
+  const status = statusConfig[event.status] || {
+    label: event.status,
+    variant: "muted" as const,
   };
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <>
       <Navbar />
-
-      <main className="pt-24 pb-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          {/* Back link */}
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="mb-6"
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+        {/* Back link */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="mb-6"
+        >
+          <Link
+            href="/dashboard/events"
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/dashboard/events">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to My Events
-              </Link>
+            <ArrowLeft className="h-4 w-4" />
+            Back to My Events
+          </Link>
+        </motion.div>
+
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6"
+        >
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="font-display text-3xl font-bold">
+                {event.title}
+              </h1>
+              <Badge variant={status.variant}>{status.label}</Badge>
+            </div>
+            {event.tagline && (
+              <p className="text-muted-foreground">{event.tagline}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <Link href={`/events/${event.slug}`} target="_blank">
+              <Button variant="outline" size="sm">
+                <ExternalLink className="h-4 w-4" />
+                View Public Page
+              </Button>
+            </Link>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(
+                  `${window.location.origin}/events/${event.slug}`
+                );
+                toast.success("Link copied to clipboard!");
+              }}
+            >
+              <Share2 className="h-4 w-4" />
+              Share
             </Button>
-          </motion.div>
+          </div>
+        </motion.div>
 
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6"
-          >
-            <div className="flex items-center gap-4">
-              <div>
-                <h1 className="font-display text-3xl font-bold">
-                  {event.title}
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  {formatDate(event.startDate)} &mdash;{" "}
-                  {formatDate(event.endDate)}
-                </p>
-              </div>
-              <Badge
-                variant={
-                  statusColor[event.status] as
-                    | "secondary"
-                    | "success"
-                    | "destructive"
-                    | "muted"
-                }
-              >
-                {event.status}
-              </Badge>
-            </div>
-            <div className="flex gap-3">
-              <Button variant="outline" asChild>
-                <Link href={`/events/${event.slug}`} target="_blank">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  View Public Page
-                </Link>
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `${window.location.origin}/events/${event.slug}`
-                  );
-                  toast.success("Event link copied to clipboard!");
-                }}
-              >
-                <Share2 className="h-4 w-4 mr-2" />
-                Share Event
-              </Button>
-            </div>
-          </motion.div>
-
-          {/* Navigation */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="flex gap-1 overflow-x-auto mb-8 pb-1"
-          >
-            {navItems.map((item) => (
-              <Button
-                key={item.label}
-                variant={item.href === "" ? "default" : "ghost"}
-                size="sm"
-                asChild
-              >
-                <Link
-                  href={`/dashboard/events/${eventId}${item.href}`}
+        {/* Tabbed Interface */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Tabs value={currentTab} onValueChange={handleTabChange}>
+            <TabsList className="flex flex-wrap h-auto w-full gap-1 bg-muted/50 p-1.5 rounded-xl mb-6">
+              {tabs.map((tab) => (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  className="gap-1.5 px-3 py-2 text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 >
-                  <item.icon className="h-4 w-4 mr-2" />
-                  {item.label}
-                </Link>
-              </Button>
-            ))}
-          </motion.div>
+                  <tab.icon className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-          {/* Stats Row */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
-          >
-            {stats.map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 + i * 0.05 }}
-              >
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">
-                          {stat.label}
-                        </p>
-                        <p className="font-display text-3xl font-bold">
-                          {stat.value}
-                        </p>
-                      </div>
-                      <div className={cn("p-3 rounded-xl", stat.bgColor)}>
-                        <stat.icon className={cn("h-6 w-6", stat.color)} />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </motion.div>
-
-          {/* Recent Activity */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Recent Activity</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {recentActivity.map((activity, i) => (
-                    <motion.div
-                      key={activity.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 + i * 0.05 }}
-                      className="flex items-start gap-3 pb-4 border-b last:border-0 last:pb-0"
-                    >
-                      <div
-                        className={cn(
-                          "mt-1 w-2 h-2 rounded-full flex-shrink-0",
-                          activity.type === "registration" && "bg-blue-500",
-                          activity.type === "check-in" && "bg-green-500",
-                          activity.type === "purchase" && "bg-yellow-500",
-                          activity.type === "cancellation" && "bg-red-500",
-                          activity.type === "promo" && "bg-purple-500"
-                        )}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm">{activity.message}</p>
-                        <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {activity.time}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
+            <TabsContent value="overview">
+              <OverviewTab event={event} eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="edit">
+              <EditTab event={event} eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="guests">
+              <GuestsTab event={event} eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="tickets">
+              <TicketsTab event={event} eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="check-in">
+              <CheckInTab event={event} eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="emails">
+              <EmailsTab event={event} eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="analytics">
+              <AnalyticsTab event={event} eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="settings">
+              <SettingsTab event={event} eventId={eventId} />
+            </TabsContent>
+          </Tabs>
+        </motion.div>
       </main>
-    </div>
+    </>
+  );
+}
+
+export default function EventManagementPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <>
+          <Navbar />
+          <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+            <div className="space-y-4">
+              <div className="shimmer rounded-xl h-12 w-64" />
+              <div className="shimmer rounded-xl h-8 w-96" />
+              <div className="shimmer rounded-xl h-12 w-full" />
+              <div className="shimmer rounded-xl h-96 w-full" />
+            </div>
+          </main>
+        </>
+      }
+    >
+      <EventDashboardContent />
+    </React.Suspense>
   );
 }

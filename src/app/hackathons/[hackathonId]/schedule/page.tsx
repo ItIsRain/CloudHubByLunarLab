@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockHackathons } from "@/lib/mock-data";
+import { useHackathon } from "@/hooks/use-hackathons";
 import { cn, formatDate } from "@/lib/utils";
 
 interface ScheduleSession {
@@ -261,9 +261,22 @@ export default function HackathonSchedulePage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
 
-  const hackathon = mockHackathons.find(
-    (h) => h.id === hackathonId || h.slug === hackathonId
-  );
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="shimmer rounded-xl h-96 w-full" />
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!hackathon) {
     return (

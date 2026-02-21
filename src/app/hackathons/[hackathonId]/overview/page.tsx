@@ -18,7 +18,7 @@ import { Footer } from "@/components/layout/footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { mockHackathons } from "@/lib/mock-data";
+import { useHackathon } from "@/hooks/use-hackathons";
 import { cn, formatDate, formatCurrency } from "@/lib/utils";
 
 const phases = [
@@ -53,9 +53,22 @@ export default function HackathonOverviewPage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
 
-  const hackathon = mockHackathons.find(
-    (h) => h.id === hackathonId || h.slug === hackathonId
-  );
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="shimmer rounded-xl h-96 w-full" />
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!hackathon) {
     return (
@@ -155,30 +168,10 @@ export default function HackathonOverviewPage() {
                   <CardTitle>About</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                    {hackathon.description.split("\n").map((p, i) => {
-                      if (p.startsWith("## "))
-                        return (
-                          <h3
-                            key={i}
-                            className="font-display text-lg font-bold mt-4 mb-2"
-                          >
-                            {p.replace("## ", "")}
-                          </h3>
-                        );
-                      if (p.startsWith("- **")) {
-                        const parts = p.replace("- **", "").split("**");
-                        return (
-                          <li key={i} className="ml-4">
-                            <strong>{parts[0]}</strong>
-                            {parts[1]}
-                          </li>
-                        );
-                      }
-                      if (p.trim()) return <p key={i}>{p}</p>;
-                      return null;
-                    })}
-                  </div>
+                  <div
+                    className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1 [&_p:empty]:hidden"
+                    dangerouslySetInnerHTML={{ __html: hackathon.description }}
+                  />
                 </CardContent>
               </Card>
             </motion.div>
@@ -402,10 +395,13 @@ export default function HackathonOverviewPage() {
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.25 + i * 0.05 }}
-                        className="flex items-center gap-3"
+                        className="flex items-start gap-3"
                       >
-                        <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
-                        <span className="text-sm">{item}</span>
+                        <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1.5" />
+                        <span
+                          className="text-sm [&_p]:inline [&_ul]:hidden [&_ol]:hidden"
+                          dangerouslySetInnerHTML={{ __html: item }}
+                        />
                       </motion.li>
                     ))}
                   </ul>
@@ -442,24 +438,10 @@ export default function HackathonOverviewPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                    {hackathon.rules.split("\n").map((line, i) => {
-                      if (line.startsWith("# "))
-                        return (
-                          <h3 key={i} className="font-bold">
-                            {line.replace("# ", "")}
-                          </h3>
-                        );
-                      if (line.match(/^\d+\./))
-                        return (
-                          <li key={i} className="ml-4">
-                            {line.replace(/^\d+\.\s/, "")}
-                          </li>
-                        );
-                      if (line.trim()) return <p key={i}>{line}</p>;
-                      return null;
-                    })}
-                  </div>
+                  <div
+                    className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1 [&_p:empty]:hidden"
+                    dangerouslySetInnerHTML={{ __html: hackathon.rules }}
+                  />
                 </CardContent>
               </Card>
             </motion.div>

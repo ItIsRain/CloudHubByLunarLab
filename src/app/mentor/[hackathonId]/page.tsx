@@ -21,7 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn, formatDate, getInitials } from "@/lib/utils";
-import { mockHackathons, mockUsers } from "@/lib/mock-data";
+import { useHackathon } from "@/hooks/use-hackathons";
+import { mockUsers } from "@/lib/mock-data";
 
 const assignedTeams = [
   {
@@ -94,7 +95,10 @@ const quickStats = [
 export default function HackathonMentoringPage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
-  const hackathon = mockHackathons.find((h) => h.id === hackathonId);
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+
+  if (isLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
 
   if (!hackathon) {
     return (

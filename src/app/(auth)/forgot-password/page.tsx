@@ -29,10 +29,25 @@ export default function ForgotPasswordPage() {
   });
 
   const onSubmit = async (data: ForgotFormData) => {
-    await new Promise((r) => setTimeout(r, 1500));
-    toast.success("Reset link sent! Check your inbox.");
-    setSubmitted(true);
-    void data;
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: data.email }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error || "Failed to send reset link");
+      }
+
+      toast.success("Reset link sent! Check your inbox.");
+      setSubmitted(true);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to send reset link"
+      );
+    }
   };
 
   return (

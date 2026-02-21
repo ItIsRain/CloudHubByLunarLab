@@ -24,7 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn, formatDate, formatTime, getInitials, formatNumber } from "@/lib/utils";
-import { mockCommunities, mockEvents } from "@/lib/mock-data";
+import { mockCommunities } from "@/lib/mock-data";
+import { useEvents } from "@/hooks/use-events";
 
 type ViewMode = "calendar" | "list";
 
@@ -59,6 +60,7 @@ export default function CommunityCalendarPage() {
   const params = useParams();
   const calendarSlug = params.calendarSlug as string;
   const community = mockCommunities.find((c) => c.slug === calendarSlug);
+  const { data: eventsData } = useEvents();
 
   const [viewMode, setViewMode] = React.useState<ViewMode>("calendar");
   const now = new Date();
@@ -96,7 +98,7 @@ export default function CommunityCalendarPage() {
     );
   }
 
-  const events = mockEvents.slice(0, 6);
+  const events = (eventsData?.data || []).slice(0, 6);
 
   // Determine which dates have events (use day-of-month from startDate)
   const eventDates = new Set(

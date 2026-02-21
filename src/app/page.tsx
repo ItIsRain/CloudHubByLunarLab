@@ -25,11 +25,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
-import {
-  getFeaturedEvents,
-  getActiveHackathons,
-  mockPricingTiers,
-} from "@/lib/mock-data";
+import { PRICING_TIERS } from "@/lib/constants";
+import { useUpcomingEvents } from "@/hooks/use-events";
+import { useActiveHackathons } from "@/hooks/use-hackathons";
+import { useTestimonials } from "@/hooks/use-testimonials";
+import { usePlatformStats } from "@/hooks/use-stats";
 
 const features = [
   {
@@ -70,39 +70,11 @@ const features = [
   },
 ];
 
-const testimonials = [
-  {
-    quote:
-      "CloudHub transformed how we run hackathons. The team formation feature alone saved us hundreds of hours.",
-    author: "Sarah Chen",
-    role: "Director of Developer Relations",
-    company: "TechCorp",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=sarah",
-  },
-  {
-    quote:
-      "The most intuitive event platform I've ever used. Our attendee satisfaction scores have never been higher.",
-    author: "Michael Torres",
-    role: "Community Manager",
-    company: "StartupHub",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=michael",
-  },
-  {
-    quote:
-      "From 50 person meetups to 2000+ person conferences, CloudHub scales beautifully with our growing community.",
-    author: "Emily Rodriguez",
-    role: "Events Lead",
-    company: "DevCommunity",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=emily",
-  },
-];
-
-const stats = [
-  { value: "10K+", label: "Events Hosted" },
-  { value: "500K+", label: "Attendees" },
-  { value: "2,500+", label: "Hackathons" },
-  { value: "$5M+", label: "Prizes Distributed" },
-];
+function formatStatValue(value: number, prefix = "", suffix = ""): string {
+  if (value >= 1_000_000) return `${prefix}${(value / 1_000_000).toFixed(1)}M${suffix}`;
+  if (value >= 1_000) return `${prefix}${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K${suffix}`;
+  return `${prefix}${value.toLocaleString()}${suffix}`;
+}
 
 const typewriterTexts = [
   "Hackathons",
@@ -197,8 +169,21 @@ function VideoPlayer({ videoId }: { videoId: string }) {
 }
 
 export default function HomePage() {
-  const featuredEvents = getFeaturedEvents();
-  const activeHackathons = getActiveHackathons();
+  const { data: eventsData, isLoading: eventsLoading } = useUpcomingEvents(4);
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useActiveHackathons();
+  const { data: testimonialsData, isLoading: testimonialsLoading } = useTestimonials(6);
+  const { data: statsData } = usePlatformStats();
+  const featuredEvents = eventsData?.data || [];
+  const activeHackathons = hackathonsData?.data || [];
+  const testimonials = testimonialsData?.data || [];
+  const platformStats = statsData?.data;
+
+  const stats = [
+    { value: formatStatValue(platformStats?.eventsHosted || 0), label: "Events Hosted" },
+    { value: formatStatValue(platformStats?.totalAttendees || 0), label: "Attendees" },
+    { value: formatStatValue(platformStats?.hackathonsHosted || 0), label: "Hackathons" },
+    { value: formatStatValue(platformStats?.totalPrizePool || 0, "$"), label: "Prizes Distributed" },
+  ];
 
   return (
     <div className="min-h-screen">
@@ -245,7 +230,7 @@ export default function HomePage() {
             {/* Badge */}
             <Badge variant="outline" className="mb-6 px-4 py-1.5 text-sm">
               <Sparkles className="h-3.5 w-3.5 mr-1.5 text-primary" />
-              Trusted by 10,000+ organizers worldwide
+              The all-in-one event &amp; hackathon platform
             </Badge>
 
             {/* Headline */}
@@ -415,17 +400,28 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredEvents.map((event, i) => (
-              <motion.div
-                key={event.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-              >
-                <EventCard event={event} />
-              </motion.div>
-            ))}
+            {eventsLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl overflow-hidden border">
+                    <div className="shimmer h-48 w-full" />
+                    <div className="p-4 space-y-3">
+                      <div className="shimmer h-4 w-3/4 rounded" />
+                      <div className="shimmer h-3 w-1/2 rounded" />
+                      <div className="shimmer h-3 w-2/3 rounded" />
+                    </div>
+                  </div>
+                ))
+              : featuredEvents.map((event, i) => (
+                  <motion.div
+                    key={event.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: i * 0.1 }}
+                  >
+                    <EventCard event={event} />
+                  </motion.div>
+                ))}
           </div>
         </div>
       </section>
@@ -456,17 +452,32 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {activeHackathons.slice(0, 2).map((hackathon, i) => (
-              <motion.div
-                key={hackathon.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-              >
-                <HackathonCard hackathon={hackathon} variant="featured" />
-              </motion.div>
-            ))}
+            {hackathonsLoading
+              ? Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl overflow-hidden border">
+                    <div className="shimmer h-56 w-full" />
+                    <div className="p-6 space-y-4">
+                      <div className="shimmer h-5 w-2/3 rounded" />
+                      <div className="shimmer h-4 w-full rounded" />
+                      <div className="shimmer h-4 w-1/2 rounded" />
+                      <div className="flex gap-2">
+                        <div className="shimmer h-8 w-20 rounded-full" />
+                        <div className="shimmer h-8 w-20 rounded-full" />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              : activeHackathons.slice(0, 2).map((hackathon, i) => (
+                  <motion.div
+                    key={hackathon.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: i * 0.1 }}
+                  >
+                    <HackathonCard hackathon={hackathon} variant="featured" />
+                  </motion.div>
+                ))}
           </div>
         </div>
       </section>
@@ -492,45 +503,81 @@ export default function HomePage() {
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, i) => (
-              <motion.div
-                key={testimonial.author}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-              >
-                <Card className="h-full">
-                  <CardContent className="p-6">
-                    <div className="flex gap-1 mb-4">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className="h-4 w-4 fill-yellow-400 text-yellow-400"
-                        />
+            {testimonialsLoading
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl border p-6 space-y-4">
+                    <div className="flex gap-1">
+                      {[...Array(5)].map((_, j) => (
+                        <div key={j} className="shimmer h-4 w-4 rounded" />
                       ))}
                     </div>
-                    <blockquote className="text-lg mb-6">
-                      "{testimonial.quote}"
-                    </blockquote>
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={testimonial.avatar} />
-                        <AvatarFallback>
-                          {testimonial.author.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-semibold">{testimonial.author}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {testimonial.role}, {testimonial.company}
-                        </div>
+                    <div className="shimmer h-4 w-full rounded" />
+                    <div className="shimmer h-4 w-3/4 rounded" />
+                    <div className="shimmer h-4 w-1/2 rounded" />
+                    <div className="flex items-center gap-3 pt-2">
+                      <div className="shimmer h-10 w-10 rounded-full" />
+                      <div className="space-y-2">
+                        <div className="shimmer h-3 w-24 rounded" />
+                        <div className="shimmer h-3 w-32 rounded" />
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+                  </div>
+                ))
+              : testimonials.length > 0
+                ? testimonials.map((testimonial, i) => (
+                    <motion.div
+                      key={testimonial.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: i * 0.1 }}
+                    >
+                      <Card className="h-full">
+                        <CardContent className="p-6">
+                          {testimonial.highlightStat && (
+                            <Badge variant="outline" className="mb-3 text-primary border-primary/30">
+                              {testimonial.highlightStat}
+                            </Badge>
+                          )}
+                          <div className="flex gap-1 mb-4">
+                            {[...Array(5)].map((_, j) => (
+                              <Star
+                                key={j}
+                                className={`h-4 w-4 ${
+                                  j < testimonial.rating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-muted-foreground/30"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <blockquote className="text-lg mb-6">
+                            &ldquo;{testimonial.quote}&rdquo;
+                          </blockquote>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={testimonial.user.avatar} />
+                              <AvatarFallback>
+                                {testimonial.user.name?.charAt(0) || "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-semibold">{testimonial.user.name}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {testimonial.role}, {testimonial.company}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))
+                : (
+                    <div className="col-span-full text-center py-12">
+                      <Star className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
+                      <p className="text-muted-foreground">Testimonials coming soon from our organizers.</p>
+                    </div>
+                  )}
           </div>
         </div>
       </section>
@@ -558,7 +605,7 @@ export default function HomePage() {
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {mockPricingTiers.map((tier, i) => (
+            {PRICING_TIERS.map((tier, i) => (
               <motion.div
                 key={tier.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -583,11 +630,17 @@ export default function HomePage() {
                       {tier.name}
                     </h3>
                     <div className="mb-4">
-                      <span className="font-display text-4xl font-bold">
-                        ${tier.price}
-                      </span>
-                      {tier.price > 0 && (
-                        <span className="text-muted-foreground">/month</span>
+                      {tier.isContactSales ? (
+                        <span className="font-display text-4xl font-bold">Custom</span>
+                      ) : (
+                        <>
+                          <span className="font-display text-4xl font-bold">
+                            {tier.monthlyPrice === 0 ? "Free" : `$${tier.monthlyPrice}`}
+                          </span>
+                          {tier.monthlyPrice !== null && tier.monthlyPrice > 0 && (
+                            <span className="text-muted-foreground">/month</span>
+                          )}
+                        </>
                       )}
                     </div>
                     <ul className="space-y-3 mb-6">
@@ -606,8 +659,12 @@ export default function HomePage() {
                       variant={tier.isPopular ? "default" : "outline"}
                       asChild
                     >
-                      <Link href="/pricing">
-                        {tier.price === 0 ? "Get Started" : "Start Free Trial"}
+                      <Link href={tier.isContactSales ? "/contact" : "/pricing"}>
+                        {tier.isContactSales
+                          ? "Talk to Sales"
+                          : tier.monthlyPrice === 0
+                            ? "Get Started"
+                            : "Start Free Trial"}
                       </Link>
                     </Button>
                   </CardContent>
@@ -635,8 +692,8 @@ export default function HomePage() {
               <span className="gradient-text">amazing events?</span>
             </h2>
             <p className="text-lg text-muted-foreground mb-10 max-w-2xl mx-auto">
-              Join thousands of organizers who trust CloudHub to power their
-              events and hackathons. Get started for free today.
+              Join organizers who trust CloudHub to power their events and
+              hackathons. Get started for free today.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="xl" asChild>

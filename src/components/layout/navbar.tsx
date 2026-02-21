@@ -35,7 +35,15 @@ import { useAuthStore } from "@/store/auth-store";
 import { useUIStore } from "@/store/ui-store";
 import { useTheme } from "@/providers/theme-provider";
 
-const navLinks = [
+interface NavLink {
+  label: string;
+  href: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  children?: { label: string; href: string; description: string }[];
+  guestOnly?: boolean;
+}
+
+const navLinks: NavLink[] = [
   {
     label: "Explore",
     href: "/explore",
@@ -64,7 +72,7 @@ const navLinks = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated, logout, hasRole } = useAuthStore();
   const { toggleNotificationPanel, toggleMobileMenu, mobileMenuOpen } = useUIStore();
   const { setTheme, resolvedTheme } = useTheme();
   const [scrolled, setScrolled] = React.useState(false);
@@ -88,6 +96,11 @@ export function Navbar() {
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);
   };
+
+  const canCreate = hasRole("organizer") || hasRole("admin");
+  const visibleNavLinks = navLinks.filter(
+    (link) => !("guestOnly" in link && link.guestOnly && isAuthenticated)
+  );
 
   return (
     <>
@@ -123,7 +136,7 @@ export function Navbar() {
 
             {/* Desktop Navigation */}
             <div className="hidden lg:flex items-center gap-1">
-              {navLinks.map((link) => (
+              {visibleNavLinks.map((link) => (
                 <div
                   key={link.href}
                   className="relative"
@@ -210,29 +223,31 @@ export function Navbar() {
                     <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
                   </Button>
 
-                  {/* Create Dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="default" size="sm" className="hidden sm:flex gap-1.5">
-                        <Plus className="h-4 w-4" />
-                        Create
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuItem asChild>
-                        <Link href="/events/create" className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4" />
-                          Create Event
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/hackathons/create" className="flex items-center gap-2">
-                          <Trophy className="h-4 w-4" />
-                          Create Hackathon
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {/* Create Dropdown — organizers & admins only */}
+                  {canCreate && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="default" size="sm" className="hidden sm:flex gap-1.5">
+                          <Plus className="h-4 w-4" />
+                          Create
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem asChild>
+                          <Link href="/events/create" className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            Create Event
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/hackathons/create" className="flex items-center gap-2">
+                            <Trophy className="h-4 w-4" />
+                            Create Hackathon
+                          </Link>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
 
                   {/* User Menu */}
                   <DropdownMenu>
@@ -268,6 +283,9 @@ export function Navbar() {
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href="/dashboard/settings">Settings</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/dashboard/billing">Billing</Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={logout} className="text-destructive">
@@ -321,7 +339,7 @@ export function Navbar() {
             className="fixed inset-x-0 top-16 z-40 bg-background border-b shadow-lg lg:hidden"
           >
             <nav className="p-4 space-y-2">
-              {navLinks.map((link) => (
+              {visibleNavLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}

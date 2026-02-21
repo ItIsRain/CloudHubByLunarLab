@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import { Download, Share2, Award, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -73,13 +74,21 @@ export function CertificatePreviewDialog({
             {/* Content */}
             <div className="relative z-10 flex flex-col items-center text-center space-y-5 py-4">
               {/* Logo */}
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">C</span>
-                </div>
-                <span className="font-display text-lg font-bold gradient-text">
-                  CloudHub
-                </span>
+              <div className="flex items-center">
+                <Image
+                  src="/CloudHubLight.svg"
+                  alt="CloudHub"
+                  width={140}
+                  height={40}
+                  className="h-9 w-auto dark:hidden"
+                />
+                <Image
+                  src="/CloudHubDark.svg"
+                  alt="CloudHub"
+                  width={140}
+                  height={40}
+                  className="h-9 w-auto hidden dark:block"
+                />
               </div>
 
               {/* Type badge */}

@@ -20,7 +20,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImageUpload } from "@/components/forms/image-upload";
 import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { TagSelector } from "@/components/forms/tag-selector";
-import { mockHackathons } from "@/lib/mock-data";
+import { useHackathons } from "@/hooks/use-hackathons";
+import { useCreateSubmission } from "@/hooks/use-submissions";
 
 const submissionSchema = z.object({
   hackathonId: z.string().min(1, "Select a hackathon"),
@@ -39,8 +40,10 @@ type SubmissionForm = z.infer<typeof submissionSchema>;
 
 export default function NewSubmissionPage() {
   const router = useRouter();
+  const { data: hackathonsData } = useHackathons();
+  const hackathons = hackathonsData?.data || [];
+  const createMutation = useCreateSubmission();
   const [techStack, setTechStack] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -53,18 +56,21 @@ export default function NewSubmissionPage() {
   });
 
   const selectedHackathonId = watch("hackathonId");
-  const selectedHackathon = mockHackathons.find((h) => h.id === selectedHackathonId);
+  const selectedHackathon = hackathons.find((h) => h.id === selectedHackathonId);
   const coverImage = watch("coverImage");
   const description = watch("description");
   const readme = watch("readme");
 
   const onSubmit = async (data: SubmissionForm) => {
-    setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    console.log("Submission:", { ...data, techStack });
-    toast.success("Project submitted successfully!");
-    setIsSubmitting(false);
-    router.push("/dashboard/submissions/sub-1");
+    try {
+      const result = await createMutation.mutateAsync({ ...data, techStack });
+      toast.success("Project submitted successfully!");
+      router.push(`/dashboard/submissions/${result.data.id}`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create submission"
+      );
+    }
   };
 
   return (
@@ -97,7 +103,7 @@ export default function NewSubmissionPage() {
                     className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="">Select hackathon</option>
-                    {mockHackathons
+                    {hackathons
                       .filter((h) => h.status !== "completed" && h.status !== "draft")
                       .map((h) => (
                         <option key={h.id} value={h.id}>
@@ -267,7 +273,7 @@ export default function NewSubmissionPage() {
               <Button type="button" variant="outline" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" loading={isSubmitting} className="gap-2">
+              <Button type="submit" loading={createMutation.isPending} className="gap-2">
                 <Upload className="h-4 w-4" />
                 Submit Project
               </Button>

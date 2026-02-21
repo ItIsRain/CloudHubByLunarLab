@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
-import { mockHackathons } from "@/lib/mock-data";
+import { useHackathons } from "@/hooks/use-hackathons";
 
 const stats = [
   { label: "Total Assigned", value: 38, icon: ClipboardCheck, color: "text-blue-500" },
@@ -25,12 +25,16 @@ const stats = [
   { label: "Avg Score", value: "8.2", icon: Star, color: "text-primary" },
 ];
 
-const assignedHackathons = [mockHackathons[0], mockHackathons[1]];
-
 export default function JudgeDashboardPage() {
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons();
+  const hackathons = hackathonsData?.data || [];
+  const assignedHackathons = hackathons.slice(0, 2);
+
   const reviewed = 15;
   const total = 38;
   const progressPercent = Math.round((reviewed / total) * 100);
+
+  if (hackathonsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
 
   return (
     <>

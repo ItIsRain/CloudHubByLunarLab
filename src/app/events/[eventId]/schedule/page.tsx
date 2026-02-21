@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn, formatDate, formatTime, getInitials } from "@/lib/utils";
-import { mockEvents } from "@/lib/mock-data";
+import { useEvent } from "@/hooks/use-events";
 import type { AgendaSession } from "@/lib/types";
 
 const sessionTypeConfig: Record<
@@ -99,9 +99,30 @@ const mockSessions: AgendaSession[] = [
 export default function SchedulePage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const event = mockEvents.find((e) => e.id === eventId || e.slug === eventId);
+  const { data: eventData, isLoading } = useEvent(eventId);
+  const event = eventData?.data;
 
   const [activeDay, setActiveDay] = React.useState(0);
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="h-8 w-48 rounded shimmer" />
+            <div className="h-12 w-72 rounded shimmer" />
+            <div className="space-y-6">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-28 rounded-2xl shimmer" />
+              ))}
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   if (!event) {
     return (

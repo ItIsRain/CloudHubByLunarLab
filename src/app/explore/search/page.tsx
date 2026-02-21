@@ -16,12 +16,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
 import { cn } from "@/lib/utils";
-import {
-  mockEvents,
-  mockHackathons,
-  mockCommunities,
-  mockUsers,
-} from "@/lib/mock-data";
+import { mockCommunities, mockUsers } from "@/lib/mock-data";
+import { useEvents } from "@/hooks/use-events";
+import { useHackathons } from "@/hooks/use-hackathons";
 
 function SearchResultsContent() {
   const searchParams = useSearchParams();
@@ -36,31 +33,19 @@ function SearchResultsContent() {
 
   const query = queryParam.toLowerCase();
 
-  const filteredEvents = React.useMemo(
-    () =>
-      query
-        ? mockEvents.filter(
-            (e) =>
-              e.title.toLowerCase().includes(query) ||
-              e.tagline?.toLowerCase().includes(query) ||
-              e.tags.some((t) => t.toLowerCase().includes(query))
-          )
-        : [],
-    [query]
-  );
+  const { data: eventsData, isLoading: eventsLoading } = useEvents({
+    search: query || undefined,
+    pageSize: 20,
+  });
 
-  const filteredHackathons = React.useMemo(
-    () =>
-      query
-        ? mockHackathons.filter(
-            (h) =>
-              h.name.toLowerCase().includes(query) ||
-              h.tagline?.toLowerCase().includes(query) ||
-              h.tags.some((t) => t.toLowerCase().includes(query))
-          )
-        : [],
-    [query]
-  );
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons({
+    search: query || undefined,
+    pageSize: 20,
+  });
+
+  const filteredEvents = query ? (eventsData?.data || []) : [];
+  const filteredHackathons = query ? (hackathonsData?.data || []) : [];
+  const isLoading = eventsLoading || hackathonsLoading;
 
   const filteredCommunities = React.useMemo(
     () =>
@@ -169,8 +154,38 @@ function SearchResultsContent() {
             </motion.div>
           )}
 
+          {/* Loading State */}
+          {query && isLoading && (
+            <div className="space-y-10">
+              <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl border bg-card overflow-hidden">
+                    <div className="aspect-[16/9] shimmer" />
+                    <div className="p-4 space-y-3">
+                      <div className="h-4 w-3/4 rounded shimmer" />
+                      <div className="h-3 w-full rounded shimmer" />
+                      <div className="h-3 w-1/2 rounded shimmer" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl border bg-card overflow-hidden">
+                    <div className="aspect-[16/9] shimmer" />
+                    <div className="p-4 space-y-3">
+                      <div className="h-4 w-3/4 rounded shimmer" />
+                      <div className="h-3 w-full rounded shimmer" />
+                      <div className="h-3 w-1/2 rounded shimmer" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Results with Tabs */}
-          {query && totalResults > 0 && (
+          {query && !isLoading && totalResults > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -573,7 +588,7 @@ function SearchResultsContent() {
           )}
 
           {/* No results at all */}
-          {query && totalResults === 0 && (
+          {query && !isLoading && totalResults === 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

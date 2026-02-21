@@ -24,14 +24,58 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
-import { mockUsers, mockEvents, mockHackathons, mockSubmissions, getCertificatesForUser } from "@/lib/mock-data";
+import { getCertificatesForUser } from "@/lib/mock-data";
+import { useEvents } from "@/hooks/use-events";
+import { useHackathons } from "@/hooks/use-hackathons";
+import { useSubmissions } from "@/hooks/use-submissions";
+import { useQuery } from "@tanstack/react-query";
 import { getInitials, formatDate } from "@/lib/utils";
+import type { User } from "@/lib/types";
 
 export default function PublicProfilePage() {
   const params = useParams();
   const username = params.username as string;
 
-  const user = mockUsers.find((u) => u.username === username);
+  const { data: profileData, isLoading: profileLoading } = useQuery<{ data: User }>({
+    queryKey: ["profile", username],
+    queryFn: async () => {
+      const res = await fetch(`/api/users/${encodeURIComponent(username)}`);
+      if (!res.ok) throw new Error("User not found");
+      return res.json();
+    },
+  });
+  const user = profileData?.data;
+  const { data: eventsData } = useEvents();
+  const { data: hackathonsData } = useHackathons();
+  const { data: submissionsData } = useSubmissions(user ? { userId: user.id } : undefined);
+
+  if (profileLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-16 pb-16">
+          <div className="relative h-48 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/10">
+            <div className="absolute inset-0 grid-bg opacity-20" />
+          </div>
+          <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 -mt-16 relative z-10">
+            <div className="flex flex-col sm:flex-row items-start gap-6 mb-8">
+              <div className="shimmer h-32 w-32 rounded-full" />
+              <div className="flex-1 space-y-3 pt-4">
+                <div className="shimmer h-8 w-48 rounded-lg" />
+                <div className="shimmer h-4 w-32 rounded-lg" />
+                <div className="shimmer h-4 w-64 rounded-lg" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="shimmer h-20 rounded-xl" />
+              ))}
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -60,9 +104,9 @@ export default function PublicProfilePage() {
     { label: "Wins", value: user.wins, icon: Award },
   ];
 
-  const userEvents = mockEvents.slice(0, 3);
-  const userHackathons = mockHackathons.slice(0, 2);
-  const userSubmissions = mockSubmissions.slice(0, 4);
+  const userEvents = (eventsData?.data || []).slice(0, 3);
+  const userHackathons = (hackathonsData?.data || []).slice(0, 2);
+  const userSubmissions = (submissionsData?.data || []).slice(0, 4);
   const userCertificates = getCertificatesForUser(user.id);
 
   return (

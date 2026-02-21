@@ -26,7 +26,9 @@ import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
 import { useAuthStore } from "@/store/auth-store";
 import { cn, getInitials } from "@/lib/utils";
-import { mockEvents, mockHackathons, mockSubmissions } from "@/lib/mock-data";
+import { useEvents } from "@/hooks/use-events";
+import { useHackathons } from "@/hooks/use-hackathons";
+import { useMySubmissions } from "@/hooks/use-submissions";
 
 export default function ProfilePage() {
   const { user } = useAuthStore();
@@ -52,9 +54,12 @@ export default function ProfilePage() {
     { label: "Wins", value: user.wins, icon: Award },
   ];
 
-  const userEvents = mockEvents.slice(0, 3);
-  const userHackathons = mockHackathons.slice(0, 2);
-  const userSubmissions = mockSubmissions.slice(0, 4);
+  const { data: eventsData } = useEvents();
+  const { data: hackathonsData } = useHackathons();
+  const { data: submissionsData } = useMySubmissions();
+  const userEvents = (eventsData?.data || []).slice(0, 3);
+  const userHackathons = (hackathonsData?.data || []).slice(0, 2);
+  const userSubmissions = (submissionsData?.data || []).slice(0, 4);
 
   return (
     <div className="min-h-screen bg-muted/30">

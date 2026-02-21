@@ -18,7 +18,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EventCard } from "@/components/cards/event-card";
 import { cn } from "@/lib/utils";
-import { mockEvents, categories } from "@/lib/mock-data";
+import type { EventCategory, EventFilters } from "@/lib/types";
+import { useEvents } from "@/hooks/use-events";
+import { categories } from "@/lib/constants";
 
 type ViewMode = "grid" | "list";
 type PriceFilter = "all" | "free" | "paid";
@@ -54,62 +56,15 @@ export default function AllEventsPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredEvents = React.useMemo(() => {
-    let events = mockEvents.filter((event) => {
-      const matchesSearch =
-        !searchQuery ||
-        event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.tagline?.toLowerCase().includes(searchQuery.toLowerCase());
+  const { data: eventsData, isLoading } = useEvents({
+    search: searchQuery || undefined,
+    category: selectedCategory ? [selectedCategory as EventCategory] : undefined,
+    isFree: priceFilter === "free" ? true : priceFilter === "paid" ? false : undefined,
+    sortBy: (sortBy === "date" || sortBy === "popularity" || sortBy === "newest") ? sortBy as EventFilters["sortBy"] : undefined,
+    pageSize: 24,
+  });
 
-      const matchesCategory =
-        !selectedCategory || event.category === selectedCategory;
-
-      const isFree = event.tickets.every((t) => t.price === 0);
-      const matchesPrice =
-        priceFilter === "all" ||
-        (priceFilter === "free" && isFree) ||
-        (priceFilter === "paid" && !isFree);
-
-      return matchesSearch && matchesCategory && matchesPrice;
-    });
-
-    // Sort
-    switch (sortBy) {
-      case "date":
-        events = [...events].sort(
-          (a, b) =>
-            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
-        );
-        break;
-      case "popularity":
-        events = [...events].sort(
-          (a, b) => b.registrationCount - a.registrationCount
-        );
-        break;
-      case "newest":
-        events = [...events].sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        break;
-      case "price-low":
-        events = [...events].sort(
-          (a, b) =>
-            Math.min(...a.tickets.map((t) => t.price)) -
-            Math.min(...b.tickets.map((t) => t.price))
-        );
-        break;
-      case "price-high":
-        events = [...events].sort(
-          (a, b) =>
-            Math.min(...b.tickets.map((t) => t.price)) -
-            Math.min(...a.tickets.map((t) => t.price))
-        );
-        break;
-    }
-
-    return events;
-  }, [searchQuery, selectedCategory, priceFilter, sortBy]);
+  const filteredEvents = eventsData?.data || [];
 
   const clearFilters = () => {
     setSearchQuery("");
@@ -225,8 +180,14 @@ export default function AllEventsPage() {
 
               {/* Results Count */}
               <span className="text-sm text-muted-foreground">
-                {filteredEvents.length}{" "}
-                {filteredEvents.length === 1 ? "event" : "events"} found
+                {isLoading ? (
+                  <span className="inline-block h-4 w-32 rounded shimmer" />
+                ) : (
+                  <>
+                    {eventsData?.total ?? 0}{" "}
+                    {eventsData?.total === 1 ? "event" : "events"} found
+                  </>
+                )}
               </span>
             </div>
 
@@ -307,31 +268,57 @@ export default function AllEventsPage() {
           </motion.div>
 
           {/* Events Grid */}
-          <div
-            className={cn(
-              "grid gap-6",
-              viewMode === "grid"
-                ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                : "grid-cols-1"
-            )}
-          >
-            {filteredEvents.map((event, i) => (
-              <motion.div
-                key={event.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: i * 0.05 }}
-              >
-                <EventCard
-                  event={event}
-                  variant={viewMode === "list" ? "compact" : "default"}
-                />
-              </motion.div>
-            ))}
-          </div>
+          {isLoading ? (
+            <div
+              className={cn(
+                "grid gap-6",
+                viewMode === "grid"
+                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                  : "grid-cols-1"
+              )}
+            >
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border bg-card overflow-hidden">
+                  <div className="aspect-[16/9] shimmer" />
+                  <div className="p-4 space-y-3">
+                    <div className="h-4 w-3/4 rounded shimmer" />
+                    <div className="h-3 w-full rounded shimmer" />
+                    <div className="h-3 w-1/2 rounded shimmer" />
+                    <div className="flex gap-2 pt-2">
+                      <div className="h-6 w-16 rounded-full shimmer" />
+                      <div className="h-6 w-20 rounded-full shimmer" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "grid gap-6",
+                viewMode === "grid"
+                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                  : "grid-cols-1"
+              )}
+            >
+              {filteredEvents.map((event, i) => (
+                <motion.div
+                  key={event.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: i * 0.05 }}
+                >
+                  <EventCard
+                    event={event}
+                    variant={viewMode === "list" ? "compact" : "default"}
+                  />
+                </motion.div>
+              ))}
+            </div>
+          )}
 
           {/* Empty State */}
-          {filteredEvents.length === 0 && (
+          {!isLoading && filteredEvents.length === 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -354,7 +341,7 @@ export default function AllEventsPage() {
           )}
 
           {/* Load More */}
-          {filteredEvents.length > 0 && (
+          {!isLoading && eventsData?.hasMore && (
             <div className="text-center mt-12">
               <Button variant="outline" size="lg">
                 Load More Events

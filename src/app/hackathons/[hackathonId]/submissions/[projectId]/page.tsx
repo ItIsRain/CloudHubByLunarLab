@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { mockSubmissions } from "@/lib/mock-data";
+import { useSubmission } from "@/hooks/use-submissions";
 import { cn, getInitials } from "@/lib/utils";
 
 export default function ProjectDetailPage() {
@@ -26,12 +26,43 @@ export default function ProjectDetailPage() {
   const hackathonId = params.hackathonId as string;
   const projectId = params.projectId as string;
 
-  const submission = mockSubmissions.find((s) => s.id === projectId);
+  const { data: submissionData, isLoading } = useSubmission(projectId);
+  const submission = submissionData?.data;
 
   const [upvoted, setUpvoted] = React.useState(false);
-  const [upvoteCount, setUpvoteCount] = React.useState(
-    submission?.upvotes ?? 0
-  );
+  const [upvoteCount, setUpvoteCount] = React.useState(0);
+
+  React.useEffect(() => {
+    if (submission) {
+      setUpvoteCount(submission.upvotes);
+    }
+  }, [submission]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="shimmer rounded-xl h-6 w-40 mb-8" />
+            <div className="shimmer rounded-xl h-10 w-72 mb-3" />
+            <div className="shimmer rounded-xl h-6 w-96 mb-8" />
+            <div className="grid lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-6">
+                <div className="shimmer rounded-xl h-64 w-full" />
+                <div className="shimmer rounded-xl h-32 w-full" />
+              </div>
+              <div className="space-y-6">
+                <div className="shimmer rounded-xl h-48 w-full" />
+                <div className="shimmer rounded-xl h-32 w-full" />
+              </div>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!submission) {
     return (

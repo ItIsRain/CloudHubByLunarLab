@@ -21,7 +21,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { mockSubmissions, mockHackathons } from "@/lib/mock-data";
+import { useHackathon } from "@/hooks/use-hackathons";
+import { useSubmission, useHackathonSubmissions, useSubmitScore } from "@/hooks/use-submissions";
 
 const scoringCriteria = [
   {
@@ -51,15 +52,19 @@ export default function ScoringPage() {
   const hackathonId = params.hackathonId as string;
   const submissionId = params.submissionId as string;
 
-  const hackathon = mockHackathons.find((h) => h.id === hackathonId);
-  const submission = mockSubmissions.find((s) => s.id === submissionId);
-  const allSubmissions = mockSubmissions.slice(0, 12);
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+  const { data: submissionData, isLoading: submissionLoading } = useSubmission(submissionId);
+  const submission = submissionData?.data;
+  const { data: allSubmissionsData, isLoading: allSubsLoading } = useHackathonSubmissions(hackathonId);
+  const allSubmissions = allSubmissionsData?.data || [];
   const currentIndex = allSubmissions.findIndex((s) => s.id === submissionId);
   const prevSub = currentIndex > 0 ? allSubmissions[currentIndex - 1] : null;
   const nextSub =
     currentIndex < allSubmissions.length - 1
       ? allSubmissions[currentIndex + 1]
       : null;
+  const submitScoreMutation = useSubmitScore();
 
   const [scores, setScores] = React.useState<Record<string, number>>({
     innovation: 7,
@@ -75,6 +80,8 @@ export default function ScoringPage() {
   });
   const [overallComments, setOverallComments] = React.useState("");
   const [flagged, setFlagged] = React.useState(false);
+
+  if (isLoading || submissionLoading || allSubsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
 
   if (!submission || !hackathon) {
     return (
@@ -104,10 +111,33 @@ export default function ScoringPage() {
     );
   }
 
-  const handleSubmitScore = () => {
-    toast.success("Score submitted successfully!", {
-      description: `Your review for "${submission.projectName}" has been saved.`,
-    });
+  const handleSubmitScore = async () => {
+    try {
+      const criteria = scoringCriteria.map((c) => ({
+        criteriaId: c.id,
+        score: scores[c.id],
+        feedback: feedback[c.id] || undefined,
+      }));
+      const totalScoreNum = parseFloat(
+        (
+          Object.values(scores).reduce((a, b) => a + b, 0) /
+          Object.values(scores).length
+        ).toFixed(1)
+      );
+      await submitScoreMutation.mutateAsync({
+        submissionId,
+        criteria,
+        totalScore: totalScoreNum,
+        overallFeedback: overallComments || undefined,
+      });
+      toast.success("Score submitted successfully!", {
+        description: `Your review for "${submission.projectName}" has been saved.`,
+      });
+    } catch (error) {
+      toast.error("Failed to submit score", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
   };
 
   const totalScore = (
@@ -115,8 +145,8 @@ export default function ScoringPage() {
     Object.values(scores).length
   ).toFixed(1);
 
-  const reviewedCount = Math.min(currentIndex + 1, 3);
-  const totalForReview = 12;
+  const reviewedCount = allSubmissions.filter((s) => s.scores && s.scores.length > 0).length;
+  const totalForReview = allSubmissions.length;
 
   return (
     <>
@@ -323,9 +353,10 @@ export default function ScoringPage() {
                     onClick={handleSubmitScore}
                     className="w-full"
                     size="lg"
+                    disabled={submitScoreMutation.isPending}
                   >
                     <Send className="mr-2 h-4 w-4" />
-                    Submit Score
+                    {submitScoreMutation.isPending ? "Submitting..." : "Submit Score"}
                   </Button>
                 </CardContent>
               </Card>

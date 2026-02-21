@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { QueryProvider } from "@/providers/query-provider";
+import { AuthProvider } from "@/providers/auth-provider";
 import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
@@ -28,7 +29,9 @@ export default function RootLayout({
       <body className="min-h-screen bg-background antialiased">
         <QueryProvider>
           <ThemeProvider>
+            <AuthProvider>
             {children}
+            </AuthProvider>
             <Toaster
               position="bottom-right"
               toastOptions={{

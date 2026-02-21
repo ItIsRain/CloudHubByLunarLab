@@ -16,11 +16,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { HackathonCard } from "@/components/cards/hackathon-card";
 import { cn } from "@/lib/utils";
-import { mockHackathons } from "@/lib/mock-data";
-import type { HackathonStatus } from "@/lib/types";
+import type { HackathonStatus, HackathonFilters } from "@/lib/types";
+import { useHackathons } from "@/hooks/use-hackathons";
 
 const statusFilters: { value: HackathonStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
+  { value: "published", label: "Open" },
   { value: "registration-open", label: "Registration Open" },
   { value: "hacking", label: "Hacking" },
   { value: "judging", label: "Judging" },
@@ -57,51 +58,14 @@ export default function AllHackathonsPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredHackathons = React.useMemo(() => {
-    let hackathons = mockHackathons.filter((h) => {
-      const matchesSearch =
-        !searchQuery ||
-        h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        h.tagline?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        h.tags.some((tag) =>
-          tag.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+  const { data: hackathonsData, isLoading } = useHackathons({
+    search: searchQuery || undefined,
+    status: selectedStatus !== "all" ? [selectedStatus] : undefined,
+    sortBy: sortBy as HackathonFilters["sortBy"],
+    pageSize: 24,
+  });
 
-      const matchesStatus =
-        selectedStatus === "all" || h.status === selectedStatus;
-
-      return matchesSearch && matchesStatus;
-    });
-
-    // Sort
-    switch (sortBy) {
-      case "date":
-        hackathons = [...hackathons].sort(
-          (a, b) =>
-            new Date(a.hackingStart).getTime() -
-            new Date(b.hackingStart).getTime()
-        );
-        break;
-      case "prize":
-        hackathons = [...hackathons].sort(
-          (a, b) => b.totalPrizePool - a.totalPrizePool
-        );
-        break;
-      case "participants":
-        hackathons = [...hackathons].sort(
-          (a, b) => b.participantCount - a.participantCount
-        );
-        break;
-      case "newest":
-        hackathons = [...hackathons].sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        break;
-    }
-
-    return hackathons;
-  }, [searchQuery, selectedStatus, sortBy]);
+  const filteredHackathons = hackathonsData?.data || [];
 
   const clearFilters = () => {
     setSearchQuery("");
@@ -181,9 +145,15 @@ export default function AllHackathonsPage() {
             <div className="flex items-center gap-4">
               {/* Results Count */}
               <span className="text-sm text-muted-foreground">
-                {filteredHackathons.length}{" "}
-                {filteredHackathons.length === 1 ? "hackathon" : "hackathons"}{" "}
-                found
+                {isLoading ? (
+                  <span className="inline-block h-4 w-32 rounded shimmer" />
+                ) : (
+                  <>
+                    {hackathonsData?.total ?? 0}{" "}
+                    {hackathonsData?.total === 1 ? "hackathon" : "hackathons"}{" "}
+                    found
+                  </>
+                )}
               </span>
             </div>
 
@@ -242,21 +212,40 @@ export default function AllHackathonsPage() {
           </motion.div>
 
           {/* Hackathons Grid */}
-          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredHackathons.map((hackathon, i) => (
-              <motion.div
-                key={hackathon.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: i * 0.05 }}
-              >
-                <HackathonCard hackathon={hackathon} />
-              </motion.div>
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border bg-card overflow-hidden">
+                  <div className="aspect-[16/9] shimmer" />
+                  <div className="p-4 space-y-3">
+                    <div className="h-4 w-3/4 rounded shimmer" />
+                    <div className="h-3 w-full rounded shimmer" />
+                    <div className="h-3 w-1/2 rounded shimmer" />
+                    <div className="flex gap-2 pt-2">
+                      <div className="h-6 w-16 rounded-full shimmer" />
+                      <div className="h-6 w-20 rounded-full shimmer" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredHackathons.map((hackathon, i) => (
+                <motion.div
+                  key={hackathon.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: i * 0.05 }}
+                >
+                  <HackathonCard hackathon={hackathon} />
+                </motion.div>
+              ))}
+            </div>
+          )}
 
           {/* Empty State */}
-          {filteredHackathons.length === 0 && (
+          {!isLoading && filteredHackathons.length === 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -279,7 +268,7 @@ export default function AllHackathonsPage() {
           )}
 
           {/* Load More */}
-          {filteredHackathons.length > 0 && (
+          {!isLoading && hackathonsData?.hasMore && (
             <div className="text-center mt-12">
               <Button variant="outline" size="lg">
                 Load More Hackathons

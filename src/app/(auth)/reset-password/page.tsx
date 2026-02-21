@@ -42,11 +42,27 @@ export default function ResetPasswordPage() {
 
   const password = watch("password", "");
 
-  const onSubmit = async () => {
-    await new Promise((r) => setTimeout(r, 1500));
-    setSuccess(true);
-    toast.success("Password reset successfully!");
-    setTimeout(() => router.push("/login"), 2000);
+  const onSubmit = async (data: ResetFormData) => {
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: data.password }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error || "Failed to reset password");
+      }
+
+      setSuccess(true);
+      toast.success("Password reset successfully!");
+      setTimeout(() => router.push("/login"), 2000);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to reset password"
+      );
+    }
   };
 
   if (success) {

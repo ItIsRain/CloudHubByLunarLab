@@ -19,10 +19,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatDate, formatNumber } from "@/lib/utils";
-import { mockCommunities, mockEvents } from "@/lib/mock-data";
+import { mockCommunities } from "@/lib/mock-data";
+import { useEvents } from "@/hooks/use-events";
 
 const community = mockCommunities[0];
-const recentEvents = mockEvents.slice(0, 3);
 
 const quickActions = [
   {
@@ -58,6 +58,9 @@ const growthData = [
 ];
 
 export default function CommunityDashboardPage() {
+  const { data: eventsData } = useEvents();
+  const recentEvents = (eventsData?.data || []).slice(0, 3);
+
   return (
     <>
       <Navbar />

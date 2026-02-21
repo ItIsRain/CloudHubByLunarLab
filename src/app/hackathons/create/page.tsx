@@ -35,7 +35,14 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
-import { categories } from "@/lib/mock-data";
+import { categories } from "@/lib/constants";
+import { useCreateHackathon } from "@/hooks/use-hackathons";
+import { useAuthStore } from "@/store/auth-store";
+import { hackathonFormToDbRow } from "@/lib/supabase/mappers";
+import { slugify } from "@/lib/utils";
+import { useUsage } from "@/hooks/use-usage";
+import { UpgradeDialog } from "@/components/dialogs/upgrade-dialog";
+import { PLAN_LIMITS } from "@/lib/constants";
 import type { EventType } from "@/lib/types";
 
 const sections = [
@@ -54,7 +61,11 @@ const sections = [
 export default function CreateHackathonPage() {
   const router = useRouter();
   const store = useHackathonFormStore();
+  const user = useAuthStore((s) => s.user);
+  const createHackathon = useCreateHackathon();
+  const { hackathonsThisMonth, tier } = useUsage();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [showTrackDialog, setShowTrackDialog] = useState(false);
   const [showPrizeDialog, setShowPrizeDialog] = useState(false);
   const [showSponsorDialog, setShowSponsorDialog] = useState(false);
@@ -67,12 +78,32 @@ export default function CreateHackathonPage() {
       store.setSection(0);
       return;
     }
+    if (!user) {
+      toast.error("You must be logged in to create a hackathon");
+      return;
+    }
+    if (hackathonsThisMonth.isAtLimit) {
+      setShowUpgradeDialog(true);
+      return;
+    }
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    toast.success("Hackathon published successfully!");
-    store.resetForm();
-    setIsSubmitting(false);
-    router.push("/explore");
+    try {
+      const slug = slugify(store.name || "hackathon");
+      const payload = hackathonFormToDbRow(store, user.id, slug);
+      const result = await createHackathon.mutateAsync(payload);
+      toast.success("Hackathon published successfully!");
+      store.resetForm();
+      router.push(`/hackathons/${result.data.slug}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create hackathon";
+      if (message.includes("PLAN_LIMIT_REACHED")) {
+        setShowUpgradeDialog(true);
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const addEligibility = () => {
@@ -82,6 +113,7 @@ export default function CreateHackathonPage() {
   };
 
   const totalPrizePool = store.prizes.reduce((sum, p) => sum + p.value, 0);
+  const prizeCurrency = store.prizes[0]?.currency || "USD";
 
   return (
     <div className="min-h-screen bg-background pt-24 pb-16">
@@ -96,6 +128,43 @@ export default function CreateHackathonPage() {
           <p className="text-muted-foreground mb-8">
             Set up your hackathon with tracks, prizes, rules, and more.
           </p>
+
+          {tier === "free" && (
+            <div
+              className={cn(
+                "mb-6 flex items-center gap-3 rounded-xl border p-4",
+                hackathonsThisMonth.isAtLimit
+                  ? "border-red-500/30 bg-red-500/5"
+                  : hackathonsThisMonth.isNearLimit
+                    ? "border-amber-500/30 bg-amber-500/5"
+                    : "border-border bg-muted/50"
+              )}
+            >
+              <div className="flex-1 flex items-center gap-2 text-sm">
+                {hackathonsThisMonth.isAtLimit ? (
+                  <>
+                    <Badge variant="destructive">Limit reached</Badge>
+                    <span>Monthly hackathon limit reached. Upgrade to continue creating hackathons.</span>
+                  </>
+                ) : (
+                  <>
+                    <Badge variant={hackathonsThisMonth.isNearLimit ? "outline" : "secondary"} className={cn(hackathonsThisMonth.isNearLimit && "border-amber-500 text-amber-600")}>
+                      {hackathonsThisMonth.used}/{hackathonsThisMonth.limit}
+                    </Badge>
+                    <span className="text-muted-foreground">hackathons used this month</span>
+                    {hackathonsThisMonth.isNearLimit && (
+                      <Badge variant="outline" className="border-amber-500 text-amber-600">Almost at limit</Badge>
+                    )}
+                  </>
+                )}
+              </div>
+              {hackathonsThisMonth.isAtLimit && (
+                <Button size="sm" onClick={() => setShowUpgradeDialog(true)}>
+                  Upgrade
+                </Button>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-8">
             {/* Sidebar */}
@@ -329,7 +398,7 @@ export default function CreateHackathonPage() {
                           <CardTitle>Prizes</CardTitle>
                           {totalPrizePool > 0 && (
                             <p className="text-sm text-muted-foreground mt-1">
-                              Total Prize Pool: <span className="font-semibold text-primary">{formatCurrency(totalPrizePool)}</span>
+                              Total Prize Pool: <span className="font-semibold text-primary">{formatCurrency(totalPrizePool, prizeCurrency)}</span>
                             </p>
                           )}
                         </div>
@@ -588,7 +657,7 @@ export default function CreateHackathonPage() {
                             <p className="text-xs text-muted-foreground">Prizes</p>
                           </div>
                           <div className="text-center">
-                            <p className="text-2xl font-bold">{formatCurrency(totalPrizePool)}</p>
+                            <p className="text-2xl font-bold">{formatCurrency(totalPrizePool, prizeCurrency)}</p>
                             <p className="text-xs text-muted-foreground">Prize Pool</p>
                           </div>
                           <div className="text-center">
@@ -639,6 +708,12 @@ export default function CreateHackathonPage() {
       <AddPrizeDialog open={showPrizeDialog} onOpenChange={setShowPrizeDialog} onAdd={store.addPrize} />
       <AddSponsorDialog open={showSponsorDialog} onOpenChange={setShowSponsorDialog} onAdd={store.addSponsor} />
       <JudgingCriteriaDialog open={showCriteriaDialog} onOpenChange={setShowCriteriaDialog} onAdd={store.addCriteria} />
+      <UpgradeDialog
+        open={showUpgradeDialog}
+        onOpenChange={setShowUpgradeDialog}
+        limitType="hackathons"
+        currentLimit={PLAN_LIMITS[tier].hackathonsPerMonth}
+      />
     </div>
   );
 }

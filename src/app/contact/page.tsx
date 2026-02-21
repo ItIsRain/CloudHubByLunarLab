@@ -6,9 +6,8 @@ import {
   Mail,
   MapPin,
   Send,
-  Twitter,
-  Github,
   Linkedin,
+  Instagram,
   MessageSquare,
   Sparkles,
   Globe,
@@ -39,23 +38,22 @@ const contactInfo = [
     icon: Mail,
     title: "Email Us",
     description: "Our team typically responds within 24 hours.",
-    value: "hello@cloudhub.io",
-    href: "mailto:hello@cloudhub.io",
+    value: "hello@lnr.ae",
+    href: "mailto:hello@lnr.ae",
   },
   {
     icon: MapPin,
     title: "Visit Us",
-    description: "Come say hello at our headquarters.",
-    value: "548 Market St, Suite 42\nSan Francisco, CA 94104",
+    description: "Come say hello at our office.",
+    value: "Al Reem Island, Addax Office Tower\nOffice 3507",
   },
   {
     icon: Globe,
     title: "Social",
     description: "Follow us for updates and community news.",
     socials: [
-      { icon: Twitter, href: "https://twitter.com/cloudhub", label: "Twitter" },
-      { icon: Github, href: "https://github.com/cloudhub", label: "GitHub" },
-      { icon: Linkedin, href: "https://linkedin.com/company/cloudhub", label: "LinkedIn" },
+      { icon: Linkedin, href: "https://www.linkedin.com/company/lunarltd/", label: "LinkedIn" },
+      { icon: Instagram, href: "https://instagram.com/1i1.ae", label: "Instagram" },
     ],
   },
 ];
@@ -329,9 +327,9 @@ export default function ContactPage() {
                       <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                         <MapPin className="h-6 w-6 text-primary" />
                       </div>
-                      <p className="text-sm font-medium">San Francisco, CA</p>
+                      <p className="text-sm font-medium">Al Reem Island, Abu Dhabi</p>
                       <p className="text-xs text-muted-foreground">
-                        548 Market St, Suite 42
+                        Addax Office Tower, Office 3507
                       </p>
                     </div>
                   </div>

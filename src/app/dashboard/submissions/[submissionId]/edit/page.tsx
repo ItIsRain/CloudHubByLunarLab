@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImageUpload } from "@/components/forms/image-upload";
 import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { TagSelector } from "@/components/forms/tag-selector";
-import { mockSubmissions } from "@/lib/mock-data";
+import { useSubmission, useUpdateSubmission } from "@/hooks/use-submissions";
 
 const editSchema = z.object({
   projectName: z.string().min(2, "Project name is required"),
@@ -34,37 +34,58 @@ export default function EditSubmissionPage() {
   const params = useParams();
   const router = useRouter();
   const submissionId = params.submissionId as string;
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data: submissionData, isLoading } = useSubmission(submissionId);
+  const updateMutation = useUpdateSubmission();
 
-  const submission = mockSubmissions.find((s) => s.id === submissionId);
+  const submission = submissionData?.data;
 
-  const [techStack, setTechStack] = useState<string[]>(
-    submission?.techStack || []
-  );
+  const [techStack, setTechStack] = useState<string[]>([]);
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors },
   } = useForm<EditForm>({
     resolver: zodResolver(editSchema),
-    defaultValues: {
-      projectName: submission?.projectName || "",
-      tagline: submission?.tagline || "",
-      description: submission?.description || "",
-      coverImage: submission?.coverImage || "",
-      demoVideo: submission?.demoVideo || "",
-      githubUrl: submission?.githubUrl || "",
-      demoUrl: submission?.demoUrl || "",
-      readme: submission?.readme || "",
-    },
   });
+
+  useEffect(() => {
+    if (submission) {
+      reset({
+        projectName: submission.projectName || "",
+        tagline: submission.tagline || "",
+        description: submission.description || "",
+        coverImage: submission.coverImage || "",
+        demoVideo: submission.demoVideo || "",
+        githubUrl: submission.githubUrl || "",
+        demoUrl: submission.demoUrl || "",
+        readme: submission.readme || "",
+      });
+      setTechStack(submission.techStack || []);
+    }
+  }, [submission, reset]);
 
   const coverImage = watch("coverImage");
   const description = watch("description");
   const readme = watch("readme");
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background pt-24 pb-16">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 space-y-6">
+          <div className="h-4 w-40 rounded bg-muted shimmer" />
+          <div className="h-8 w-2/3 rounded bg-muted shimmer" />
+          <div className="h-5 w-1/3 rounded bg-muted shimmer" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-40 rounded-xl bg-muted shimmer" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (!submission) {
     return (
@@ -80,12 +101,15 @@ export default function EditSubmissionPage() {
   }
 
   const onSubmit = async (data: EditForm) => {
-    setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    console.log("Updated:", { ...data, techStack });
-    toast.success("Submission updated successfully!");
-    setIsSubmitting(false);
-    router.push(`/dashboard/submissions/${submissionId}`);
+    try {
+      await updateMutation.mutateAsync({ id: submissionId, ...data, techStack });
+      toast.success("Submission updated successfully!");
+      router.push(`/dashboard/submissions/${submissionId}`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update submission"
+      );
+    }
   };
 
   return (
@@ -198,7 +222,7 @@ export default function EditSubmissionPage() {
               <Button type="button" variant="outline" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" loading={isSubmitting} className="gap-2">
+              <Button type="submit" loading={updateMutation.isPending} className="gap-2">
                 <Save className="h-4 w-4" />
                 Save Changes
               </Button>

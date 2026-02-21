@@ -10,27 +10,27 @@ import { Event } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage, AvatarGroup } from "@/components/ui/avatar";
+import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
 
 interface EventCardProps {
   event: Event;
   variant?: "default" | "compact" | "featured";
-  onBookmark?: (id: string) => void;
   className?: string;
 }
 
 export function EventCard({
   event,
   variant = "default",
-  onBookmark,
   className,
 }: EventCardProps) {
-  const [isBookmarked, setIsBookmarked] = React.useState(event.isBookmarked);
+  const { bookmarkIds } = useBookmarkIds("event");
+  const toggleBookmark = useToggleBookmark();
+  const isBookmarked = bookmarkIds.has(event.id);
 
   const handleBookmark = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsBookmarked(!isBookmarked);
-    onBookmark?.(event.id);
+    toggleBookmark.mutate({ entityType: "event", entityId: event.id });
   };
 
   const isFree = event.tickets.every((t) => t.price === 0);
@@ -48,7 +48,7 @@ export function EventCard({
         >
           <div className="relative h-16 w-16 rounded-lg overflow-hidden flex-shrink-0">
             <Image
-              src={event.coverImage || "/placeholder-event.jpg"}
+              src={event.coverImage || "/placeholder-event.svg"}
               alt={event.title}
               fill
               unoptimized
@@ -82,7 +82,7 @@ export function EventCard({
         >
           {/* Background Image */}
           <Image
-            src={event.coverImage || "/placeholder-event.jpg"}
+            src={event.coverImage || "/placeholder-event.svg"}
             alt={event.title}
             fill
             unoptimized
@@ -178,7 +178,7 @@ export function EventCard({
         {/* Cover Image */}
         <div className="relative h-48 overflow-hidden">
           <Image
-            src={event.coverImage || "/placeholder-event.jpg"}
+            src={event.coverImage || "/placeholder-event.svg"}
             alt={event.title}
             fill
             unoptimized

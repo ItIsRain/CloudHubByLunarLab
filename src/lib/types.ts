@@ -2,6 +2,21 @@
 // Core Types for CloudHub by Lunar Labs Platform
 // =====================================================
 
+// Subscription Types
+export type SubscriptionTier = "free" | "pro" | "enterprise";
+export type SubscriptionStatus = "inactive" | "active" | "past_due" | "canceled" | "trialing";
+
+export interface PlanLimits {
+  eventsPerMonth: number;
+  hackathonsPerMonth: number;
+  attendeesPerEvent: number;
+  paidTicketing: boolean;
+  customBranding: boolean;
+  analytics: boolean;
+  apiAccess: boolean;
+  prioritySupport: boolean;
+}
+
 // User & Auth Types
 export type UserRole = "attendee" | "organizer" | "judge" | "mentor" | "admin";
 
@@ -25,6 +40,10 @@ export interface User {
   hackathonsParticipated: number;
   projectsSubmitted: number;
   wins: number;
+  subscriptionTier: SubscriptionTier;
+  stripeCustomerId?: string;
+  subscriptionStatus: SubscriptionStatus;
+  currentPeriodEnd?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -109,6 +128,7 @@ export interface Event {
   tickets: TicketType[];
   speakers: Speaker[];
   agenda: AgendaSession[];
+  faq: { question: string; answer: string }[];
   organizer: User;
   organizerId: string;
   communityId?: string;
@@ -123,6 +143,7 @@ export interface Event {
 // Hackathon Types
 export type HackathonStatus =
   | "draft"
+  | "published"
   | "registration-open"
   | "registration-closed"
   | "hacking"
@@ -186,6 +207,13 @@ export interface AvailabilitySlot {
   bookedBy?: string;
 }
 
+export interface FAQItem {
+  id: string;
+  question: string;
+  answer: string;
+  category?: string;
+}
+
 export interface Hackathon {
   id: string;
   slug: string;
@@ -213,6 +241,7 @@ export interface Hackathon {
   mentors: Mentor[];
   judges: User[];
   judgingCriteria: JudgingCriteria[];
+  faqs?: FAQItem[];
   rules: string;
   eligibility: string[];
   minTeamSize: number;
@@ -252,6 +281,7 @@ export interface Team {
   lookingForRoles?: string[];
   maxSize: number;
   status: TeamStatus;
+  joinPassword?: string | null;
   submission?: Submission;
   createdAt: string;
   updatedAt: string;
@@ -298,6 +328,29 @@ export interface Score {
   scoredAt: string;
 }
 
+// Hackathon Announcement Types
+export interface HackathonAnnouncement {
+  id: string;
+  hackathonId: string;
+  title: string;
+  message: string;
+  sentBy: User;
+  recipientCount: number;
+  sentAt: string;
+}
+
+// Hackathon Participant Types
+export interface HackathonParticipant {
+  id: string;
+  userId: string;
+  user: User;
+  hackathonId: string;
+  status: "pending" | "confirmed" | "approved" | "rejected" | "cancelled";
+  teamName?: string;
+  trackName?: string;
+  createdAt: string;
+}
+
 // Registration Types
 export interface Registration {
   id: string;
@@ -309,6 +362,28 @@ export interface Registration {
   checkedInAt?: string;
   qrCode: string;
   customFields?: Record<string, string>;
+  createdAt: string;
+}
+
+// Event Guest Types (for dashboard)
+export interface EventGuest {
+  id: string;
+  user: User;
+  ticketType: TicketType | null;
+  status: "pending" | "confirmed" | "checked-in" | "cancelled";
+  qrCode: string | null;
+  checkedInAt: string | null;
+  createdAt: string;
+}
+
+// Event Email Types
+export interface EventEmail {
+  id: string;
+  eventId: string;
+  subject: string;
+  body: string;
+  recipientFilter: string;
+  recipientCount: number;
   createdAt: string;
 }
 
@@ -413,6 +488,29 @@ export interface PricingTier {
     prioritySupport: boolean;
   };
   isPopular: boolean;
+}
+
+// Testimonial Types
+export interface Testimonial {
+  id: string;
+  userId: string;
+  user: User;
+  quote: string;
+  role: string;
+  company: string;
+  highlightStat?: string;
+  rating: number;
+  isApproved: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Platform Stats Types
+export interface PlatformStats {
+  eventsHosted: number;
+  totalAttendees: number;
+  hackathonsHosted: number;
+  totalPrizePool: number;
 }
 
 // API Types

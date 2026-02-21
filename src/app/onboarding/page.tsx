@@ -22,7 +22,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuthStore } from "@/store/auth-store";
 import { cn } from "@/lib/utils";
-import { mockCommunities, popularTags } from "@/lib/mock-data";
+import { mockCommunities } from "@/lib/mock-data";
+import { popularTags } from "@/lib/constants";
 
 const steps = [
   { id: 1, label: "Profile", icon: User },

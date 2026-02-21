@@ -10,33 +10,45 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Users } from "lucide-react";
+import { Users, Lock, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { getInitials } from "@/lib/utils";
+import { useJoinTeam } from "@/hooks/use-teams";
 import type { Team } from "@/lib/types";
 
 interface JoinTeamDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   team: Team | null;
-  onJoin: (teamId: string, message: string) => void;
 }
 
 export function JoinTeamDialog({
   open,
   onOpenChange,
   team,
-  onJoin,
 }: JoinTeamDialogProps) {
-  const [message, setMessage] = useState("");
+  const [password, setPassword] = useState("");
+  const joinMutation = useJoinTeam();
 
   if (!team) return null;
 
-  const handleJoin = () => {
-    onJoin(team.id, message);
-    setMessage("");
-    onOpenChange(false);
+  const hasPassword = !!team.joinPassword;
+
+  const handleJoin = async () => {
+    try {
+      await joinMutation.mutateAsync({
+        teamId: team.id,
+        password: hasPassword ? password : undefined,
+      });
+      toast.success(`Joined "${team.name}" successfully!`);
+      setPassword("");
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to join team");
+    }
   };
 
   return (
@@ -45,7 +57,7 @@ export function JoinTeamDialog({
         <DialogHeader>
           <DialogTitle>Join {team.name}</DialogTitle>
           <DialogDescription>
-            Send a request to join this team.
+            {hasPassword ? "This team requires a password to join." : "Join this team to collaborate on the hackathon."}
           </DialogDescription>
         </DialogHeader>
 
@@ -57,7 +69,10 @@ export function JoinTeamDialog({
                 <Users className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="font-semibold">{team.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold">{team.name}</p>
+                  {hasPassword && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {team.members.length}/{team.maxSize} members
                 </p>
@@ -91,25 +106,40 @@ export function JoinTeamDialog({
             )}
           </div>
 
-          {/* Message */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Message (optional)</label>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Tell the team about yourself..."
-              rows={3}
-              className="flex w-full rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            />
-          </div>
+          {/* Password */}
+          {hasPassword && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5" />
+                Team Password *
+              </label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter the team password"
+              />
+            </div>
+          )}
         </div>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleJoin}>
-            Request to Join
+          <Button
+            type="button"
+            onClick={handleJoin}
+            disabled={joinMutation.isPending || (hasPassword && !password)}
+          >
+            {joinMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Joining...
+              </>
+            ) : (
+              "Join Team"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

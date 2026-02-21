@@ -7,6 +7,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Calendar,
+  Check,
   Clock,
   MapPin,
   Users,
@@ -21,6 +22,8 @@ import {
   ExternalLink,
   Twitter,
   Linkedin,
+  Pencil,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/layout/navbar";
@@ -32,8 +35,12 @@ import { RegisterEventDialog } from "@/components/dialogs/register-event-dialog"
 import { ShareDialog } from "@/components/dialogs/share-dialog";
 import { AddToCalendarDialog } from "@/components/dialogs/add-to-calendar-dialog";
 import { EventCard } from "@/components/cards/event-card";
-import { mockEvents } from "@/lib/mock-data";
-import { cn, formatDate, formatTime, formatCurrency } from "@/lib/utils";
+import { useEvent, useEvents } from "@/hooks/use-events";
+import { useEventRegistration, useCancelEventRegistration } from "@/hooks/use-registrations";
+import { useEventGuests } from "@/hooks/use-event-guests";
+import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
+import { useAuthStore } from "@/store/auth-store";
+import { cn, formatDate, formatTime, formatCurrency, getInitials } from "@/lib/utils";
 import type { AgendaSession } from "@/lib/types";
 
 const sessionTypeColors: Record<AgendaSession["type"], string> = {
@@ -49,15 +56,56 @@ export default function EventDetailPage() {
   const params = useParams();
   const eventId = params.eventId as string;
 
-  const event = mockEvents.find(
-    (e) => e.id === eventId || e.slug === eventId
-  );
+  const { data: eventData, isLoading } = useEvent(eventId);
+  const event = eventData?.data;
+  const relatedFilters = event ? { category: [event.category], pageSize: 4 } : undefined;
+  const { data: relatedData } = useEvents(relatedFilters);
+  const relatedEventsAll = relatedData?.data || [];
 
-  const [isBookmarked, setIsBookmarked] = React.useState(event?.isBookmarked ?? false);
+  const { user, isAuthenticated } = useAuthStore();
+  const isOrganizer = !!(user && event && user.id === event.organizerId);
+  const { data: regData } = useEventRegistration(event?.id);
+  const isRegistered = regData?.registered ?? false;
+  const cancelRegistration = useCancelEventRegistration();
+
+  const { data: guestsData } = useEventGuests(event?.id);
+  const attendees = React.useMemo(() => {
+    const guests = guestsData?.data ?? [];
+    return guests
+      .filter((g) => g.status === "confirmed" || g.status === "checked-in")
+      .filter((g) => g.user != null);
+  }, [guestsData]);
+
+  const { bookmarkIds } = useBookmarkIds("event");
+  const toggleBookmark = useToggleBookmark();
+  const isBookmarked = event ? bookmarkIds.has(event.id) : false;
   const [registerOpen, setRegisterOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [calendarOpen, setCalendarOpen] = React.useState(false);
   const [faqOpen, setFaqOpen] = React.useState<number | null>(null);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="h-[400px] rounded-2xl shimmer" />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-6">
+                <div className="h-64 rounded-2xl shimmer" />
+                <div className="h-48 rounded-2xl shimmer" />
+              </div>
+              <div className="space-y-6">
+                <div className="h-72 rounded-2xl shimmer" />
+                <div className="h-40 rounded-2xl shimmer" />
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (!event) {
     return (
@@ -81,13 +129,8 @@ export default function EventDetailPage() {
 
   const isFree = event.tickets.every((t) => t.price === 0);
   const lowestPrice = Math.min(...event.tickets.map((t) => t.price));
-  const relatedEvents = mockEvents.filter((e) => e.id !== event.id && e.category === event.category).slice(0, 3);
-
-  const mockFaq = [
-    { q: "What should I bring?", a: "Just bring your laptop and enthusiasm! We'll provide everything else." },
-    { q: "Is parking available?", a: "Yes, there's a parking garage adjacent to the venue with event-rate pricing." },
-    { q: "Can I get a refund?", a: "Full refunds are available up to 7 days before the event." },
-  ];
+  const relatedEvents = relatedEventsAll.filter((e) => e.id !== event.id).slice(0, 3);
+  const faqItems = event.faq ?? [];
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -130,7 +173,7 @@ export default function EventDetailPage() {
                 size="sm"
                 variant="outline"
                 className="bg-white/10 border-white/30 text-white hover:bg-white/20"
-                onClick={() => { setIsBookmarked(!isBookmarked); toast.success(isBookmarked ? "Removed from bookmarks" : "Added to bookmarks"); }}
+                onClick={() => { if (event) toggleBookmark.mutate({ entityType: "event", entityId: event.id }); }}
               >
                 {isBookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
               </Button>
@@ -150,10 +193,40 @@ export default function EventDetailPage() {
               >
                 <CalendarPlus className="h-4 w-4" />
               </Button>
-              <Button size="sm" onClick={() => setRegisterOpen(true)}>
-                <Ticket className="h-4 w-4 mr-2" />
-                Register
-              </Button>
+              {isOrganizer ? (
+                <>
+                  <Button size="sm" asChild>
+                    <Link href={`/dashboard/events/${event.id}?tab=edit`}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit Event
+                    </Link>
+                  </Button>
+                  <Button size="sm" variant="secondary" asChild>
+                    <Link href={`/dashboard/events/${event.id}`}>
+                      <Settings className="h-4 w-4 mr-2" />
+                      Manage
+                    </Link>
+                  </Button>
+                </>
+              ) : isRegistered ? (
+                <Button size="sm" variant="secondary" onClick={async () => {
+                  if (event) {
+                    await cancelRegistration.mutateAsync(event.id);
+                    toast.success("Registration cancelled");
+                  }
+                }}>
+                  <Check className="h-4 w-4 mr-2" />
+                  Registered
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => {
+                  if (!isAuthenticated) { toast.error("Please sign in to register"); return; }
+                  setRegisterOpen(true);
+                }}>
+                  <Ticket className="h-4 w-4 mr-2" />
+                  Register
+                </Button>
+              )}
             </div>
           </div>
         </motion.div>
@@ -174,24 +247,10 @@ export default function EventDetailPage() {
                     <CardTitle>About this event</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                      {event.description.split("\n").map((paragraph, i) => {
-                        if (paragraph.startsWith("## ")) {
-                          return <h3 key={i} className="font-display text-lg font-bold mt-4 mb-2">{paragraph.replace("## ", "")}</h3>;
-                        }
-                        if (paragraph.startsWith("- **")) {
-                          const parts = paragraph.replace("- **", "").split("**");
-                          return <li key={i} className="ml-4"><strong>{parts[0]}</strong>{parts[1]}</li>;
-                        }
-                        if (paragraph.startsWith("1. ") || paragraph.startsWith("2. ") || paragraph.startsWith("3. ") || paragraph.startsWith("4. ")) {
-                          return <li key={i} className="ml-4">{paragraph.replace(/^\d+\.\s/, "")}</li>;
-                        }
-                        if (paragraph.trim()) {
-                          return <p key={i}>{paragraph}</p>;
-                        }
-                        return null;
-                      })}
-                    </div>
+                    <div
+                      className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1"
+                      dangerouslySetInnerHTML={{ __html: event.description }}
+                    />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -315,36 +374,38 @@ export default function EventDetailPage() {
               )}
 
               {/* FAQ */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle>FAQ</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {mockFaq.map((item, i) => (
-                      <div key={i} className="border rounded-lg">
-                        <button
-                          type="button"
-                          onClick={() => setFaqOpen(faqOpen === i ? null : i)}
-                          className="w-full flex items-center justify-between p-4 text-left"
-                        >
-                          <span className="font-medium text-sm">{item.q}</span>
-                          {faqOpen === i ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        </button>
-                        {faqOpen === i && (
-                          <div className="px-4 pb-4 text-sm text-muted-foreground">
-                            {item.a}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </motion.div>
+              {faqItems.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>FAQ</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {faqItems.map((item, i) => (
+                        <div key={i} className="border rounded-lg">
+                          <button
+                            type="button"
+                            onClick={() => setFaqOpen(faqOpen === i ? null : i)}
+                            className="w-full flex items-center justify-between p-4 text-left"
+                          >
+                            <span className="font-medium text-sm">{item.question}</span>
+                            {faqOpen === i ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </button>
+                          {faqOpen === i && (
+                            <div className="px-4 pb-4 text-sm text-muted-foreground">
+                              {item.answer}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
             </div>
 
             {/* Right Column */}
@@ -418,10 +479,40 @@ export default function EventDetailPage() {
                       ))}
                     </div>
 
-                    <Button className="w-full" onClick={() => setRegisterOpen(true)}>
-                      <Ticket className="h-4 w-4 mr-2" />
-                      {isFree ? "Register for Free" : `Register from ${formatCurrency(lowestPrice)}`}
-                    </Button>
+                    {isOrganizer ? (
+                      <div className="space-y-2">
+                        <Button className="w-full" asChild>
+                          <Link href={`/dashboard/events/${event.id}?tab=edit`}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit Event
+                          </Link>
+                        </Button>
+                        <Button className="w-full" variant="outline" asChild>
+                          <Link href={`/dashboard/events/${event.id}`}>
+                            <Settings className="h-4 w-4 mr-2" />
+                            Manage Event
+                          </Link>
+                        </Button>
+                      </div>
+                    ) : isRegistered ? (
+                      <Button className="w-full" variant="secondary" onClick={async () => {
+                        if (event) {
+                          await cancelRegistration.mutateAsync(event.id);
+                          toast.success("Registration cancelled");
+                        }
+                      }}>
+                        <Check className="h-4 w-4 mr-2" />
+                        Registered
+                      </Button>
+                    ) : (
+                      <Button className="w-full" onClick={() => {
+                        if (!isAuthenticated) { toast.error("Please sign in to register"); return; }
+                        setRegisterOpen(true);
+                      }}>
+                        <Ticket className="h-4 w-4 mr-2" />
+                        {isFree ? "Register for Free" : `Register from ${formatCurrency(lowestPrice)}`}
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -462,20 +553,32 @@ export default function EventDetailPage() {
                     <CardTitle className="text-sm">Who&apos;s attending</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex -space-x-2 mb-2">
-                      {Array.from({ length: 8 }).map((_, i) => (
-                        <Avatar key={i} className="h-8 w-8 border-2 border-background">
-                          <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=attendee${i}`} />
-                          <AvatarFallback>A</AvatarFallback>
-                        </Avatar>
-                      ))}
-                      <div className="h-8 w-8 rounded-full bg-muted border-2 border-background flex items-center justify-center text-xs font-medium">
-                        +{event.registrationCount - 8}
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {event.registrationCount} people registered
-                    </p>
+                    {attendees.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No attendees yet. Be the first to register!
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex -space-x-2 mb-2">
+                          {attendees.slice(0, 8).map((guest) => (
+                            <Avatar key={guest.id} className="h-8 w-8 border-2 border-background">
+                              <AvatarImage src={guest.user!.avatar} />
+                              <AvatarFallback className="text-[10px]">
+                                {getInitials(guest.user!.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                          ))}
+                          {attendees.length > 8 && (
+                            <div className="h-8 w-8 rounded-full bg-muted border-2 border-background flex items-center justify-center text-xs font-medium">
+                              +{attendees.length - 8}
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {attendees.length} {attendees.length === 1 ? "person" : "people"} registered
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -512,6 +615,7 @@ export default function EventDetailPage() {
       <RegisterEventDialog
         open={registerOpen}
         onOpenChange={setRegisterOpen}
+        eventId={event.id}
         eventTitle={event.title}
         tickets={event.tickets}
       />

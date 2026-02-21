@@ -15,25 +15,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TagSelector } from "@/components/forms/tag-selector";
 import { useState } from "react";
+import { Lock } from "lucide-react";
 
-const teamSchema = z.object({
-  name: z.string().min(2, "Team name is required").max(50),
-  description: z.string().max(500).optional(),
-  maxSize: z.number().min(1).max(10),
-});
+function buildTeamSchema(maxTeamSize: number) {
+  return z.object({
+    name: z.string().min(2, "Team name is required").max(50),
+    description: z.string().max(500).optional(),
+    maxSize: z.number().min(1).max(maxTeamSize, `Cannot exceed hackathon limit of ${maxTeamSize}`),
+    joinPassword: z.string().max(50).optional(),
+  });
+}
 
-type TeamForm = z.infer<typeof teamSchema>;
+type TeamForm = z.infer<ReturnType<typeof buildTeamSchema>>;
 
 interface CreateTeamDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: TeamForm & { lookingForRoles: string[] }) => void;
+  maxTeamSize?: number;
 }
 
 export function CreateTeamDialog({
   open,
   onOpenChange,
   onSubmit,
+  maxTeamSize = 10,
 }: CreateTeamDialogProps) {
   const [roles, setRoles] = useState<string[]>([]);
 
@@ -43,8 +49,8 @@ export function CreateTeamDialog({
     reset,
     formState: { errors },
   } = useForm<TeamForm>({
-    resolver: zodResolver(teamSchema),
-    defaultValues: { maxSize: 4 },
+    resolver: zodResolver(buildTeamSchema(maxTeamSize)),
+    defaultValues: { maxSize: Math.min(4, maxTeamSize) },
   });
 
   const handleFormSubmit = (data: TeamForm) => {
@@ -85,7 +91,25 @@ export function CreateTeamDialog({
 
           <div className="space-y-1">
             <label className="text-sm font-medium">Max Team Size</label>
-            <Input type="number" {...register("maxSize", { valueAsNumber: true })} min={1} max={10} />
+            <Input type="number" {...register("maxSize", { valueAsNumber: true })} min={1} max={maxTeamSize} />
+            {errors.maxSize && (
+              <p className="text-xs text-destructive">{errors.maxSize.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5" />
+              Join Password
+            </label>
+            <Input
+              {...register("joinPassword")}
+              type="text"
+              placeholder="Leave empty for open team"
+            />
+            <p className="text-xs text-muted-foreground">
+              Members will need this password to join your team
+            </p>
           </div>
 
           <div className="space-y-1">

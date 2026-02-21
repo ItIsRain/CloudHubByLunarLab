@@ -1,0 +1,383 @@
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  Globe,
+  Lock,
+  EyeOff,
+  Copy,
+  ToggleLeft,
+  ToggleRight,
+  UserCog,
+  Trash2,
+  XCircle,
+  AlertTriangle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import type { Hackathon } from "@/lib/types";
+import { useUpdateHackathon, useDeleteHackathon } from "@/hooks/use-hackathons";
+import { toast } from "sonner";
+
+interface SettingsTabProps {
+  hackathon: Hackathon;
+  hackathonId: string;
+}
+
+type Visibility = "public" | "private" | "unlisted";
+
+const visibilityOptions: {
+  value: Visibility;
+  label: string;
+  description: string;
+  icon: React.ElementType;
+}[] = [
+  {
+    value: "public",
+    label: "Public",
+    description: "Visible to everyone and listed in search results",
+    icon: Globe,
+  },
+  {
+    value: "private",
+    label: "Private",
+    description: "Only visible to invited participants",
+    icon: Lock,
+  },
+  {
+    value: "unlisted",
+    label: "Unlisted",
+    description: "Accessible via link but not listed in search",
+    icon: EyeOff,
+  },
+];
+
+export function SettingsTab({ hackathon, hackathonId }: SettingsTabProps) {
+  const router = useRouter();
+  const updateHackathon = useUpdateHackathon();
+  const deleteHackathon = useDeleteHackathon();
+
+  // Derive initial visibility from hackathon status or default to public
+  const [visibility, setVisibility] = React.useState<Visibility>("public");
+  const [registrationOpen, setRegistrationOpen] = React.useState(
+    hackathon.status === "registration-open"
+  );
+
+  const hackathonUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/hackathons/${hackathon.slug}`
+      : `/hackathons/${hackathon.slug}`;
+
+  const handleVisibilityChange = async (newVisibility: Visibility) => {
+    setVisibility(newVisibility);
+    try {
+      await updateHackathon.mutateAsync({
+        id: hackathonId,
+        visibility: newVisibility,
+      });
+      toast.success(`Hackathon visibility set to ${newVisibility}.`);
+    } catch {
+      toast.error("Failed to update visibility.");
+    }
+  };
+
+  const handleToggleRegistration = async () => {
+    const newState = !registrationOpen;
+    setRegistrationOpen(newState);
+    try {
+      await updateHackathon.mutateAsync({
+        id: hackathonId,
+        status: newState ? "registration-open" : "registration-closed",
+      });
+      toast.success(
+        `Registration ${newState ? "opened" : "closed"} successfully.`
+      );
+    } catch {
+      toast.error("Failed to update registration status.");
+    }
+  };
+
+  const handleCopyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(hackathonUrl);
+      toast.success("URL copied to clipboard!");
+    } catch {
+      toast.error("Failed to copy URL.");
+    }
+  };
+
+  const handleCancelHackathon = async () => {
+    const confirmed = window.confirm(
+      "Are you sure you want to cancel this hackathon? This action will notify all participants."
+    );
+    if (!confirmed) return;
+
+    try {
+      await updateHackathon.mutateAsync({
+        id: hackathonId,
+        status: "draft",
+      });
+      toast.success("Hackathon has been cancelled.");
+    } catch {
+      toast.error("Failed to cancel hackathon.");
+    }
+  };
+
+  const handleDeleteHackathon = async () => {
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete this hackathon? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteHackathon.mutateAsync(hackathonId);
+      router.push("/dashboard/hackathons");
+      toast.success("Hackathon deleted successfully.");
+    } catch {
+      toast.error("Failed to delete hackathon.");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <h2 className="font-display text-2xl font-bold">Settings</h2>
+        <p className="text-sm text-muted-foreground">
+          Manage hackathon visibility, registration, and danger zone options
+        </p>
+      </motion.div>
+
+      {/* Visibility */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Visibility</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {visibilityOptions.map((option) => {
+                const isActive = visibility === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleVisibilityChange(option.value)}
+                    className={cn(
+                      "flex flex-col items-start gap-2 rounded-xl border-2 p-4 text-left transition-all duration-200 hover:shadow-sm",
+                      isActive
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/30"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <option.icon
+                        className={cn(
+                          "h-4 w-4",
+                          isActive
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                        )}
+                      />
+                      <span className="font-medium text-sm">
+                        {option.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {option.description}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Hackathon URL */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Hackathon URL</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-3">
+              <Input
+                value={hackathonUrl}
+                readOnly
+                className="font-mono text-sm"
+              />
+              <Button
+                variant="outline"
+                onClick={handleCopyUrl}
+                className="gap-2 shrink-0"
+              >
+                <Copy className="h-4 w-4" />
+                Copy
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Registration Toggle */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Registration</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <p className="text-sm font-medium">Registration Status</p>
+                <Badge variant={registrationOpen ? "success" : "muted"}>
+                  {registrationOpen ? "Open" : "Closed"}
+                </Badge>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleToggleRegistration}
+                disabled={updateHackathon.isPending}
+                className="gap-2"
+              >
+                {registrationOpen ? (
+                  <ToggleRight className="h-4 w-4 text-green-500" />
+                ) : (
+                  <ToggleLeft className="h-4 w-4 text-muted-foreground" />
+                )}
+                {registrationOpen ? "Close Registration" : "Open Registration"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Management */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Management</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between py-2 border-b">
+              <div>
+                <p className="text-sm font-medium">Transfer Ownership</p>
+                <p className="text-xs text-muted-foreground">
+                  Transfer this hackathon to another organizer
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() =>
+                  toast.info("Transfer ownership feature coming soon.")
+                }
+              >
+                <UserCog className="h-4 w-4" />
+                Transfer
+              </Button>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-medium">Duplicate Hackathon</p>
+                <p className="text-xs text-muted-foreground">
+                  Create a copy of this hackathon with the same settings
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() =>
+                  toast.info("Duplicate hackathon feature coming soon.")
+                }
+              >
+                <Copy className="h-4 w-4" />
+                Duplicate
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Danger Zone */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+      >
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Danger Zone
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between py-2 border-b border-destructive/20">
+              <div>
+                <p className="text-sm font-medium">Cancel Hackathon</p>
+                <p className="text-xs text-muted-foreground">
+                  Cancel this hackathon and notify all participants
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+                onClick={handleCancelHackathon}
+                disabled={updateHackathon.isPending}
+              >
+                <XCircle className="h-4 w-4" />
+                Cancel Hackathon
+              </Button>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-medium">Delete Hackathon</p>
+                <p className="text-xs text-muted-foreground">
+                  Permanently delete this hackathon and all associated data
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+                onClick={handleDeleteHackathon}
+                disabled={deleteHackathon.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+                {deleteHackathon.isPending ? "Deleting..." : "Delete Hackathon"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </div>
+  );
+}

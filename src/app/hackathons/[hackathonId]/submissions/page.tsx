@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { mockHackathons, mockSubmissions } from "@/lib/mock-data";
+import { useHackathon } from "@/hooks/use-hackathons";
+import { useHackathonSubmissions } from "@/hooks/use-submissions";
 import { cn } from "@/lib/utils";
 
 type SortOption = "votes" | "recent";
@@ -27,13 +28,33 @@ export default function HackathonSubmissionsPage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
 
-  const hackathon = mockHackathons.find(
-    (h) => h.id === hackathonId || h.slug === hackathonId
-  );
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+  const { data: submissionsData, isLoading: subsLoading } = useHackathonSubmissions(hackathon?.id);
 
   const [searchQuery, setSearchQuery] = React.useState("");
   const [trackFilter, setTrackFilter] = React.useState("all");
   const [sortBy, setSortBy] = React.useState<SortOption>("votes");
+
+  if (isLoading || subsLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="shimmer rounded-xl h-10 w-64 mb-4" />
+            <div className="shimmer rounded-xl h-6 w-96 mb-8" />
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="shimmer rounded-xl h-48 w-full" />
+              ))}
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!hackathon) {
     return (
@@ -58,9 +79,7 @@ export default function HackathonSubmissionsPage() {
     );
   }
 
-  const hackSubs = mockSubmissions.filter(
-    (s) => s.hackathonId === hackathon.id
-  );
+  const hackSubs = submissionsData?.data || [];
 
   const filteredSubs = hackSubs
     .filter((sub) => {

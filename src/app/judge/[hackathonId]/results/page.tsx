@@ -17,12 +17,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { mockHackathons, mockSubmissions } from "@/lib/mock-data";
+import { useHackathon } from "@/hooks/use-hackathons";
+import { useHackathonSubmissions } from "@/hooks/use-submissions";
 
 export default function ResultsPage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
-  const hackathon = mockHackathons.find((h) => h.id === hackathonId);
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+  const { data: submissionsData, isLoading: submissionsLoading } = useHackathonSubmissions(hackathonId);
+
+  if (isLoading || submissionsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
 
   if (!hackathon) {
     return (
@@ -50,15 +55,14 @@ export default function ResultsPage() {
     );
   }
 
-  // Create ranked submissions with mock scores
-  const rankedSubmissions = mockSubmissions
-    .slice(0, 10)
+  // Rank submissions by averageScore descending
+  const rankedSubmissions = [...(submissionsData?.data || [])]
+    .sort((a, b) => (b.averageScore ?? 0) - (a.averageScore ?? 0))
     .map((sub, i) => ({
       ...sub,
-      finalScore: parseFloat((9.5 - i * 0.35).toFixed(1)),
+      finalScore: sub.averageScore ?? 0,
       rank: i + 1,
-    }))
-    .sort((a, b) => b.finalScore - a.finalScore);
+    }));
 
   const getRankStyle = (rank: number) => {
     if (rank === 1)

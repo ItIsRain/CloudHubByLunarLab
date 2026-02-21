@@ -10,14 +10,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Check, Ticket, Loader2 } from "lucide-react";
+import { Check, Ticket, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
+import {
+  useRegisterForEvent,
+  useCreateTicketCheckout,
+} from "@/hooks/use-registrations";
 import type { TicketType } from "@/lib/types";
 
 interface RegisterEventDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  eventId: string;
   eventTitle: string;
   tickets: TicketType[];
 }
@@ -25,20 +30,51 @@ interface RegisterEventDialogProps {
 export function RegisterEventDialog({
   open,
   onOpenChange,
+  eventId,
   eventTitle,
   tickets,
 }: RegisterEventDialogProps) {
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
-  const [isRegistering, setIsRegistering] = useState(false);
+  const registerMutation = useRegisterForEvent();
+  const checkoutMutation = useCreateTicketCheckout();
+
+  const selected = tickets.find((t) => t.id === selectedTicket);
+  const isPaid = selected ? selected.price > 0 : false;
+  const isPending = registerMutation.isPending || checkoutMutation.isPending;
 
   const handleRegister = async () => {
-    if (!selectedTicket) return;
-    setIsRegistering(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setIsRegistering(false);
-    toast.success("Successfully registered! Check your email for confirmation.");
-    onOpenChange(false);
-    setSelectedTicket(null);
+    if (!selectedTicket || !selected) return;
+
+    try {
+      if (isPaid) {
+        // Paid ticket — redirect to Stripe Checkout
+        const { url } = await checkoutMutation.mutateAsync({
+          eventId,
+          ticketId: selectedTicket,
+        });
+        if (url) {
+          window.location.href = url;
+        }
+      } else {
+        // Free ticket — register directly
+        await registerMutation.mutateAsync({
+          eventId,
+          ticketType: {
+            id: selected.id,
+            name: selected.name,
+            price: selected.price,
+            currency: selected.currency,
+          },
+        });
+        toast.success(
+          "Successfully registered! Check your email for confirmation."
+        );
+        onOpenChange(false);
+        setSelectedTicket(null);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Registration failed");
+    }
   };
 
   return (
@@ -83,12 +119,15 @@ export function RegisterEventDialog({
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground mt-2">
-                        {ticket.quantity - ticket.sold} of {ticket.quantity} remaining
+                        {ticket.quantity - ticket.sold} of {ticket.quantity}{" "}
+                        remaining
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="font-display text-xl font-bold">
-                        {ticket.price === 0 ? "Free" : formatCurrency(ticket.price, ticket.currency)}
+                        {ticket.price === 0
+                          ? "Free"
+                          : formatCurrency(ticket.price, ticket.currency)}
                       </span>
                       {isSelected && (
                         <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center">
@@ -105,13 +144,18 @@ export function RegisterEventDialog({
 
         <Button
           className="w-full"
-          disabled={!selectedTicket || isRegistering}
+          disabled={!selectedTicket || isPending}
           onClick={handleRegister}
         >
-          {isRegistering ? (
+          {isPending ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Processing...
+              {isPaid ? "Redirecting to payment..." : "Processing..."}
+            </>
+          ) : isPaid ? (
+            <>
+              <CreditCard className="h-4 w-4 mr-2" />
+              Proceed to Payment
             </>
           ) : (
             "Complete Registration"

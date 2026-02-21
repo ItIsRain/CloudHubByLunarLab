@@ -19,7 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn, formatDate } from "@/lib/utils";
-import { mockEvents } from "@/lib/mock-data";
+import { useEvents } from "@/hooks/use-events";
+import type { Event } from "@/lib/types";
 import { toast } from "sonner";
 
 const statusStyles: Record<string, "default" | "success" | "warning" | "destructive" | "secondary"> = {
@@ -30,30 +31,36 @@ const statusStyles: Record<string, "default" | "success" | "warning" | "destruct
 };
 
 export default function AdminEventsPage() {
+  const { data: eventsData, isLoading: eventsLoading } = useEvents();
+  const events = eventsData?.data || [];
   const [search, setSearch] = React.useState("");
-  const [featured, setFeatured] = React.useState<Record<string, boolean>>(
-    () => {
+  const [featured, setFeatured] = React.useState<Record<string, boolean>>({});
+
+  React.useEffect(() => {
+    if (events.length > 0 && Object.keys(featured).length === 0) {
       const map: Record<string, boolean> = {};
-      mockEvents.forEach((e) => {
+      events.forEach((e) => {
         map[e.id] = e.isFeatured;
       });
-      return map;
+      setFeatured(map);
     }
-  );
+  }, [events, featured]);
 
-  const filterBySearch = (events: typeof mockEvents) =>
-    events.filter(
+  if (eventsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
+
+  const filterBySearch = (list: typeof events) =>
+    list.filter(
       (event) =>
         event.title.toLowerCase().includes(search.toLowerCase()) ||
         event.organizer.name.toLowerCase().includes(search.toLowerCase())
     );
 
-  const allEvents = filterBySearch(mockEvents);
+  const allEvents = filterBySearch(events);
   const flaggedEvents = filterBySearch(
-    mockEvents.filter((_, i) => i % 7 === 0)
+    events.filter((_, i) => i % 7 === 0)
   );
   const pendingEvents = filterBySearch(
-    mockEvents.filter((e) => e.status === "draft")
+    events.filter((e) => e.status === "draft")
   );
 
   const toggleFeatured = (eventId: string, title: string) => {
@@ -68,7 +75,7 @@ export default function AdminEventsPage() {
     });
   };
 
-  const renderTable = (events: typeof mockEvents) => (
+  const renderTable = (events: Event[]) => (
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>

@@ -20,7 +20,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ShareDialog } from "@/components/dialogs/share-dialog";
 import { cn, formatDate, getInitials } from "@/lib/utils";
-import { mockSubmissions, mockHackathons } from "@/lib/mock-data";
+import { useSubmission } from "@/hooks/use-submissions";
+import { useHackathons } from "@/hooks/use-hackathons";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -37,8 +38,32 @@ export default function SubmissionDetailPage() {
   const submissionId = params.submissionId as string;
   const [showShare, setShowShare] = useState(false);
   const [upvoted, setUpvoted] = useState(false);
+  const { data: hackathonsData } = useHackathons();
+  const hackathons = hackathonsData?.data || [];
+  const { data: submissionData, isLoading } = useSubmission(submissionId);
 
-  const submission = mockSubmissions.find((s) => s.id === submissionId);
+  const submission = submissionData?.data;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background pt-24 pb-16">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="h-4 w-48 rounded bg-muted shimmer" />
+          <div className="h-64 w-full rounded-2xl bg-muted shimmer" />
+          <div className="space-y-3">
+            <div className="h-8 w-2/3 rounded bg-muted shimmer" />
+            <div className="h-5 w-1/2 rounded bg-muted shimmer" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-20 rounded-xl bg-muted shimmer" />
+            ))}
+          </div>
+          <div className="h-48 rounded-xl bg-muted shimmer" />
+        </div>
+      </div>
+    );
+  }
 
   if (!submission) {
     return (
@@ -54,7 +79,7 @@ export default function SubmissionDetailPage() {
     );
   }
 
-  const hackathon = mockHackathons.find((h) => h.id === submission.hackathonId);
+  const hackathon = hackathons.find((h) => h.id === submission.hackathonId);
 
   const handleUpvote = () => {
     setUpvoted(!upvoted);

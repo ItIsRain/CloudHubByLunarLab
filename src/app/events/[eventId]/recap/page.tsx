@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn, formatDate } from "@/lib/utils";
-import { mockEvents } from "@/lib/mock-data";
+import { useEvent } from "@/hooks/use-events";
 
 const recapStats = [
   { label: "Attendees", value: 156, icon: Users },
@@ -71,7 +71,36 @@ const recordings = [
 export default function RecapPage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const event = mockEvents.find((e) => e.id === eventId || e.slug === eventId);
+  const { data: eventData, isLoading } = useEvent(eventId);
+  const event = eventData?.data;
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-8">
+            <div className="text-center space-y-4">
+              <div className="h-6 w-32 mx-auto rounded shimmer" />
+              <div className="h-12 w-96 mx-auto rounded shimmer" />
+              <div className="h-5 w-64 mx-auto rounded shimmer" />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-32 rounded-2xl shimmer" />
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-20 rounded-2xl shimmer" />
+              ))}
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   if (!event) {
     return (

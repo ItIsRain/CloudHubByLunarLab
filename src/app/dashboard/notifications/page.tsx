@@ -19,7 +19,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatRelativeTime } from "@/lib/utils";
-import { mockNotifications } from "@/lib/mock-data";
+import {
+  useNotifications,
+  useMarkAllNotificationsRead,
+  useToggleNotificationRead,
+} from "@/hooks/use-notifications";
 import type { NotificationType } from "@/lib/types";
 
 const typeConfig: Record<NotificationType, { icon: React.ElementType; color: string }> = {
@@ -42,26 +46,32 @@ const filterOptions: { value: string; label: string }[] = [
 ];
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = React.useState(mockNotifications);
   const [filter, setFilter] = React.useState("all");
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-  };
+  const queryFilters = React.useMemo(() => {
+    const f: { type?: string; unread?: boolean; pageSize?: number } = { pageSize: 50 };
+    if (filter === "unread") {
+      f.unread = true;
+    } else if (filter !== "all") {
+      f.type = filter;
+    }
+    return f;
+  }, [filter]);
 
-  const toggleRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: !n.isRead } : n))
-    );
-  };
+  const { data, isLoading } = useNotifications(queryFilters);
+  const markAllRead = useMarkAllNotificationsRead();
+  const toggleRead = useToggleNotificationRead();
 
-  const filtered = notifications.filter((n) => {
-    if (filter === "all") return true;
-    if (filter === "unread") return !n.isRead;
-    return n.type === filter;
-  });
-
+  const notifications = data?.data || [];
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const handleMarkAllRead = () => {
+    markAllRead.mutate();
+  };
+
+  const handleToggleRead = (id: string, currentlyRead: boolean) => {
+    toggleRead.mutate({ id, is_read: !currentlyRead });
+  };
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -81,7 +91,7 @@ export default function NotificationsPage() {
               </p>
             </div>
             {unreadCount > 0 && (
-              <Button variant="outline" size="sm" onClick={markAllRead}>
+              <Button variant="outline" size="sm" onClick={handleMarkAllRead}>
                 <CheckCheck className="h-4 w-4 mr-2" />
                 Mark all read
               </Button>
@@ -110,7 +120,13 @@ export default function NotificationsPage() {
 
           {/* List */}
           <div className="space-y-2">
-            {filtered.length === 0 ? (
+            {isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="shimmer rounded-xl h-20 w-full" />
+                ))}
+              </div>
+            ) : notifications.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -125,7 +141,7 @@ export default function NotificationsPage() {
                 </p>
               </motion.div>
             ) : (
-              filtered.map((notification, i) => {
+              notifications.map((notification, i) => {
                 const config = typeConfig[notification.type];
                 const Icon = config.icon;
 
@@ -168,7 +184,7 @@ export default function NotificationsPage() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => toggleRead(notification.id)}
+                            onClick={() => handleToggleRead(notification.id, notification.isRead)}
                             className={cn(
                               "h-2.5 w-2.5 rounded-full flex-shrink-0 mt-1.5 transition-colors",
                               notification.isRead ? "bg-muted hover:bg-primary/50" : "bg-primary"

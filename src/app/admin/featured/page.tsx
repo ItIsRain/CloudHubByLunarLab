@@ -17,25 +17,42 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDate } from "@/lib/utils";
-import { mockEvents, mockHackathons } from "@/lib/mock-data";
+import { useEvents } from "@/hooks/use-events";
+import { useHackathons } from "@/hooks/use-hackathons";
 import { toast } from "sonner";
 
 export default function AdminFeaturedPage() {
-  const [featuredEventIds, setFeaturedEventIds] = React.useState<string[]>(
-    () => mockEvents.filter((e) => e.isFeatured).map((e) => e.id)
-  );
-  const [featuredHackathonIds, setFeaturedHackathonIds] = React.useState<string[]>(
-    () => mockHackathons.filter((h) => h.isFeatured).map((h) => h.id)
-  );
+  const { data: eventsData, isLoading: eventsLoading } = useEvents();
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons();
+  const allEvents = eventsData?.data || [];
+  const allHackathons = hackathonsData?.data || [];
+
+  const [featuredEventIds, setFeaturedEventIds] = React.useState<string[]>([]);
+  const [featuredHackathonIds, setFeaturedHackathonIds] = React.useState<string[]>([]);
+  const [initialized, setInitialized] = React.useState(false);
   const [showAddEvent, setShowAddEvent] = React.useState(false);
   const [showAddHackathon, setShowAddHackathon] = React.useState(false);
   const [selectedEventId, setSelectedEventId] = React.useState("");
   const [selectedHackathonId, setSelectedHackathonId] = React.useState("");
 
-  const featuredEvents = mockEvents.filter((e) => featuredEventIds.includes(e.id));
-  const nonFeaturedEvents = mockEvents.filter((e) => !featuredEventIds.includes(e.id));
-  const featuredHackathons = mockHackathons.filter((h) => featuredHackathonIds.includes(h.id));
-  const nonFeaturedHackathons = mockHackathons.filter((h) => !featuredHackathonIds.includes(h.id));
+  React.useEffect(() => {
+    if (!initialized && allEvents.length > 0) {
+      setFeaturedEventIds(allEvents.filter((e) => e.isFeatured).map((e) => e.id));
+    }
+    if (!initialized && allHackathons.length > 0) {
+      setFeaturedHackathonIds(allHackathons.filter((h) => h.isFeatured).map((h) => h.id));
+    }
+    if (allEvents.length > 0 && allHackathons.length > 0) {
+      setInitialized(true);
+    }
+  }, [allEvents, allHackathons, initialized]);
+
+  if (eventsLoading || hackathonsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
+
+  const featuredEvents = allEvents.filter((e) => featuredEventIds.includes(e.id));
+  const nonFeaturedEvents = allEvents.filter((e) => !featuredEventIds.includes(e.id));
+  const featuredHackathons = allHackathons.filter((h) => featuredHackathonIds.includes(h.id));
+  const nonFeaturedHackathons = allHackathons.filter((h) => !featuredHackathonIds.includes(h.id));
 
   const removeEvent = (id: string, title: string) => {
     setFeaturedEventIds((prev) => prev.filter((eid) => eid !== id));
@@ -49,7 +66,7 @@ export default function AdminFeaturedPage() {
 
   const addEvent = () => {
     if (!selectedEventId) return;
-    const event = mockEvents.find((e) => e.id === selectedEventId);
+    const event = allEvents.find((e) => e.id === selectedEventId);
     setFeaturedEventIds((prev) => [...prev, selectedEventId]);
     setSelectedEventId("");
     setShowAddEvent(false);
@@ -58,7 +75,7 @@ export default function AdminFeaturedPage() {
 
   const addHackathon = () => {
     if (!selectedHackathonId) return;
-    const hack = mockHackathons.find((h) => h.id === selectedHackathonId);
+    const hack = allHackathons.find((h) => h.id === selectedHackathonId);
     setFeaturedHackathonIds((prev) => [...prev, selectedHackathonId]);
     setSelectedHackathonId("");
     setShowAddHackathon(false);

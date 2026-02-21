@@ -8,12 +8,14 @@ import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { HackathonCard } from "@/components/cards/hackathon-card";
-import { mockHackathons } from "@/lib/mock-data";
-
-const organizingHackathons = mockHackathons.slice(0, 3);
-const participatingHackathons = mockHackathons.slice(3, 6);
+import { useMyHackathons } from "@/hooks/use-hackathons";
 
 export default function MyHackathonsPage() {
+  const { data: hackathonsData, isLoading } = useMyHackathons();
+  const hackathons = hackathonsData?.data || [];
+  const organizingHackathons = hackathons.slice(0, 3);
+  const participatingHackathons = hackathons.slice(3, 6);
+
   return (
     <>
       <Navbar />
@@ -57,7 +59,13 @@ export default function MyHackathonsPage() {
             </TabsList>
 
             <TabsContent value="organizing">
-              {organizingHackathons.length > 0 ? (
+              {isLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="shimmer rounded-xl h-64 w-full" />
+                  ))}
+                </div>
+              ) : organizingHackathons.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {organizingHackathons.map((h, i) => (
                     <motion.div
@@ -107,7 +115,13 @@ export default function MyHackathonsPage() {
             </TabsContent>
 
             <TabsContent value="participating">
-              {participatingHackathons.length > 0 ? (
+              {isLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="shimmer rounded-xl h-64 w-full" />
+                  ))}
+                </div>
+              ) : participatingHackathons.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {participatingHackathons.map((h, i) => (
                     <motion.div

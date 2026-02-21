@@ -20,8 +20,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { InviteTeamMemberDialog } from "@/components/dialogs/invite-team-member-dialog";
+import { EditTeamDialog } from "@/components/dialogs/edit-team-dialog";
 import { cn, getInitials, formatDate } from "@/lib/utils";
-import { mockTeams, mockHackathons } from "@/lib/mock-data";
+import { useTeam } from "@/hooks/use-teams";
+import { useHackathons } from "@/hooks/use-hackathons";
 import type { TeamStatus } from "@/lib/types";
 
 const statusColors: Record<TeamStatus, string> = {
@@ -34,8 +36,22 @@ export default function TeamWorkspacePage() {
   const params = useParams();
   const teamId = params.teamId as string;
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const { data: hackathonsData } = useHackathons();
+  const hackathons = hackathonsData?.data || [];
 
-  const team = mockTeams.find((t) => t.id === teamId);
+  const { data: teamData, isLoading } = useTeam(teamId);
+  const team = teamData?.data;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background pt-24 pb-16">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+          <div className="shimmer rounded-xl h-96 w-full" />
+        </div>
+      </div>
+    );
+  }
 
   if (!team) {
     return (
@@ -54,7 +70,7 @@ export default function TeamWorkspacePage() {
     );
   }
 
-  const hackathon = mockHackathons.find((h) => h.id === team.hackathonId);
+  const hackathon = hackathons.find((h) => h.id === team.hackathonId);
 
   const handleInvite = (userId: string) => {
     toast.success("Invitation sent!");
@@ -112,7 +128,7 @@ export default function TeamWorkspacePage() {
                   Invite Member
                 </Button>
               )}
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" onClick={() => setShowEditDialog(true)}>
                 <Settings className="h-4 w-4" />
               </Button>
             </div>
@@ -290,6 +306,11 @@ export default function TeamWorkspacePage() {
         onOpenChange={setShowInviteDialog}
         onInvite={handleInvite}
         existingMemberIds={team.members.map((m) => m.user.id)}
+      />
+      <EditTeamDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        team={team}
       />
     </div>
   );

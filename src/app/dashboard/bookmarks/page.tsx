@@ -9,11 +9,21 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
-import { getBookmarkedEvents, getBookmarkedHackathons } from "@/lib/mock-data";
+import { useBookmarkedEntityIds } from "@/hooks/use-bookmarks";
+import { useEventsByIds } from "@/hooks/use-events";
+import { useHackathonsByIds } from "@/hooks/use-hackathons";
 
 export default function BookmarksPage() {
-  const bookmarkedEvents = getBookmarkedEvents();
-  const bookmarkedHackathons = getBookmarkedHackathons();
+  const { ids: eventIds, isLoading: eventIdsLoading } = useBookmarkedEntityIds("event");
+  const { ids: hackathonIds, isLoading: hackathonIdsLoading } = useBookmarkedEntityIds("hackathon");
+  const { data: eventsData, isLoading: eventsLoading } = useEventsByIds(eventIds);
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathonsByIds(hackathonIds);
+
+  const bookmarkedEvents = eventsData?.data || [];
+  const bookmarkedHackathons = hackathonsData?.data || [];
+
+  const isLoadingEvents = eventIdsLoading || eventsLoading;
+  const isLoadingHackathons = hackathonIdsLoading || hackathonsLoading;
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -38,16 +48,29 @@ export default function BookmarksPage() {
               <TabsList>
                 <TabsTrigger value="events">
                   <Calendar className="h-4 w-4 mr-2" />
-                  Events ({bookmarkedEvents.length})
+                  Events ({isLoadingEvents ? "..." : bookmarkedEvents.length})
                 </TabsTrigger>
                 <TabsTrigger value="hackathons">
                   <Trophy className="h-4 w-4 mr-2" />
-                  Hackathons ({bookmarkedHackathons.length})
+                  Hackathons ({isLoadingHackathons ? "..." : bookmarkedHackathons.length})
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="events">
-                {bookmarkedEvents.length === 0 ? (
+                {isLoadingEvents ? (
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="rounded-2xl overflow-hidden border">
+                        <div className="shimmer h-48 w-full" />
+                        <div className="p-4 space-y-3">
+                          <div className="shimmer h-4 w-3/4 rounded" />
+                          <div className="shimmer h-3 w-1/2 rounded" />
+                          <div className="shimmer h-3 w-2/3 rounded" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : bookmarkedEvents.length === 0 ? (
                   <div className="text-center py-16">
                     <Bookmark className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                     <h3 className="font-display text-lg font-bold mb-1">No bookmarked events</h3>
@@ -75,7 +98,20 @@ export default function BookmarksPage() {
               </TabsContent>
 
               <TabsContent value="hackathons">
-                {bookmarkedHackathons.length === 0 ? (
+                {isLoadingHackathons ? (
+                  <div className="space-y-4 mt-4">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <div key={i} className="rounded-2xl overflow-hidden border">
+                        <div className="shimmer h-44 w-full" />
+                        <div className="p-4 space-y-3">
+                          <div className="shimmer h-4 w-2/3 rounded" />
+                          <div className="shimmer h-3 w-full rounded" />
+                          <div className="shimmer h-3 w-1/2 rounded" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : bookmarkedHackathons.length === 0 ? (
                   <div className="text-center py-16">
                     <Bookmark className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                     <h3 className="font-display text-lg font-bold mb-1">No bookmarked hackathons</h3>

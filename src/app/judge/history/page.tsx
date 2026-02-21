@@ -16,28 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
-import { mockHackathons } from "@/lib/mock-data";
-
-const pastJudging = [
-  {
-    hackathon: mockHackathons[2],
-    submissionsJudged: 18,
-    averageScore: 7.6,
-    completedAt: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    hackathon: mockHackathons[0],
-    submissionsJudged: 15,
-    averageScore: 8.1,
-    completedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    hackathon: mockHackathons[1],
-    submissionsJudged: 12,
-    averageScore: 7.5,
-    completedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
+import { useHackathons } from "@/hooks/use-hackathons";
 
 const summaryStats = [
   { label: "Total Hackathons Judged", value: 3, icon: Trophy },
@@ -46,6 +25,32 @@ const summaryStats = [
 ];
 
 export default function JudgingHistoryPage() {
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons();
+  const hackathons = hackathonsData?.data || [];
+
+  const pastJudging = [
+    ...(hackathons[2] ? [{
+      hackathon: hackathons[2],
+      submissionsJudged: 18,
+      averageScore: 7.6,
+      completedAt: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString(),
+    }] : []),
+    ...(hackathons[0] ? [{
+      hackathon: hackathons[0],
+      submissionsJudged: 15,
+      averageScore: 8.1,
+      completedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+    }] : []),
+    ...(hackathons[1] ? [{
+      hackathon: hackathons[1],
+      submissionsJudged: 12,
+      averageScore: 7.5,
+      completedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
+    }] : []),
+  ];
+
+  if (hackathonsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
+
   return (
     <>
       <Navbar />

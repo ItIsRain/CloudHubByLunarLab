@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatDate, formatCurrency } from "@/lib/utils";
-import { mockEvents } from "@/lib/mock-data";
+import { useEvent } from "@/hooks/use-events";
 
 interface MockTicket {
   id: string;
@@ -85,10 +85,34 @@ const ticketTypes: MockTicket[] = [
 export default function TicketsPage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const event = mockEvents.find((e) => e.id === eventId || e.slug === eventId);
+  const { data: eventData, isLoading } = useEvent(eventId);
+  const event = eventData?.data;
 
   const [selectedTicket, setSelectedTicket] = React.useState<string | null>(null);
   const [quantity, setQuantity] = React.useState(1);
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="h-8 w-48 rounded shimmer" />
+            <div className="h-12 w-64 rounded shimmer" />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-36 rounded-2xl shimmer" />
+                ))}
+              </div>
+              <div className="h-72 rounded-2xl shimmer" />
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   if (!event) {
     return (

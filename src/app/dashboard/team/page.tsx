@@ -10,7 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { getTeamsForUser, mockHackathons } from "@/lib/mock-data";
+import { useMyTeams } from "@/hooks/use-teams";
+import { useHackathons } from "@/hooks/use-hackathons";
 
 const statusColors: Record<string, string> = {
   forming: "bg-blue-500/10 text-blue-500",
@@ -19,7 +20,10 @@ const statusColors: Record<string, string> = {
 };
 
 export default function TeamsPage() {
-  const teams = getTeamsForUser("user-1");
+  const { data: hackathonsData } = useHackathons();
+  const hackathons = hackathonsData?.data || [];
+  const { data: teamsData, isLoading } = useMyTeams();
+  const teams = teamsData?.data || [];
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -35,7 +39,13 @@ export default function TeamsPage() {
             <p className="text-muted-foreground">{teams.length} teams across hackathons</p>
           </motion.div>
 
-          {teams.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="shimmer rounded-xl h-28 w-full" />
+              ))}
+            </div>
+          ) : teams.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -53,7 +63,7 @@ export default function TeamsPage() {
           ) : (
             <div className="space-y-4">
               {teams.map((team, i) => {
-                const hackathon = mockHackathons.find((h) => h.id === team.hackathonId);
+                const hackathon = hackathons.find((h) => h.id === team.hackathonId);
 
                 return (
                   <motion.div

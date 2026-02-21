@@ -21,15 +21,37 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn, getInitials } from "@/lib/utils";
-import { mockEvents, mockSpeakers } from "@/lib/mock-data";
+import { mockSpeakers } from "@/lib/mock-data";
+import { useEvent } from "@/hooks/use-events";
 import type { Speaker } from "@/lib/types";
 
 export default function SpeakersPage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const event = mockEvents.find((e) => e.id === eventId || e.slug === eventId);
+  const { data: eventData, isLoading } = useEvent(eventId);
+  const event = eventData?.data;
 
   const [expandedSpeaker, setExpandedSpeaker] = React.useState<string | null>(null);
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="h-8 w-48 rounded shimmer" />
+            <div className="h-12 w-64 rounded shimmer" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-56 rounded-2xl shimmer" />
+              ))}
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   if (!event) {
     return (

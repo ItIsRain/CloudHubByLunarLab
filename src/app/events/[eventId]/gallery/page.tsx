@@ -19,7 +19,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { mockEvents } from "@/lib/mock-data";
+import { useEvent } from "@/hooks/use-events";
 
 const galleryImages = Array.from({ length: 12 }, (_, i) => ({
   id: `img-${i + 1}`,
@@ -32,9 +32,30 @@ const galleryImages = Array.from({ length: 12 }, (_, i) => ({
 export default function GalleryPage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const event = mockEvents.find((e) => e.id === eventId || e.slug === eventId);
+  const { data: eventData, isLoading } = useEvent(eventId);
+  const event = eventData?.data;
 
   const [lightboxIndex, setLightboxIndex] = React.useState<number | null>(null);
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="h-8 w-48 rounded shimmer" />
+            <div className="h-10 w-64 rounded shimmer" />
+            <div className="columns-1 sm:columns-2 lg:columns-3 gap-4 space-y-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-48 rounded-2xl shimmer break-inside-avoid" />
+              ))}
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   if (!event) {
     return (

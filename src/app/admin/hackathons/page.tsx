@@ -20,7 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
-import { mockHackathons } from "@/lib/mock-data";
+import { useHackathons } from "@/hooks/use-hackathons";
 import { toast } from "sonner";
 
 const statusStyles: Record<string, "default" | "success" | "warning" | "destructive" | "secondary" | "gradient"> = {
@@ -34,19 +34,25 @@ const statusStyles: Record<string, "default" | "success" | "warning" | "destruct
 };
 
 export default function AdminHackathonsPage() {
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons();
+  const hackathons = hackathonsData?.data || [];
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
-  const [featured, setFeatured] = React.useState<Record<string, boolean>>(
-    () => {
+  const [featured, setFeatured] = React.useState<Record<string, boolean>>({});
+
+  React.useEffect(() => {
+    if (hackathons.length > 0 && Object.keys(featured).length === 0) {
       const map: Record<string, boolean> = {};
-      mockHackathons.forEach((h) => {
+      hackathons.forEach((h) => {
         map[h.id] = h.isFeatured;
       });
-      return map;
+      setFeatured(map);
     }
-  );
+  }, [hackathons, featured]);
 
-  const filteredHackathons = mockHackathons.filter((hack) => {
+  if (hackathonsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
+
+  const filteredHackathons = hackathons.filter((hack) => {
     const matchSearch =
       hack.name.toLowerCase().includes(search.toLowerCase()) ||
       hack.organizer.name.toLowerCase().includes(search.toLowerCase());
@@ -186,7 +192,10 @@ export default function AdminHackathonsPage() {
                             <td className="p-4 hidden sm:table-cell">
                               <div className="flex items-center gap-1 text-sm font-medium">
                                 <DollarSign className="h-3.5 w-3.5 text-green-500" />
-                                {formatCurrency(hack.totalPrizePool)}
+                                {formatCurrency(
+                                  (hack.prizes ?? []).reduce((sum, p) => sum + (p.value || 0), 0),
+                                  hack.prizes?.[0]?.currency || "USD"
+                                )}
                               </div>
                             </td>
                             <td className="p-4 text-center">

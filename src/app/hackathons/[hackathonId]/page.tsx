@@ -22,6 +22,12 @@ import {
   Star,
   ChevronRight,
   ExternalLink,
+  Check,
+  Loader2,
+  Pencil,
+  UserPlus,
+  Lock,
+  HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/layout/navbar";
@@ -33,11 +39,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ShareDialog } from "@/components/dialogs/share-dialog";
 import { AddToCalendarDialog } from "@/components/dialogs/add-to-calendar-dialog";
 import { BookMentorDialog } from "@/components/dialogs/book-mentor-dialog";
-import { mockHackathons, mockTeams, mockSubmissions } from "@/lib/mock-data";
+import { CreateTeamDialog } from "@/components/dialogs/create-team-dialog";
+import { EditTeamDialog } from "@/components/dialogs/edit-team-dialog";
+import { JoinTeamDialog } from "@/components/dialogs/join-team-dialog";
+import { useHackathon } from "@/hooks/use-hackathons";
+import { useHackathonSubmissions } from "@/hooks/use-submissions";
+import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
+import { useHackathonRegistration, useRegisterForHackathon, useCancelHackathonRegistration } from "@/hooks/use-registrations";
+import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
+import { useAuthStore } from "@/store/auth-store";
 import { cn, formatDate, formatCurrency, getTimeRemaining } from "@/lib/utils";
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   "draft": { label: "Draft", color: "bg-muted" },
+  "published": { label: "Registration Open", color: "bg-green-500" },
   "registration-open": { label: "Registration Open", color: "bg-green-500" },
   "registration-closed": { label: "Registration Closed", color: "bg-yellow-500" },
   "hacking": { label: "Hacking in Progress", color: "bg-primary" },
@@ -81,15 +96,41 @@ export default function HackathonDetailPage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
 
-  const hackathon = mockHackathons.find(
-    (h) => h.id === hackathonId || h.slug === hackathonId
-  );
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+  const { data: teamsData } = useHackathonTeams(hackathon?.id);
+  const { data: submissionsData } = useHackathonSubmissions(hackathon?.id);
+  const { isAuthenticated, user } = useAuthStore();
+  const { data: regData } = useHackathonRegistration(hackathon?.id);
+  const isRegistered = regData?.registered ?? false;
+  const registerMutation = useRegisterForHackathon();
+  const cancelMutation = useCancelHackathonRegistration();
 
-  const [isBookmarked, setIsBookmarked] = React.useState(hackathon?.isBookmarked ?? false);
+  const { bookmarkIds } = useBookmarkIds("hackathon");
+  const toggleBookmark = useToggleBookmark();
+  const isBookmarked = hackathon ? bookmarkIds.has(hackathon.id) : false;
   const [shareOpen, setShareOpen] = React.useState(false);
   const [calendarOpen, setCalendarOpen] = React.useState(false);
   const [mentorDialogOpen, setMentorDialogOpen] = React.useState(false);
   const [selectedMentor, setSelectedMentor] = React.useState<string | null>(null);
+  const [createTeamOpen, setCreateTeamOpen] = React.useState(false);
+  const [editTeamOpen, setEditTeamOpen] = React.useState(false);
+  const [joinTeamOpen, setJoinTeamOpen] = React.useState(false);
+  const [selectedTeam, setSelectedTeam] = React.useState<import("@/lib/types").Team | null>(null);
+  const createTeamMutation = useCreateTeam();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="shimmer rounded-xl h-96 w-full" />
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (!hackathon) {
     return (
@@ -112,11 +153,12 @@ export default function HackathonDetailPage() {
   }
 
   const status = statusConfig[hackathon.status] || statusConfig["draft"];
-  const hackTeams = mockTeams.filter((t) => t.hackathonId === hackathon.id);
-  const hackSubs = mockSubmissions.filter((s) => s.hackathonId === hackathon.id);
+  const hackTeams = teamsData?.data || [];
+  const hackSubs = submissionsData?.data || [];
+  const isOrganizer = user?.id === hackathon.organizerId;
 
   const getDeadline = () => {
-    if (hackathon.status === "registration-open") return hackathon.registrationEnd;
+    if (hackathon.status === "published" || hackathon.status === "registration-open") return hackathon.registrationEnd;
     if (hackathon.status === "hacking" || hackathon.status === "submission") return hackathon.submissionDeadline;
     return null;
   };
@@ -175,7 +217,10 @@ export default function HackathonDetailPage() {
                 <div className="flex flex-wrap items-center gap-6 mt-4 text-white/80">
                   <div className="flex items-center gap-1.5">
                     <Trophy className="h-5 w-5 text-yellow-400" />
-                    <span className="font-bold text-white">{formatCurrency(hackathon.totalPrizePool)}</span>
+                    <span className="font-bold text-white">{formatCurrency(
+                      (hackathon.prizes ?? []).reduce((sum, p) => sum + (p.value || 0), 0),
+                      hackathon.prizes?.[0]?.currency || "USD"
+                    )}</span>
                     <span>in prizes</span>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -184,7 +229,7 @@ export default function HackathonDetailPage() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Zap className="h-5 w-5" />
-                    <span>{hackathon.teamCount} teams</span>
+                    <span>{hackTeams.length} teams</span>
                   </div>
                 </div>
               </div>
@@ -196,7 +241,7 @@ export default function HackathonDetailPage() {
                     size="sm"
                     variant="outline"
                     className="bg-white/10 border-white/30 text-white hover:bg-white/20"
-                    onClick={() => { setIsBookmarked(!isBookmarked); toast.success(isBookmarked ? "Removed" : "Bookmarked!"); }}
+                    onClick={() => { if (hackathon) toggleBookmark.mutate({ entityType: "hackathon", entityId: hackathon.id }); }}
                   >
                     {isBookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
                   </Button>
@@ -206,10 +251,38 @@ export default function HackathonDetailPage() {
                   <Button size="sm" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20" onClick={() => setCalendarOpen(true)}>
                     <CalendarPlus className="h-4 w-4" />
                   </Button>
-                  {hackathon.status === "registration-open" && (
-                    <Button size="sm" onClick={() => toast.success("Registration submitted! (mock)")}>
-                      Register Now
+                  {isOrganizer ? (
+                    <Button size="sm" asChild>
+                      <Link href={`/dashboard/hackathons/${hackathon.id}?tab=edit`}>
+                        <Pencil className="h-4 w-4 mr-1" />
+                        Edit Hackathon
+                      </Link>
                     </Button>
+                  ) : (hackathon.status === "published" || hackathon.status === "registration-open") && (
+                    isRegistered ? (
+                      <Button size="sm" variant="secondary" onClick={async () => {
+                        await cancelMutation.mutateAsync(hackathon.id);
+                        toast.success("Registration cancelled");
+                      }} disabled={cancelMutation.isPending}>
+                        <Check className="h-4 w-4 mr-1" />
+                        Registered
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={async () => {
+                        if (!isAuthenticated) { toast.error("Please sign in to register"); return; }
+                        try {
+                          await registerMutation.mutateAsync(hackathon.id);
+                          toast.success("Successfully registered for the hackathon!");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Registration failed");
+                        }
+                      }} disabled={registerMutation.isPending}>
+                        {registerMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : null}
+                        Register Now
+                      </Button>
+                    )
                   )}
                 </div>
               </div>
@@ -243,17 +316,10 @@ export default function HackathonDetailPage() {
                 <Card>
                   <CardHeader><CardTitle>About</CardTitle></CardHeader>
                   <CardContent>
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                      {hackathon.description.split("\n").map((p, i) => {
-                        if (p.startsWith("## ")) return <h3 key={i} className="font-display text-lg font-bold mt-4 mb-2">{p.replace("## ", "")}</h3>;
-                        if (p.startsWith("- **")) {
-                          const parts = p.replace("- **", "").split("**");
-                          return <li key={i} className="ml-4"><strong>{parts[0]}</strong>{parts[1]}</li>;
-                        }
-                        if (p.trim()) return <p key={i}>{p}</p>;
-                        return null;
-                      })}
-                    </div>
+                    <div
+                      className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1 [&_p:empty]:hidden"
+                      dangerouslySetInnerHTML={{ __html: hackathon.description }}
+                    />
                   </CardContent>
                 </Card>
 
@@ -315,21 +381,22 @@ export default function HackathonDetailPage() {
                 <Card>
                   <CardHeader><CardTitle>Rules & Eligibility</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                      {hackathon.rules.split("\n").map((line, i) => {
-                        if (line.startsWith("# ")) return <h3 key={i} className="font-bold">{line.replace("# ", "")}</h3>;
-                        if (line.match(/^\d+\./)) return <li key={i} className="ml-4">{line.replace(/^\d+\.\s/, "")}</li>;
-                        if (line.trim()) return <p key={i}>{line}</p>;
-                        return null;
-                      })}
-                    </div>
+                    {hackathon.rules && (
+                      <div
+                        className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1 [&_p:empty]:hidden"
+                        dangerouslySetInnerHTML={{ __html: hackathon.rules }}
+                      />
+                    )}
                     <div>
                       <p className="text-sm font-medium mb-2">Eligibility</p>
                       <ul className="space-y-1">
                         {hackathon.eligibility.map((e, i) => (
-                          <li key={i} className="text-sm text-muted-foreground flex items-center gap-2">
-                            <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                            {e}
+                          <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                            <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                            <span
+                              className="[&_p]:inline [&_ul]:hidden [&_ol]:hidden"
+                              dangerouslySetInnerHTML={{ __html: e }}
+                            />
                           </li>
                         ))}
                       </ul>
@@ -407,7 +474,10 @@ export default function HackathonDetailPage() {
                     <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                     <h3 className="font-display text-lg font-bold mb-1">No teams yet</h3>
                     <p className="text-sm text-muted-foreground mb-4">Be the first to create a team!</p>
-                    <Button onClick={() => toast.info("Team creation coming soon!")}>Create Team</Button>
+                    <Button onClick={() => {
+                      if (!isAuthenticated) { toast.error("Please sign in to create a team"); return; }
+                      setCreateTeamOpen(true);
+                    }}>Create Team</Button>
                   </div>
                 ) : (
                   <div className="grid sm:grid-cols-2 gap-4">
@@ -442,6 +512,50 @@ export default function HackathonDetailPage() {
                                 ))}
                               </div>
                             )}
+                            {/* Action buttons */}
+                            {(() => {
+                              if (isOrganizer) {
+                                return (
+                                  <Button variant="outline" size="sm" className="w-full gap-1.5 mt-3" asChild>
+                                    <Link href={`/dashboard/hackathons/${hackathon.id}?tab=teams`}>
+                                      <Users className="h-3.5 w-3.5" />
+                                      View Team
+                                    </Link>
+                                  </Button>
+                                );
+                              }
+
+                              const isLeader = user && team.members.some((m) => m.user.id === user.id && m.isLeader);
+                              const isMember = user && team.members.some((m) => m.user.id === user.id);
+
+                              if (isLeader) {
+                                return (
+                                  <Button variant="outline" size="sm" className="w-full gap-1.5 mt-3" onClick={() => { setSelectedTeam(team); setEditTeamOpen(true); }}>
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Edit Team
+                                  </Button>
+                                );
+                              }
+
+                              if (!isMember && team.status === "forming" && team.members.length < team.maxSize) {
+                                if (!isRegistered) {
+                                  return (
+                                    <Button variant="outline" size="sm" className="w-full gap-1.5 mt-3" disabled title="Register for the hackathon to join a team">
+                                      <Lock className="h-3.5 w-3.5" />
+                                      Register to Join
+                                    </Button>
+                                  );
+                                }
+                                return (
+                                  <Button variant="outline" size="sm" className="w-full gap-1.5 mt-3" onClick={() => { setSelectedTeam(team); setJoinTeamOpen(true); }}>
+                                    <UserPlus className="h-3.5 w-3.5" />
+                                    {team.joinPassword ? <><Lock className="h-3 w-3" /> Join Team</> : "Join Team"}
+                                  </Button>
+                                );
+                              }
+
+                              return null;
+                            })()}
                           </CardContent>
                         </Card>
                       </motion.div>
@@ -568,21 +682,25 @@ export default function HackathonDetailPage() {
 
               {/* FAQ */}
               <TabsContent value="faq" className="mt-6">
-                <Card>
-                  <CardContent className="p-6 space-y-4">
-                    {[
-                      { q: "Who can participate?", a: hackathon.eligibility.join(". ") },
-                      { q: "What's the team size?", a: `Teams of ${hackathon.minTeamSize}-${hackathon.maxTeamSize}. ${hackathon.allowSolo ? "Solo participation is allowed." : ""}` },
-                      { q: "Do I need to be on-site?", a: hackathon.type === "online" ? "No, this is a fully online hackathon." : hackathon.type === "hybrid" ? "You can participate either in-person or remotely." : "Yes, this is an in-person hackathon." },
-                      { q: "What happens after I submit?", a: "Your project will be reviewed by our judges based on the scoring criteria. Winners will be announced on " + formatDate(hackathon.winnersAnnouncement) + "." },
-                    ].map((item, i) => (
-                      <div key={i} className="pb-4 border-b last:border-0 last:pb-0">
-                        <p className="font-medium mb-1">{item.q}</p>
-                        <p className="text-sm text-muted-foreground">{item.a}</p>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
+                {(hackathon.faqs ?? []).length > 0 ? (
+                  <Card>
+                    <CardContent className="p-6 space-y-4">
+                      {(hackathon.faqs ?? []).map((faq) => (
+                        <div key={faq.id} className="pb-4 border-b last:border-0 last:pb-0">
+                          <p className="font-medium mb-1">{faq.question}</p>
+                          <p className="text-sm text-muted-foreground">{faq.answer}</p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                      <HelpCircle className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                      <p className="text-muted-foreground text-sm">No FAQs have been added yet.</p>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
             </Tabs>
           </motion.div>
@@ -597,6 +715,38 @@ export default function HackathonDetailPage() {
           onOpenChange={setMentorDialogOpen}
           mentor={hackathon.mentors.find((m) => m.id === selectedMentor) || hackathon.mentors[0]}
           onBook={() => toast.success("Mentor session booked! (mock)")}
+        />
+      )}
+      <CreateTeamDialog
+        open={createTeamOpen}
+        onOpenChange={setCreateTeamOpen}
+        maxTeamSize={hackathon.maxTeamSize}
+        onSubmit={async (data) => {
+          try {
+            await createTeamMutation.mutateAsync({
+              hackathon_id: hackathon.id,
+              name: data.name,
+              description: data.description,
+              max_size: data.maxSize,
+              looking_for_roles: data.lookingForRoles,
+              join_password: data.joinPassword || undefined,
+            });
+            toast.success(`Team "${data.name}" created successfully!`);
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed to create team");
+          }
+        }}
+      />
+      <JoinTeamDialog
+        open={joinTeamOpen}
+        onOpenChange={setJoinTeamOpen}
+        team={selectedTeam}
+      />
+      {selectedTeam && (
+        <EditTeamDialog
+          open={editTeamOpen}
+          onOpenChange={setEditTeamOpen}
+          team={selectedTeam}
         />
       )}
     </div>

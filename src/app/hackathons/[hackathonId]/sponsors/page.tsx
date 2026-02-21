@@ -14,7 +14,8 @@ import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { mockHackathons, mockSponsors } from "@/lib/mock-data";
+import { mockSponsors } from "@/lib/mock-data";
+import { useHackathon } from "@/hooks/use-hackathons";
 import { cn, getInitials } from "@/lib/utils";
 
 const tierConfig: Record<
@@ -90,9 +91,22 @@ export default function HackathonSponsorsPage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
 
-  const hackathon = mockHackathons.find(
-    (h) => h.id === hackathonId || h.slug === hackathonId
-  );
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="shimmer rounded-xl h-96 w-full" />
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!hackathon) {
     return (

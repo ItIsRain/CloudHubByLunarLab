@@ -8,18 +8,21 @@ import { Trophy, Users, Clock, Bookmark, BookmarkCheck, Globe, Zap } from "lucid
 import { cn, formatCurrency, getTimeRemaining } from "@/lib/utils";
 import { Hackathon } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
 
 interface HackathonCardProps {
   hackathon: Hackathon;
   variant?: "default" | "compact" | "featured";
-  onBookmark?: (id: string) => void;
   className?: string;
 }
 
 const statusConfig: Record<string, { label: string; variant: "muted" | "success" | "warning" | "gradient" | "secondary"; dot?: boolean; pulse?: boolean }> = {
   "draft": { label: "Draft", variant: "muted" },
+  "published": { label: "Registration Open", variant: "success", dot: true },
   "registration-open": { label: "Registration Open", variant: "success", dot: true },
+  "registration_open": { label: "Registration Open", variant: "success", dot: true },
   "registration-closed": { label: "Registration Closed", variant: "warning" },
+  "registration_closed": { label: "Registration Closed", variant: "warning" },
   "hacking": { label: "Hacking in Progress", variant: "gradient", dot: true, pulse: true },
   "submission": { label: "Submissions Open", variant: "warning", dot: true },
   "judging": { label: "Judging", variant: "secondary" },
@@ -76,21 +79,22 @@ function CountdownTimer({ deadline }: { deadline: string }) {
 export function HackathonCard({
   hackathon,
   variant = "default",
-  onBookmark,
   className,
 }: HackathonCardProps) {
-  const [isBookmarked, setIsBookmarked] = React.useState(hackathon.isBookmarked);
-  const status = statusConfig[hackathon.status];
+  const { bookmarkIds } = useBookmarkIds("hackathon");
+  const toggleBookmark = useToggleBookmark();
+  const isBookmarked = bookmarkIds.has(hackathon.id);
+  const status = statusConfig[hackathon.status] || { label: hackathon.status || "Unknown", variant: "muted" as const };
 
   const handleBookmark = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsBookmarked(!isBookmarked);
-    onBookmark?.(hackathon.id);
+    toggleBookmark.mutate({ entityType: "hackathon", entityId: hackathon.id });
   };
 
   const getDeadline = () => {
     switch (hackathon.status) {
+      case "published":
       case "registration-open":
         return hackathon.registrationEnd;
       case "hacking":
@@ -115,7 +119,7 @@ export function HackathonCard({
         >
           {/* Background Image */}
           <Image
-            src={hackathon.coverImage || "/placeholder-hackathon.jpg"}
+            src={hackathon.coverImage || "/placeholder-hackathon.svg"}
             alt={hackathon.name}
             fill
             unoptimized
@@ -178,7 +182,10 @@ export function HackathonCard({
               <div className="flex items-center gap-1.5">
                 <Trophy className="h-4 w-4 text-yellow-400" />
                 <span className="font-semibold text-white">
-                  {formatCurrency(hackathon.totalPrizePool)}
+                  {formatCurrency(
+                    (hackathon.prizes ?? []).reduce((sum, p) => sum + (p.value || 0), 0),
+                    hackathon.prizes?.[0]?.currency || "USD"
+                  )}
                 </span>
                 <span>in prizes</span>
               </div>
@@ -246,7 +253,7 @@ export function HackathonCard({
         {/* Cover Image */}
         <div className="relative h-44 overflow-hidden">
           <Image
-            src={hackathon.coverImage || "/placeholder-hackathon.jpg"}
+            src={hackathon.coverImage || "/placeholder-hackathon.svg"}
             alt={hackathon.name}
             fill
             unoptimized
@@ -280,7 +287,10 @@ export function HackathonCard({
           <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-white">
             <Trophy className="h-4 w-4 text-yellow-400" />
             <span className="font-display font-bold">
-              {formatCurrency(hackathon.totalPrizePool)}
+              {formatCurrency(
+                (hackathon.prizes ?? []).reduce((sum, p) => sum + (p.value || 0), 0),
+                hackathon.prizes?.[0]?.currency || "USD"
+              )}
             </span>
           </div>
 

@@ -22,7 +22,10 @@ import { Badge } from "@/components/ui/badge";
 import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
 import { cn } from "@/lib/utils";
-import { mockEvents, mockHackathons, categories } from "@/lib/mock-data";
+import type { EventCategory, EventFilters, HackathonFilters } from "@/lib/types";
+import { useEvents } from "@/hooks/use-events";
+import { useHackathons } from "@/hooks/use-hackathons";
+import { categories } from "@/lib/constants";
 
 type ViewMode = "grid" | "list";
 type ContentType = "all" | "events" | "hackathons";
@@ -42,25 +45,23 @@ export default function ExplorePage() {
   const [sortBy, setSortBy] = React.useState("trending");
   const [showFilters, setShowFilters] = React.useState(false);
 
-  const filteredEvents = mockEvents.filter((event) => {
-    const matchesSearch =
-      event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      selectedCategories.length === 0 ||
-      selectedCategories.includes(event.category);
-    return matchesSearch && matchesCategory;
+  const { data: eventsData, isLoading: eventsLoading } = useEvents({
+    search: searchQuery || undefined,
+    category: selectedCategories.length > 0 ? selectedCategories as EventCategory[] : undefined,
+    sortBy: sortBy as EventFilters["sortBy"],
+    pageSize: 12,
   });
 
-  const filteredHackathons = mockHackathons.filter((hackathon) => {
-    const matchesSearch =
-      hackathon.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      hackathon.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      selectedCategories.length === 0 ||
-      selectedCategories.includes(hackathon.category);
-    return matchesSearch && matchesCategory;
+  const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons({
+    search: searchQuery || undefined,
+    category: selectedCategories.length > 0 ? selectedCategories as EventCategory[] : undefined,
+    sortBy: sortBy as HackathonFilters["sortBy"],
+    pageSize: 12,
   });
+
+  const filteredEvents = eventsData?.data || [];
+  const filteredHackathons = hackathonsData?.data || [];
+  const isLoading = eventsLoading || hackathonsLoading;
 
   const toggleCategory = (category: string) => {
     setSelectedCategories((prev) =>
@@ -263,52 +264,78 @@ export default function ExplorePage() {
           </motion.div>
 
           {/* Content Grid */}
-          <div
-            className={cn(
-              "grid gap-6",
-              viewMode === "grid"
-                ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                : "grid-cols-1"
-            )}
-          >
-            {/* Events */}
-            {(contentType === "all" || contentType === "events") &&
-              filteredEvents.map((event, i) => (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: i * 0.05 }}
-                >
-                  <EventCard
-                    event={event}
-                    variant={viewMode === "list" ? "compact" : "default"}
-                  />
-                </motion.div>
+          {isLoading ? (
+            <div
+              className={cn(
+                "grid gap-6",
+                viewMode === "grid"
+                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                  : "grid-cols-1"
+              )}
+            >
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border bg-card overflow-hidden">
+                  <div className="aspect-[16/9] shimmer" />
+                  <div className="p-4 space-y-3">
+                    <div className="h-4 w-3/4 rounded shimmer" />
+                    <div className="h-3 w-full rounded shimmer" />
+                    <div className="h-3 w-1/2 rounded shimmer" />
+                    <div className="flex gap-2 pt-2">
+                      <div className="h-6 w-16 rounded-full shimmer" />
+                      <div className="h-6 w-20 rounded-full shimmer" />
+                    </div>
+                  </div>
+                </div>
               ))}
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "grid gap-6",
+                viewMode === "grid"
+                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                  : "grid-cols-1"
+              )}
+            >
+              {/* Events */}
+              {(contentType === "all" || contentType === "events") &&
+                filteredEvents.map((event, i) => (
+                  <motion.div
+                    key={event.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: i * 0.05 }}
+                  >
+                    <EventCard
+                      event={event}
+                      variant={viewMode === "list" ? "compact" : "default"}
+                    />
+                  </motion.div>
+                ))}
 
-            {/* Hackathons */}
-            {(contentType === "all" || contentType === "hackathons") &&
-              filteredHackathons.map((hackathon, i) => (
-                <motion.div
-                  key={hackathon.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.4,
-                    delay: (filteredEvents.length + i) * 0.05,
-                  }}
-                >
-                  <HackathonCard
-                    hackathon={hackathon}
-                    variant={viewMode === "list" ? "default" : "default"}
-                  />
-                </motion.div>
-              ))}
-          </div>
+              {/* Hackathons */}
+              {(contentType === "all" || contentType === "hackathons") &&
+                filteredHackathons.map((hackathon, i) => (
+                  <motion.div
+                    key={hackathon.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.4,
+                      delay: (filteredEvents.length + i) * 0.05,
+                    }}
+                  >
+                    <HackathonCard
+                      hackathon={hackathon}
+                      variant={viewMode === "list" ? "default" : "default"}
+                    />
+                  </motion.div>
+                ))}
+            </div>
+          )}
 
           {/* Empty State */}
-          {totalResults === 0 && (
+          {!isLoading && totalResults === 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -331,7 +358,7 @@ export default function ExplorePage() {
           )}
 
           {/* Load More */}
-          {totalResults > 0 && (
+          {!isLoading && totalResults > 0 && (
             <div className="text-center mt-12">
               <Button variant="outline" size="lg">
                 Load More

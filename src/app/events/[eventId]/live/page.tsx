@@ -21,7 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn, getInitials } from "@/lib/utils";
-import { mockEvents, mockUsers } from "@/lib/mock-data";
+import { mockUsers } from "@/lib/mock-data";
+import { useEvent } from "@/hooks/use-events";
 
 const mockChatMessages = [
   { id: "chat-1", user: mockUsers[0], message: "Excited to be here! This keynote is amazing.", time: "2 min ago" },
@@ -39,7 +40,8 @@ const mockChatMessages = [
 export default function LivePage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const event = mockEvents.find((e) => e.id === eventId || e.slug === eventId);
+  const { data: eventData, isLoading } = useEvent(eventId);
+  const event = eventData?.data;
 
   const [chatInput, setChatInput] = React.useState("");
   const [messages, setMessages] = React.useState(mockChatMessages);
@@ -48,6 +50,25 @@ export default function LivePage() {
   React.useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="h-8 w-48 rounded shimmer" />
+            <div className="h-10 w-96 rounded shimmer" />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 aspect-video rounded-2xl shimmer" />
+              <div className="h-[500px] rounded-2xl shimmer" />
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   if (!event) {
     return (

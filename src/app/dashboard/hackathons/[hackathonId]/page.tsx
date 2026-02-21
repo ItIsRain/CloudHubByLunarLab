@@ -2,14 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  Users,
-  Trophy,
-  FileText,
-  DollarSign,
   ExternalLink,
   Share2,
   LayoutDashboard,
@@ -24,53 +20,95 @@ import {
   Megaphone,
   BarChart3,
   Settings,
-  Clock,
+  FileText,
+  HelpCircle,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { cn, formatDate, formatCurrency } from "@/lib/utils";
-import { mockHackathons } from "@/lib/mock-data";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useHackathon } from "@/hooks/use-hackathons";
 import { toast } from "sonner";
 
-const statusConfig: Record<string, { label: string; variant: "muted" | "success" | "warning" | "gradient" | "secondary" }> = {
-  "draft": { label: "Draft", variant: "muted" },
+import { OverviewTab } from "./_components/overview-tab";
+import { EditTab } from "./_components/edit-tab";
+import { ParticipantsTab } from "./_components/participants-tab";
+import { TeamsTab } from "./_components/teams-tab";
+import { SubmissionsTab } from "./_components/submissions-tab";
+import { JudgingTab } from "./_components/judging-tab";
+import { MentorsTab } from "./_components/mentors-tab";
+import { SponsorsTab } from "./_components/sponsors-tab";
+import { PrizesTab } from "./_components/prizes-tab";
+import { AnnouncementsTab } from "./_components/announcements-tab";
+import { AnalyticsTab } from "./_components/analytics-tab";
+import { SettingsTab } from "./_components/settings-tab";
+import { FAQTab } from "./_components/faq-tab";
+
+const statusConfig: Record<
+  string,
+  { label: string; variant: "muted" | "success" | "warning" | "gradient" | "secondary" }
+> = {
+  draft: { label: "Draft", variant: "muted" },
+  published: { label: "Published", variant: "success" },
   "registration-open": { label: "Registration Open", variant: "success" },
   "registration-closed": { label: "Registration Closed", variant: "warning" },
-  "hacking": { label: "Hacking in Progress", variant: "gradient" },
-  "submission": { label: "Submissions Open", variant: "warning" },
-  "judging": { label: "Judging", variant: "secondary" },
-  "completed": { label: "Completed", variant: "muted" },
+  hacking: { label: "Hacking in Progress", variant: "gradient" },
+  submission: { label: "Submissions Open", variant: "warning" },
+  judging: { label: "Judging", variant: "secondary" },
+  completed: { label: "Completed", variant: "muted" },
 };
 
-const recentActivity = [
-  { id: 1, action: "New team registered", detail: "Code Crusaders joined the hackathon", time: "2 hours ago", icon: UsersRound },
-  { id: 2, action: "Submission received", detail: "Team AI Pioneers submitted their project", time: "5 hours ago", icon: Inbox },
-  { id: 3, action: "Mentor session booked", detail: "Sarah Kim booked a session with Team Byte Builders", time: "8 hours ago", icon: GraduationCap },
-  { id: 4, action: "New participant", detail: "Emma Wilson registered for the hackathon", time: "12 hours ago", icon: UserCheck },
-  { id: 5, action: "Sponsor update", detail: "TechGiant increased their prize contribution", time: "1 day ago", icon: Handshake },
+const tabs = [
+  { value: "overview", label: "Overview", icon: LayoutDashboard },
+  { value: "edit", label: "Edit", icon: Edit },
+  { value: "participants", label: "Participants", icon: UserCheck },
+  { value: "teams", label: "Teams", icon: UsersRound },
+  { value: "submissions", label: "Submissions", icon: Inbox },
+  { value: "judging", label: "Judging", icon: Scale },
+  { value: "mentors", label: "Mentors", icon: GraduationCap },
+  { value: "sponsors", label: "Sponsors", icon: Handshake },
+  { value: "prizes", label: "Prizes", icon: Gift },
+  { value: "faq", label: "FAQ", icon: HelpCircle },
+  { value: "announcements", label: "Announcements", icon: Megaphone },
+  { value: "analytics", label: "Analytics", icon: BarChart3 },
+  { value: "settings", label: "Settings", icon: Settings },
 ];
 
-const navLinks = [
-  { label: "Overview", icon: LayoutDashboard, path: "" },
-  { label: "Edit", icon: Edit, path: "/edit" },
-  { label: "Participants", icon: UserCheck, path: "/participants" },
-  { label: "Teams", icon: UsersRound, path: "/teams" },
-  { label: "Submissions", icon: Inbox, path: "/submissions" },
-  { label: "Judging", icon: Scale, path: "/judging" },
-  { label: "Mentors", icon: GraduationCap, path: "/mentors" },
-  { label: "Sponsors", icon: Handshake, path: "/sponsors" },
-  { label: "Prizes", icon: Gift, path: "/prizes" },
-  { label: "Announcements", icon: Megaphone, path: "/announcements" },
-  { label: "Analytics", icon: BarChart3, path: "/analytics" },
-  { label: "Settings", icon: Settings, path: "/settings" },
-];
-
-export default function HackathonManagementPage() {
+function HackathonDashboardContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const hackathonId = params.hackathonId as string;
-  const hackathon = mockHackathons.find((h) => h.id === hackathonId);
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+
+  const currentTab = searchParams.get("tab") || "overview";
+
+  const handleTabChange = (value: string) => {
+    const url = new URL(window.location.href);
+    if (value === "overview") {
+      url.searchParams.delete("tab");
+    } else {
+      url.searchParams.set("tab", value);
+    }
+    router.replace(url.pathname + url.search, { scroll: false });
+  };
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+          <div className="space-y-4">
+            <div className="shimmer rounded-xl h-12 w-64" />
+            <div className="shimmer rounded-xl h-8 w-96" />
+            <div className="shimmer rounded-xl h-12 w-full" />
+            <div className="shimmer rounded-xl h-96 w-full" />
+          </div>
+        </main>
+      </>
+    );
+  }
 
   if (!hackathon) {
     return (
@@ -103,14 +141,10 @@ export default function HackathonManagementPage() {
     );
   }
 
-  const status = statusConfig[hackathon.status] || { label: hackathon.status, variant: "muted" as const };
-
-  const stats = [
-    { label: "Participants", value: "245", icon: Users, color: "text-blue-500", bgColor: "bg-blue-500/10" },
-    { label: "Teams", value: "52", icon: UsersRound, color: "text-green-500", bgColor: "bg-green-500/10" },
-    { label: "Submissions", value: "38", icon: FileText, color: "text-purple-500", bgColor: "bg-purple-500/10" },
-    { label: "Prize Pool", value: formatCurrency(hackathon.totalPrizePool), icon: DollarSign, color: "text-yellow-500", bgColor: "bg-yellow-500/10" },
-  ];
+  const status = statusConfig[hackathon.status] || {
+    label: hackathon.status,
+    variant: "muted" as const,
+  };
 
   return (
     <>
@@ -135,18 +169,18 @@ export default function HackathonManagementPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8"
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6"
         >
-          <div className="flex items-center gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <h1 className="font-display text-3xl font-bold">
-                  {hackathon.name}
-                </h1>
-                <Badge variant={status.variant}>{status.label}</Badge>
-              </div>
-              <p className="text-muted-foreground">{hackathon.tagline}</p>
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="font-display text-3xl font-bold">
+                {hackathon.name}
+              </h1>
+              <Badge variant={status.variant}>{status.label}</Badge>
             </div>
+            {hackathon.tagline && (
+              <p className="text-muted-foreground">{hackathon.tagline}</p>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <Link href={`/hackathons/${hackathon.slug}`} target="_blank">
@@ -171,111 +205,90 @@ export default function HackathonManagementPage() {
           </div>
         </motion.div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {stats.map((stat, i) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              <Card>
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "w-10 h-10 rounded-xl flex items-center justify-center",
-                        stat.bgColor
-                      )}
-                    >
-                      <stat.icon className={cn("h-5 w-5", stat.color)} />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold font-display">
-                        {stat.value}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {stat.label}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Navigation Links */}
+        {/* Tabbed Interface */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="mb-8"
+          transition={{ delay: 0.1 }}
         >
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex flex-wrap gap-2">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.label}
-                    href={`/dashboard/hackathons/${hackathonId}${link.path}`}
-                  >
-                    <Button
-                      variant={link.path === "" ? "default" : "ghost"}
-                      size="sm"
-                      className="gap-2"
-                    >
-                      <link.icon className="h-4 w-4" />
-                      {link.label}
-                    </Button>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+          <Tabs value={currentTab} onValueChange={handleTabChange}>
+            <TabsList className="flex flex-wrap h-auto w-full gap-1 bg-muted/50 p-1.5 rounded-xl mb-6">
+              {tabs.map((tab) => (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  className="gap-1.5 px-3 py-2 text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                >
+                  <tab.icon className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-        {/* Recent Activity */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentActivity.map((activity, i) => (
-                  <motion.div
-                    key={activity.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.35 + i * 0.05 }}
-                    className="flex items-start gap-3 pb-4 last:pb-0 border-b last:border-b-0"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <activity.icon className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{activity.action}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {activity.detail}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                      <Clock className="h-3 w-3" />
-                      {activity.time}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+            <TabsContent value="overview">
+              <OverviewTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="edit">
+              <EditTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="participants">
+              <ParticipantsTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="teams">
+              <TeamsTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="submissions">
+              <SubmissionsTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="judging">
+              <JudgingTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="mentors">
+              <MentorsTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="sponsors">
+              <SponsorsTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="prizes">
+              <PrizesTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="faq">
+              <FAQTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="announcements">
+              <AnnouncementsTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="analytics">
+              <AnalyticsTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="settings">
+              <SettingsTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+          </Tabs>
         </motion.div>
       </main>
     </>
+  );
+}
+
+export default function HackathonManagementPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <>
+          <Navbar />
+          <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+            <div className="space-y-4">
+              <div className="shimmer rounded-xl h-12 w-64" />
+              <div className="shimmer rounded-xl h-8 w-96" />
+              <div className="shimmer rounded-xl h-12 w-full" />
+              <div className="shimmer rounded-xl h-96 w-full" />
+            </div>
+          </main>
+        </>
+      }
+    >
+      <HackathonDashboardContent />
+    </React.Suspense>
   );
 }

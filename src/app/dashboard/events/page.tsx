@@ -8,10 +8,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EventCard } from "@/components/cards/event-card";
-import { mockEvents } from "@/lib/mock-data";
-
-const hostingEvents = mockEvents.slice(0, 4);
-const attendingEvents = mockEvents.slice(4, 8);
+import { useMyEvents } from "@/hooks/use-events";
 
 function EmptyState({ message, cta }: { message: string; cta: string }) {
   return (
@@ -38,6 +35,11 @@ function EmptyState({ message, cta }: { message: string; cta: string }) {
 }
 
 export default function MyEventsPage() {
+  const { data: eventsData, isLoading } = useMyEvents();
+  const events = eventsData?.data || [];
+  const hostingEvents = events.slice(0, 4);
+  const attendingEvents = events.slice(4, 8);
+
   return (
     <div className="min-h-screen bg-muted/30">
       <Navbar />
@@ -83,7 +85,13 @@ export default function MyEventsPage() {
               </TabsList>
 
               <TabsContent value="hosting">
-                {hostingEvents.length > 0 ? (
+                {isLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="shimmer rounded-xl h-64 w-full" />
+                    ))}
+                  </div>
+                ) : hostingEvents.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
                     {hostingEvents.map((event, i) => (
                       <motion.div
@@ -118,7 +126,13 @@ export default function MyEventsPage() {
               </TabsContent>
 
               <TabsContent value="attending">
-                {attendingEvents.length > 0 ? (
+                {isLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="shimmer rounded-xl h-64 w-full" />
+                    ))}
+                  </div>
+                ) : attendingEvents.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
                     {attendingEvents.map((event, i) => (
                       <motion.div

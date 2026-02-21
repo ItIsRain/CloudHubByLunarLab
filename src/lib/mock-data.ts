@@ -3,11 +3,8 @@ import {
   Event,
   Hackathon,
   Team,
-  Submission,
   Sponsor,
-  Notification,
   BlogPost,
-  PricingTier,
   Community,
   Speaker,
   Track,
@@ -56,6 +53,8 @@ export const mockUsers: User[] = [
     hackathonsParticipated: 12,
     projectsSubmitted: 8,
     wins: 3,
+    subscriptionTier: "pro",
+    subscriptionStatus: "active",
     createdAt: subtractDays(365),
     updatedAt: subtractDays(1),
   },
@@ -78,6 +77,8 @@ export const mockUsers: User[] = [
     hackathonsParticipated: 6,
     projectsSubmitted: 4,
     wins: 1,
+    subscriptionTier: "free",
+    subscriptionStatus: "inactive",
     createdAt: subtractDays(200),
     updatedAt: subtractDays(2),
   },
@@ -100,6 +101,8 @@ export const mockUsers: User[] = [
     hackathonsParticipated: 24,
     projectsSubmitted: 18,
     wins: 7,
+    subscriptionTier: "enterprise",
+    subscriptionStatus: "active",
     createdAt: subtractDays(500),
     updatedAt: subtractDays(0),
   },
@@ -121,6 +124,8 @@ export const mockUsers: User[] = [
     hackathonsParticipated: 15,
     projectsSubmitted: 12,
     wins: 4,
+    subscriptionTier: "free",
+    subscriptionStatus: "inactive",
     createdAt: subtractDays(180),
     updatedAt: subtractDays(5),
   },
@@ -142,6 +147,8 @@ export const mockUsers: User[] = [
     hackathonsParticipated: 8,
     projectsSubmitted: 5,
     wins: 2,
+    subscriptionTier: "free",
+    subscriptionStatus: "inactive",
     createdAt: subtractDays(300),
     updatedAt: subtractDays(3),
   },
@@ -179,6 +186,8 @@ for (let i = 6; i <= 50; i++) {
     hackathonsParticipated: 1 + (i * 3) % 14,
     projectsSubmitted: (i * 2) % 10,
     wins: i % 3,
+    subscriptionTier: "free",
+    subscriptionStatus: "inactive",
     createdAt: subtractDays(30 + (i * 17) % 335),
     updatedAt: subtractDays((i * 3) % 30),
   });
@@ -424,6 +433,7 @@ Whether you're a seasoned AI practitioner or just starting your journey, this su
         type: "workshop",
       },
     ],
+    faq: [],
     organizer: mockUsers[2],
     organizerId: mockUsers[2].id,
     capacity: 2600,
@@ -476,6 +486,7 @@ All skill levels welcome. Bring your questions and enthusiasm!`,
     ],
     speakers: mockSpeakers.slice(1, 3),
     agenda: [],
+    faq: [],
     organizer: mockUsers[0],
     organizerId: mockUsers[0].id,
     capacity: 150,
@@ -529,6 +540,7 @@ Laptops required. All software and tesnet ETH will be provided.`,
     ],
     speakers: [mockSpeakers[3]],
     agenda: [],
+    faq: [],
     organizer: mockUsers[3],
     organizerId: mockUsers[3].id,
     capacity: 100,
@@ -573,6 +585,7 @@ Featured topics include component libraries, design tokens, documentation, and c
     ],
     speakers: mockSpeakers.slice(2, 5),
     agenda: [],
+    faq: [],
     organizer: mockUsers[1],
     organizerId: mockUsers[1].id,
     capacity: 400,
@@ -616,6 +629,7 @@ Top 3 startups will receive funding and mentorship opportunities.`,
     ],
     speakers: [],
     agenda: [],
+    faq: [],
     organizer: mockUsers[2],
     organizerId: mockUsers[2].id,
     capacity: 200,
@@ -679,6 +693,7 @@ for (let i = 6; i <= 20; i++) {
     ],
     speakers: [],
     agenda: [],
+    faq: [],
     organizer: mockUsers[i % 5],
     organizerId: mockUsers[i % 5].id,
     capacity: 200,
@@ -1094,7 +1109,7 @@ for (let i = 4; i <= 10; i++) {
 // =====================================================
 // Mock Teams
 // =====================================================
-export const mockTeams: Team[] = [
+const mockTeams: Team[] = [
   {
     id: "team-1",
     name: "AI Pioneers",
@@ -1157,166 +1172,9 @@ for (let i = 3; i <= 15; i++) {
   });
 }
 
-// =====================================================
-// Mock Submissions
-// =====================================================
-export const mockSubmissions: Submission[] = [
-  {
-    id: "sub-1",
-    hackathonId: "hack-3",
-    teamId: "team-1",
-    team: mockTeams[0],
-    track: createTracks()[0],
-    projectName: "EcoTrack AI",
-    tagline: "AI-powered carbon footprint tracking for everyday life",
-    description: `EcoTrack AI uses machine learning to automatically track and reduce your carbon footprint. Simply connect your daily activities and let our AI suggest personalized ways to live more sustainably.
+// mockSubmissions — removed (now in Supabase)
 
-## Features
-
-- **Automatic Tracking** - Connect your apps and services for seamless tracking
-- **AI Insights** - Get personalized recommendations based on your habits
-- **Community Challenges** - Compete with friends to reduce emissions
-- **Impact Dashboard** - Visualize your environmental impact over time
-
-Built with React Native, TensorFlow, and lots of love for the planet.`,
-    coverImage: "https://images.unsplash.com/photo-1569163139599-0f4517e36f31?w=800&h=400&fit=crop",
-    screenshots: [
-      "https://images.unsplash.com/photo-1569163139599-0f4517e36f31?w=400&h=300&fit=crop",
-      "https://images.unsplash.com/photo-1569163139599-0f4517e36f31?w=400&h=300&fit=crop",
-    ],
-    githubUrl: "https://github.com/team/ecotrack-ai",
-    demoUrl: "https://ecotrack-ai.demo.com",
-    techStack: ["React Native", "TensorFlow", "Python", "Firebase", "Node.js"],
-    status: "winner",
-    scores: [],
-    averageScore: 8.7,
-    rank: 1,
-    upvotes: 234,
-    submittedAt: subtractDays(48),
-    createdAt: subtractDays(50),
-    updatedAt: subtractDays(35),
-  },
-  {
-    id: "sub-2",
-    hackathonId: "hack-3",
-    teamId: "team-2",
-    team: mockTeams[1],
-    track: createTracks()[1],
-    projectName: "GreenChain",
-    tagline: "Blockchain-verified carbon credits marketplace",
-    description: `GreenChain is a decentralized marketplace for trading verified carbon credits. Using blockchain technology, we ensure transparent, tamper-proof tracking of carbon offset projects.
-
-Every credit on GreenChain is verified through our network of environmental auditors and recorded on-chain for complete transparency.`,
-    coverImage: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=800&h=400&fit=crop",
-    screenshots: [],
-    githubUrl: "https://github.com/team/greenchain",
-    techStack: ["Solidity", "React", "IPFS", "The Graph", "Hardhat"],
-    status: "scored",
-    scores: [],
-    averageScore: 8.2,
-    rank: 2,
-    upvotes: 187,
-    submittedAt: subtractDays(48),
-    createdAt: subtractDays(49),
-    updatedAt: subtractDays(40),
-  },
-];
-
-// Generate more submissions
-for (let i = 3; i <= 30; i++) {
-  const projectNames = [
-    "SmartBudget", "HealthPal", "LearnFlow", "TaskMaster", "CodeReview AI",
-    "FitTrack", "MindfulApp", "DevDocs", "TeamSync", "DataViz Pro",
-    "ChatBot X", "PhotoEdit", "MusicMix", "GameHub", "ShopSmart",
-    "NewsAggregator", "WeatherPlus", "TravelBuddy", "RecipeBook", "PetCare",
-    "EventPlanner", "StudyBuddy", "FinanceTracker", "SocialConnect", "WorkoutPro",
-    "MeditateNow", "LanguageLearn", "ArtGallery",
-  ];
-
-  mockSubmissions.push({
-    id: `sub-${i}`,
-    hackathonId: `hack-${(i % 3) + 1}`,
-    teamId: `team-${i % 15 + 1}`,
-    team: mockTeams[(i % 15)],
-    track: createTracks()[i % 4],
-    projectName: projectNames[(i - 3) % projectNames.length],
-    tagline: `${projectNames[(i - 3) % projectNames.length]} - making life easier`,
-    description: `An innovative project that showcases creativity and technical excellence.`,
-    coverImage: `https://images.unsplash.com/photo-${1569163139599 + i * 100}-0f4517e36f31?w=800&h=400&fit=crop`,
-    screenshots: [],
-    githubUrl: `https://github.com/team/${projectNames[(i - 3) % projectNames.length].toLowerCase()}`,
-    techStack: ["React", "Node.js", "PostgreSQL"],
-    status: ["submitted", "under-review", "scored"][i % 3] as Submission["status"],
-    scores: [],
-    upvotes: 10 + (i * 23) % 140,
-    submittedAt: subtractDays(i + 30),
-    createdAt: subtractDays(i + 35),
-    updatedAt: subtractDays(i + 25),
-  });
-}
-
-// =====================================================
-// Mock Notifications
-// =====================================================
-export const mockNotifications: Notification[] = [
-  {
-    id: "notif-1",
-    type: "hackathon-update",
-    title: "BuildAI 2024 Registration Open",
-    message: "Registration is now open for BuildAI 2024! Sign up early for the best swag.",
-    link: "/hackathons/buildai-2024",
-    isRead: false,
-    createdAt: subtractDays(1),
-  },
-  {
-    id: "notif-2",
-    type: "team-invite",
-    title: "Team Invite from AI Pioneers",
-    message: "Alex Chen has invited you to join the team 'AI Pioneers' for BuildAI 2024.",
-    link: "/dashboard/team/team-1",
-    isRead: false,
-    createdAt: subtractDays(2),
-  },
-  {
-    id: "notif-3",
-    type: "event-reminder",
-    title: "React Meetup Tomorrow",
-    message: "Don't forget! React Developers Meetup starts tomorrow at 6:00 PM.",
-    link: "/events/react-meetup-sf",
-    isRead: true,
-    createdAt: subtractDays(3),
-  },
-  {
-    id: "notif-4",
-    type: "submission-feedback",
-    title: "Feedback on EcoTrack AI",
-    message: "A judge has left feedback on your Climate Hack submission.",
-    link: "/dashboard/submissions/sub-1",
-    isRead: true,
-    createdAt: subtractDays(35),
-  },
-  {
-    id: "notif-5",
-    type: "winner-announcement",
-    title: "Congratulations! You Won!",
-    message: "Your team won 1st place at Climate Hack 2024!",
-    link: "/hackathons/climate-hack",
-    isRead: true,
-    createdAt: subtractDays(35),
-  },
-];
-
-// Generate more notifications
-for (let i = 6; i <= 20; i++) {
-  mockNotifications.push({
-    id: `notif-${i}`,
-    type: ["event-reminder", "hackathon-update", "team-message", "system"][i % 4] as Notification["type"],
-    title: `Notification ${i}`,
-    message: `This is notification message number ${i}.`,
-    isRead: i > 10,
-    createdAt: subtractDays(i),
-  });
-}
+// Mock Notifications — removed (now in Supabase)
 
 // =====================================================
 // Mock Blog Posts
@@ -1414,87 +1272,7 @@ for (let i = 4; i <= 10; i++) {
   });
 }
 
-// =====================================================
-// Mock Pricing Tiers
-// =====================================================
-export const mockPricingTiers: PricingTier[] = [
-  {
-    id: "tier-free",
-    name: "Free",
-    price: 0,
-    currency: "USD",
-    interval: "monthly",
-    features: [
-      "Host 1 event per month",
-      "Up to 50 attendees",
-      "Basic event page",
-      "Email notifications",
-      "Community support",
-    ],
-    limits: {
-      eventsPerMonth: 1,
-      attendeesPerEvent: 50,
-      customBranding: false,
-      analytics: false,
-      apiAccess: false,
-      prioritySupport: false,
-    },
-    isPopular: false,
-  },
-  {
-    id: "tier-pro",
-    name: "Pro",
-    price: 29,
-    currency: "USD",
-    interval: "monthly",
-    features: [
-      "Unlimited events",
-      "Up to 500 attendees per event",
-      "Custom branding",
-      "Advanced analytics",
-      "Priority email support",
-      "Custom registration forms",
-      "Promo codes & discounts",
-      "Attendee management tools",
-    ],
-    limits: {
-      eventsPerMonth: -1,
-      attendeesPerEvent: 500,
-      customBranding: true,
-      analytics: true,
-      apiAccess: false,
-      prioritySupport: true,
-    },
-    isPopular: true,
-  },
-  {
-    id: "tier-enterprise",
-    name: "Enterprise",
-    price: 99,
-    currency: "USD",
-    interval: "monthly",
-    features: [
-      "Everything in Pro",
-      "Unlimited attendees",
-      "API access",
-      "SSO integration",
-      "Dedicated account manager",
-      "Custom integrations",
-      "SLA guarantee",
-      "White-label options",
-      "Advanced security features",
-    ],
-    limits: {
-      eventsPerMonth: -1,
-      attendeesPerEvent: -1,
-      customBranding: true,
-      analytics: true,
-      apiAccess: true,
-      prioritySupport: true,
-    },
-    isPopular: false,
-  },
-];
+// mockPricingTiers — removed (replaced by PRICING_TIERS in constants.ts)
 
 // =====================================================
 // Mock Communities
@@ -1538,38 +1316,9 @@ export const mockCommunities: Community[] = [
 ];
 
 // =====================================================
-// Categories & Tags
+// Helper functions for remaining mock data
 // =====================================================
-export const categories = [
-  { value: "tech", label: "Technology", icon: "laptop" },
-  { value: "ai-ml", label: "AI / Machine Learning", icon: "brain" },
-  { value: "web3", label: "Web3 / Blockchain", icon: "link" },
-  { value: "design", label: "Design", icon: "palette" },
-  { value: "business", label: "Business", icon: "briefcase" },
-  { value: "health", label: "Health", icon: "heart" },
-  { value: "music", label: "Music", icon: "music" },
-  { value: "social", label: "Social", icon: "users" },
-  { value: "workshop", label: "Workshop", icon: "wrench" },
-  { value: "conference", label: "Conference", icon: "mic" },
-  { value: "meetup", label: "Meetup", icon: "coffee" },
-  { value: "networking", label: "Networking", icon: "globe" },
-];
-
-export const popularTags = [
-  "React", "TypeScript", "Node.js", "Python", "AI", "Machine Learning",
-  "Web3", "Blockchain", "Ethereum", "Design", "UX", "Startup",
-  "DevOps", "Cloud", "AWS", "Kubernetes", "Docker", "GraphQL",
-  "Next.js", "TensorFlow", "OpenAI", "LLM", "NLP", "Computer Vision",
-];
-
-// =====================================================
-// Helper function to get featured content
-// =====================================================
-export const getFeaturedEvents = () => mockEvents.filter(e => e.isFeatured).slice(0, 4);
-export const getFeaturedHackathons = () => mockHackathons.filter(h => h.isFeatured).slice(0, 3);
-export const getUpcomingEvents = () => mockEvents.filter(e => new Date(e.startDate) > new Date()).slice(0, 6);
-export const getActiveHackathons = () => mockHackathons.filter(h => h.status !== "completed").slice(0, 4);
-export const getRecentSubmissions = () => mockSubmissions.slice(0, 8);
+// getRecentSubmissions — removed (now in Supabase)
 export const getTopSponsors = () => mockSponsors.filter(s => s.tier === "platinum" || s.tier === "gold");
 
 // =====================================================
@@ -1748,8 +1497,6 @@ export const getBookmarkedEvents = () =>
 export const getBookmarkedHackathons = () =>
   mockHackathons.filter((h) => h.isBookmarked);
 
-export const getSubmissionsForUser = (_userId: string) =>
-  mockSubmissions.filter((_, i) => i < 5);
+// getSubmissionsForUser — removed (now in Supabase)
 
-export const getTeamsForUser = (_userId: string) =>
-  mockTeams.filter((_, i) => i < 4);
+// getTeamsForUser — removed (now in Supabase)

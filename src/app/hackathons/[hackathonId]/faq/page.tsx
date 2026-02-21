@@ -16,98 +16,9 @@ import { Footer } from "@/components/layout/footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { mockHackathons } from "@/lib/mock-data";
-import { cn, formatDate } from "@/lib/utils";
-
-interface FAQItem {
-  id: string;
-  question: string;
-  answer: string;
-  category: "General" | "Registration" | "Teams" | "Submissions" | "Prizes";
-}
-
-function generateFAQs(hackathon: {
-  name: string;
-  eligibility: string[];
-  minTeamSize: number;
-  maxTeamSize: number;
-  allowSolo: boolean;
-  type: string;
-  submissionDeadline: string;
-  winnersAnnouncement: string;
-  totalPrizePool: number;
-}): FAQItem[] {
-  return [
-    {
-      id: "faq-1",
-      question: "Who can participate in this hackathon?",
-      answer: `${hackathon.eligibility.join(". ")}. We welcome participants of all backgrounds and skill levels. Whether you're a beginner or an experienced developer, there's a place for you at ${hackathon.name}.`,
-      category: "General",
-    },
-    {
-      id: "faq-2",
-      question: "Is this hackathon free to join?",
-      answer: `Yes! ${hackathon.name} is completely free to participate in. All you need is a passion for building and a willingness to learn.`,
-      category: "General",
-    },
-    {
-      id: "faq-3",
-      question: "How do I register?",
-      answer:
-        "Click the 'Register Now' button on the hackathon page. You'll need to create a CloudHub account if you don't have one. Registration takes less than 2 minutes.",
-      category: "Registration",
-    },
-    {
-      id: "faq-4",
-      question: "Can I participate remotely?",
-      answer:
-        hackathon.type === "online"
-          ? "Yes! This is a fully online hackathon. You can participate from anywhere in the world."
-          : hackathon.type === "hybrid"
-            ? "Yes! This is a hybrid hackathon. You can choose to participate either in-person at the venue or remotely from anywhere."
-            : "This is an in-person hackathon. You'll need to be present at the venue for the duration of the event.",
-      category: "Registration",
-    },
-    {
-      id: "faq-5",
-      question: "How do teams work?",
-      answer: `Teams can have ${hackathon.minTeamSize} to ${hackathon.maxTeamSize} members. ${hackathon.allowSolo ? "Solo participation is allowed, but we encourage forming teams for the best experience." : "You must be part of a team to participate."} You can form a team before the hackathon or use our team formation feature to find teammates.`,
-      category: "Teams",
-    },
-    {
-      id: "faq-6",
-      question: "What if I don't have a team?",
-      answer:
-        "No worries! We have a team formation feature where you can browse open teams looking for members. You can also post your skills and interests so teams can find you. We'll also host a team formation session at the start of the hackathon.",
-      category: "Teams",
-    },
-    {
-      id: "faq-7",
-      question: "What do I need to submit?",
-      answer: `Your submission should include: a project name and description, a link to your GitHub repository, a demo URL or video, and the tech stack used. All submissions must be made before ${formatDate(hackathon.submissionDeadline)}.`,
-      category: "Submissions",
-    },
-    {
-      id: "faq-8",
-      question: "How will projects be judged?",
-      answer:
-        "Projects are evaluated by our panel of expert judges based on criteria including Innovation, Technical Execution, Impact & Usefulness, Presentation & Demo, and Design & UX. Each criterion is weighted and scored on a 10-point scale.",
-      category: "Submissions",
-    },
-    {
-      id: "faq-9",
-      question: "When will winners be announced?",
-      answer: `Winners will be announced on ${formatDate(hackathon.winnersAnnouncement)}. All participants will be notified via email and through the CloudHub platform. Winners will also be featured on the hackathon leaderboard.`,
-      category: "Prizes",
-    },
-    {
-      id: "faq-10",
-      question: "How are prizes distributed?",
-      answer: `The total prize pool is $${hackathon.totalPrizePool.toLocaleString()}. Prizes are distributed to winning teams within 30 days of the winner announcement. Cash prizes are split equally among team members unless the team specifies otherwise.`,
-      category: "Prizes",
-    },
-  ];
-}
+import { useHackathon } from "@/hooks/use-hackathons";
+import { cn } from "@/lib/utils";
+import type { FAQItem } from "@/lib/types";
 
 const categoryColors: Record<string, string> = {
   General: "bg-blue-500/10 text-blue-600 border-blue-500/20",
@@ -117,18 +28,29 @@ const categoryColors: Record<string, string> = {
   Prizes: "bg-amber-500/10 text-amber-600 border-amber-500/20",
 };
 
-const categories = ["General", "Registration", "Teams", "Submissions", "Prizes"] as const;
-
 export default function HackathonFAQPage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
 
-  const hackathon = mockHackathons.find(
-    (h) => h.id === hackathonId || h.slug === hackathonId
-  );
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
 
   const [openIndices, setOpenIndices] = React.useState<Set<string>>(new Set());
   const [activeCategory, setActiveCategory] = React.useState<string>("all");
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="shimmer rounded-xl h-96 w-full" />
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!hackathon) {
     return (
@@ -153,7 +75,10 @@ export default function HackathonFAQPage() {
     );
   }
 
-  const faqs = generateFAQs(hackathon);
+  const faqs: FAQItem[] = hackathon.faqs ?? [];
+
+  // Collect unique categories from FAQs
+  const categories = Array.from(new Set(faqs.map((f) => f.category).filter(Boolean))) as string[];
 
   const filteredFAQs =
     activeCategory === "all"
@@ -206,119 +131,143 @@ export default function HackathonFAQPage() {
             </p>
           </motion.div>
 
-          {/* Category Filter */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="flex flex-wrap gap-2 mb-8"
-          >
-            <Button
-              variant={activeCategory === "all" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveCategory("all")}
+          {faqs.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="max-w-3xl"
             >
-              All
-            </Button>
-            {categories.map((cat) => (
-              <Button
-                key={cat}
-                variant={activeCategory === cat ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveCategory(cat)}
-              >
-                {cat}
-              </Button>
-            ))}
-          </motion.div>
-
-          {/* FAQ Accordion */}
-          <div className="max-w-3xl space-y-3">
-            {filteredFAQs.map((faq, i) => {
-              const isOpen = openIndices.has(faq.id);
-
-              return (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <HelpCircle className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                  <h3 className="font-display text-lg font-bold mb-1">No FAQs Yet</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm">
+                    The organizer hasn&apos;t added any frequently asked questions yet. Check back later or contact the organizer.
+                  </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ) : (
+            <>
+              {/* Category Filter */}
+              {categories.length > 1 && (
                 <motion.div
-                  key={faq.id}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
+                  transition={{ delay: 0.05 }}
+                  className="flex flex-wrap gap-2 mb-8"
                 >
-                  <Card
-                    className={cn(
-                      "transition-shadow",
-                      isOpen && "shadow-md ring-1 ring-primary/10"
-                    )}
+                  <Button
+                    variant={activeCategory === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveCategory("all")}
                   >
-                    <CardContent className="p-0">
-                      {/* Question (clickable header) */}
-                      <button
-                        onClick={() => toggleFAQ(faq.id)}
-                        className="w-full flex items-center justify-between p-5 text-left"
-                      >
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <HelpCircle
-                            className={cn(
-                              "h-5 w-5 flex-shrink-0 mt-0.5 transition-colors",
-                              isOpen
-                                ? "text-primary"
-                                : "text-muted-foreground"
-                            )}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={cn(
-                                "font-medium transition-colors",
-                                isOpen ? "text-primary" : "text-foreground"
-                              )}
-                            >
-                              {faq.question}
-                            </p>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] mt-1.5",
-                                categoryColors[faq.category] || ""
-                              )}
-                            >
-                              {faq.category}
-                            </Badge>
-                          </div>
-                        </div>
-                        <ChevronDown
-                          className={cn(
-                            "h-5 w-5 text-muted-foreground flex-shrink-0 transition-transform duration-200",
-                            isOpen && "rotate-180"
-                          )}
-                        />
-                      </button>
+                    All
+                  </Button>
+                  {categories.map((cat) => (
+                    <Button
+                      key={cat}
+                      variant={activeCategory === cat ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setActiveCategory(cat)}
+                    >
+                      {cat}
+                    </Button>
+                  ))}
+                </motion.div>
+              )}
 
-                      {/* Answer (collapsible) */}
-                      <AnimatePresence initial={false}>
-                        {isOpen && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="overflow-hidden"
+              {/* FAQ Accordion */}
+              <div className="max-w-3xl space-y-3">
+                {filteredFAQs.map((faq, i) => {
+                  const isOpen = openIndices.has(faq.id);
+
+                  return (
+                    <motion.div
+                      key={faq.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                    >
+                      <Card
+                        className={cn(
+                          "transition-shadow",
+                          isOpen && "shadow-md ring-1 ring-primary/10"
+                        )}
+                      >
+                        <CardContent className="p-0">
+                          {/* Question (clickable header) */}
+                          <button
+                            onClick={() => toggleFAQ(faq.id)}
+                            className="w-full flex items-center justify-between p-5 text-left"
                           >
-                            <div className="px-5 pb-5 pl-13">
-                              <div className="pl-8 border-l-2 border-primary/20">
-                                <p className="text-sm text-muted-foreground leading-relaxed">
-                                  {faq.answer}
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              <HelpCircle
+                                className={cn(
+                                  "h-5 w-5 flex-shrink-0 mt-0.5 transition-colors",
+                                  isOpen
+                                    ? "text-primary"
+                                    : "text-muted-foreground"
+                                )}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p
+                                  className={cn(
+                                    "font-medium transition-colors",
+                                    isOpen ? "text-primary" : "text-foreground"
+                                  )}
+                                >
+                                  {faq.question}
                                 </p>
+                                {faq.category && (
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "text-[10px] mt-1.5",
+                                      categoryColors[faq.category] || ""
+                                    )}
+                                  >
+                                    {faq.category}
+                                  </Badge>
+                                )}
                               </div>
                             </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
+                            <ChevronDown
+                              className={cn(
+                                "h-5 w-5 text-muted-foreground flex-shrink-0 transition-transform duration-200",
+                                isOpen && "rotate-180"
+                              )}
+                            />
+                          </button>
+
+                          {/* Answer (collapsible) */}
+                          <AnimatePresence initial={false}>
+                            {isOpen && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="px-5 pb-5 pl-13">
+                                  <div className="pl-8 border-l-2 border-primary/20">
+                                    <p className="text-sm text-muted-foreground leading-relaxed">
+                                      {faq.answer}
+                                    </p>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           {/* Still have questions? */}
           <motion.div

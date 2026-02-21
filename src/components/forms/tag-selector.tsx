@@ -6,7 +6,7 @@ import { X, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { popularTags } from "@/lib/mock-data";
+import { popularTags } from "@/lib/constants";
 
 interface TagSelectorProps {
   value: string[];

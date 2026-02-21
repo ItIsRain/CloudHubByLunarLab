@@ -12,6 +12,8 @@ import {
   ArrowLeft,
   UserPlus,
   Filter,
+  Lock,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,8 +22,12 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CreateTeamDialog } from "@/components/dialogs/create-team-dialog";
 import { JoinTeamDialog } from "@/components/dialogs/join-team-dialog";
+import { EditTeamDialog } from "@/components/dialogs/edit-team-dialog";
 import { cn, getInitials } from "@/lib/utils";
-import { mockTeams, mockHackathons } from "@/lib/mock-data";
+import { useHackathon } from "@/hooks/use-hackathons";
+import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
+import { useHackathonRegistration } from "@/hooks/use-registrations";
+import { useAuthStore } from "@/store/auth-store";
 import type { Team, TeamStatus } from "@/lib/types";
 
 const statusColors: Record<TeamStatus, string> = {
@@ -37,10 +43,17 @@ export default function TeamsPage() {
   const [statusFilter, setStatusFilter] = useState<TeamStatus | "all">("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const { user } = useAuthStore();
 
-  const hackathon = mockHackathons.find((h) => h.id === hackathonId);
-  const allTeams = mockTeams.filter((t) => t.hackathonId === hackathonId);
+  const { data: hackathonData, isLoading } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
+  const { data: teamsData, isLoading: teamsLoading } = useHackathonTeams(hackathonId);
+  const allTeams = teamsData?.data || [];
+  const { data: regData } = useHackathonRegistration(hackathon?.id);
+  const isRegistered = regData?.registered ?? false;
+  const isOrganizer = user?.id && hackathon?.organizerId === user.id;
 
   const filteredTeams = useMemo(() => {
     return allTeams.filter((team) => {
@@ -52,14 +65,34 @@ export default function TeamsPage() {
     });
   }, [allTeams, search, statusFilter]);
 
-  const handleCreateTeam = (data: { name: string; description?: string; maxSize: number; lookingForRoles: string[] }) => {
-    toast.success(`Team "${data.name}" created successfully!`);
+  const createTeamMutation = useCreateTeam();
+
+  const handleCreateTeam = async (data: { name: string; description?: string; maxSize: number; lookingForRoles: string[]; joinPassword?: string }) => {
+    try {
+      await createTeamMutation.mutateAsync({
+        hackathon_id: hackathonId,
+        name: data.name,
+        description: data.description,
+        max_size: data.maxSize,
+        looking_for_roles: data.lookingForRoles,
+        join_password: data.joinPassword || undefined,
+      });
+      toast.success(`Team "${data.name}" created successfully!`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create team");
+    }
   };
 
-  const handleJoinTeam = (teamId: string, message: string) => {
-    toast.success("Join request sent!");
-    console.log("Join request:", { teamId, message });
-  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background pt-24 pb-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="shimmer rounded-xl h-96 w-full" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pt-24 pb-16">
@@ -161,7 +194,10 @@ export default function TeamsPage() {
                             <Users className="h-5 w-5 text-primary" />
                           </div>
                           <div>
-                            <h3 className="font-display font-semibold">{team.name}</h3>
+                            <h3 className="font-display font-semibold flex items-center gap-1.5">
+                              {team.name}
+                              {team.joinPassword && <Lock className="h-3 w-3 text-muted-foreground" />}
+                            </h3>
                             <p className="text-xs text-muted-foreground">
                               {team.members.length}/{team.maxSize} members
                             </p>
@@ -205,21 +241,63 @@ export default function TeamsPage() {
                         </div>
                       )}
 
-                      {/* Join button */}
-                      {team.status === "forming" && team.members.length < team.maxSize && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full gap-1.5"
-                          onClick={() => {
-                            setSelectedTeam(team);
-                            setShowJoinDialog(true);
-                          }}
-                        >
-                          <UserPlus className="h-3.5 w-3.5" />
-                          Request to Join
-                        </Button>
-                      )}
+                      {/* Action buttons */}
+                      {(() => {
+                        if (isOrganizer) return null;
+
+                        const isLeader = user && team.members.some((m) => m.user.id === user.id && m.isLeader);
+                        const isMember = user && team.members.some((m) => m.user.id === user.id);
+
+                        if (isLeader) {
+                          return (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full gap-1.5"
+                              onClick={() => {
+                                setSelectedTeam(team);
+                                setShowEditDialog(true);
+                              }}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit Team
+                            </Button>
+                          );
+                        }
+
+                        if (!isMember && team.status === "forming" && team.members.length < team.maxSize) {
+                          if (!isRegistered) {
+                            return (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full gap-1.5"
+                                disabled
+                                title="Register for the hackathon to join a team"
+                              >
+                                <Lock className="h-3.5 w-3.5" />
+                                Register to Join
+                              </Button>
+                            );
+                          }
+                          return (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full gap-1.5"
+                              onClick={() => {
+                                setSelectedTeam(team);
+                                setShowJoinDialog(true);
+                              }}
+                            >
+                              <UserPlus className="h-3.5 w-3.5" />
+                              Join Team
+                            </Button>
+                          );
+                        }
+
+                        return null;
+                      })()}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -233,13 +311,20 @@ export default function TeamsPage() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onSubmit={handleCreateTeam}
+        maxTeamSize={hackathon?.maxTeamSize}
       />
       <JoinTeamDialog
         open={showJoinDialog}
         onOpenChange={setShowJoinDialog}
         team={selectedTeam}
-        onJoin={handleJoinTeam}
       />
+      {selectedTeam && (
+        <EditTeamDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          team={selectedTeam}
+        />
+      )}
     </div>
   );
 }
