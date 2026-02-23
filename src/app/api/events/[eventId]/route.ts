@@ -68,14 +68,40 @@ export async function PATCH(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const updates = await request.json();
+    const body = await request.json();
 
-    // Prevent updating protected fields
-    delete updates.id;
-    delete updates.organizer_id;
-    delete updates.created_at;
-    delete updates.updated_at;
-    delete updates.organizer;
+    // Allowlist + camelCase-to-snake_case key mapping
+    const keyMap: Record<string, string> = {
+      title: "title", tagline: "tagline", description: "description",
+      cover_image: "cover_image", coverImage: "cover_image",
+      category: "category", tags: "tags", type: "type", status: "status",
+      location: "location",
+      start_date: "start_date", startDate: "start_date",
+      end_date: "end_date", endDate: "end_date",
+      timezone: "timezone", tickets: "tickets", speakers: "speakers",
+      agenda: "agenda", faq: "faq", capacity: "capacity",
+    };
+    const updates: Record<string, unknown> = {};
+    for (const [key, dbKey] of Object.entries(keyMap)) {
+      if (key in body) updates[dbKey] = body[key];
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
+
+    // Validate status against allowed values
+    if (updates.status) {
+      const allowedStatuses = [
+        "draft", "published", "cancelled", "completed", "sold-out",
+      ];
+      if (!allowedStatuses.includes(updates.status as string)) {
+        return NextResponse.json(
+          { error: "Invalid event status" },
+          { status: 400 }
+        );
+      }
+    }
 
     const { data, error } = await supabase
       .from("events")

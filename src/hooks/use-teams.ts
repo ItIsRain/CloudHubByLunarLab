@@ -38,6 +38,8 @@ export function useTeams(filters?: TeamFilters) {
       fetchJson<PaginatedResponse<Team>>(
         `/api/teams${buildTeamParams(filters)}`
       ),
+    // API requires at least hackathonId or userId filter
+    enabled: !!(filters?.hackathonId || filters?.userId),
   });
 }
 

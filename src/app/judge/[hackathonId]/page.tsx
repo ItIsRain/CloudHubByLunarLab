@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { cn, formatDate } from "@/lib/utils";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useHackathonSubmissions } from "@/hooks/use-submissions";
+import { useHackathonPhase } from "@/hooks/use-hackathon-phase";
 import {
   useJudgeInvitation,
   useAcceptInvitation,
@@ -41,6 +42,7 @@ function JudgingPageContent() {
   const hackathon = hackathonData?.data;
   const { data: submissionsData, isLoading: submissionsLoading } =
     useHackathonSubmissions(hackathonId);
+  const phase = useHackathonPhase(hackathon);
 
   const {
     data: invitationData,
@@ -320,6 +322,18 @@ function JudgingPageContent() {
             </div>
           </motion.div>
 
+          {/* Phase Banner */}
+          {!phase.canJudge && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="mb-6 rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground"
+            >
+              {phase.getMessage("judge")}
+            </motion.div>
+          )}
+
           {/* Filters & Search */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -415,15 +429,25 @@ function JudgingPageContent() {
                         </Badge>
 
                         {/* Action */}
-                        <Button
-                          asChild
-                          size="sm"
-                          variant={sub.isReviewed ? "outline" : "default"}
-                        >
-                          <Link href={`/judge/${hackathonId}/${sub.id}`}>
+                        {phase.canJudge ? (
+                          <Button
+                            asChild
+                            size="sm"
+                            variant={sub.isReviewed ? "outline" : "default"}
+                          >
+                            <Link href={`/judge/${hackathonId}/${sub.id}`}>
+                              {sub.isReviewed ? "Edit" : "Score"}
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled
+                          >
                             {sub.isReviewed ? "Edit" : "Score"}
-                          </Link>
-                        </Button>
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardContent>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { profileToUser } from "@/lib/supabase/mappers";
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,6 +9,14 @@ export async function POST(request: NextRequest) {
     if (!email || !token) {
       return NextResponse.json(
         { error: "Email and verification code are required" },
+        { status: 400 }
+      );
+    }
+
+    const VALID_OTP_TYPES = ["email", "recovery"];
+    if (!VALID_OTP_TYPES.includes(type)) {
+      return NextResponse.json(
+        { error: "Invalid verification type" },
         { status: 400 }
       );
     }
@@ -36,8 +45,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      user: data.user,
-      profile,
+      user: data.user ? { id: data.user.id, email: data.user.email } : null,
+      profile: profile ? profileToUser(profile as Record<string, unknown>) : null,
       message: "Email verified successfully",
     });
   } catch {

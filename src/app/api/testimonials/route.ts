@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await getSupabaseServerClient();
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "10") || 10));
 
     const { data, error } = await supabase
       .from("testimonials")
@@ -65,13 +65,39 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
+    if (!body.quote || !body.role) {
+      return NextResponse.json(
+        { error: "quote and role are required" },
+        { status: 400 }
+      );
+    }
+
+    if (typeof body.quote !== "string" || body.quote.length > 2000) {
+      return NextResponse.json(
+        { error: "Quote must be under 2,000 characters" },
+        { status: 400 }
+      );
+    }
+    if (typeof body.role !== "string" || body.role.length > 100) {
+      return NextResponse.json(
+        { error: "Role must be under 100 characters" },
+        { status: 400 }
+      );
+    }
+    if (body.company && (typeof body.company !== "string" || body.company.length > 100)) {
+      return NextResponse.json(
+        { error: "Company must be under 100 characters" },
+        { status: 400 }
+      );
+    }
+
     const { data, error } = await supabase
       .from("testimonials")
       .insert({
         user_id: user.id,
-        quote: body.quote,
-        role: body.role,
-        company: body.company,
+        quote: body.quote.slice(0, 2000),
+        role: body.role.slice(0, 100),
+        company: body.company ? String(body.company).slice(0, 100) : null,
         highlight_stat: body.highlightStat || null,
         rating: body.rating || 5,
       })

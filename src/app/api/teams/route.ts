@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToTeam } from "@/lib/supabase/mappers";
+import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
+import { canFormTeams, getPhaseMessage } from "@/lib/hackathon-phases";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,9 +20,17 @@ export async function GET(request: NextRequest) {
     const hackathonId = url.searchParams.get("hackathonId");
     const userId = url.searchParams.get("userId");
     const status = url.searchParams.get("status");
-    const page = parseInt(url.searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(url.searchParams.get("pageSize") || "50", 10);
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get("pageSize") || "50", 10) || 50));
     const offset = (page - 1) * pageSize;
+
+    // Require at least one filter to prevent listing all teams across all hackathons
+    if (!hackathonId && !userId) {
+      return NextResponse.json(
+        { error: "hackathonId or userId filter is required" },
+        { status: 400 }
+      );
+    }
 
     let query = supabase
       .from("teams")
@@ -37,6 +47,9 @@ export async function GET(request: NextRequest) {
       query = query.eq("status", status);
     }
     if (userId) {
+      // Only allow querying own teams — prevent IDOR
+      const effectiveUserId = userId === user.id ? userId : user.id;
+
       // Filter teams where this user is a member
       query = supabase
         .from("teams")
@@ -50,7 +63,7 @@ export async function GET(request: NextRequest) {
       const { data: memberTeamIds } = await supabase
         .from("team_members")
         .select("team_id")
-        .eq("user_id", userId);
+        .eq("user_id", effectiveUserId);
 
       const teamIds = (memberTeamIds || []).map((m) => m.team_id);
       if (teamIds.length === 0) {
@@ -125,6 +138,84 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(hackathon_id)) {
+      return NextResponse.json(
+        { error: "Invalid hackathon_id format" },
+        { status: 400 }
+      );
+    }
+
+    // Validate max_size is a reasonable positive number
+    if (max_size !== undefined && (typeof max_size !== "number" || max_size < 1 || max_size > 20)) {
+      return NextResponse.json(
+        { error: "max_size must be a number between 1 and 20" },
+        { status: 400 }
+      );
+    }
+
+    // Validate join_password length if provided
+    const trimmedPassword = typeof join_password === "string" ? join_password.trim() : join_password;
+    if (trimmedPassword && (typeof trimmedPassword !== "string" || trimmedPassword.length < 4 || trimmedPassword.length > 100)) {
+      return NextResponse.json(
+        { error: "Team password must be between 4 and 100 characters" },
+        { status: 400 }
+      );
+    }
+
+    // Verify hackathon exists
+    const { data: hackathonCheck } = await supabase
+      .from("hackathons")
+      .select("id")
+      .eq("id", hackathon_id)
+      .single();
+
+    if (!hackathonCheck) {
+      return NextResponse.json(
+        { error: "Hackathon not found" },
+        { status: 404 }
+      );
+    }
+
+    // Verify user is registered for this hackathon
+    const { data: registration } = await supabase
+      .from("hackathon_registrations")
+      .select("id")
+      .eq("hackathon_id", hackathon_id)
+      .eq("user_id", user.id)
+      .in("status", ["confirmed", "approved"])
+      .maybeSingle();
+
+    if (!registration) {
+      return NextResponse.json(
+        { error: "You must be registered for this hackathon to create a team" },
+        { status: 403 }
+      );
+    }
+
+    // Prevent user from being on multiple teams in the same hackathon
+    const { data: existingMemberships } = await supabase
+      .from("team_members")
+      .select("team_id, teams!inner(hackathon_id)")
+      .eq("user_id", user.id)
+      .eq("teams.hackathon_id", hackathon_id);
+
+    if (existingMemberships && existingMemberships.length > 0) {
+      return NextResponse.json(
+        { error: "You are already on a team in this hackathon" },
+        { status: 409 }
+      );
+    }
+
+    // Verify team formation window is open
+    const timeline = await getHackathonTimeline(supabase, hackathon_id);
+    if (timeline && !canFormTeams(timeline)) {
+      return NextResponse.json(
+        { error: getPhaseMessage(timeline, "formTeams") },
+        { status: 403 }
+      );
+    }
+
     // Create team
     const { data: team, error: teamError } = await supabase
       .from("teams")
@@ -136,7 +227,7 @@ export async function POST(request: NextRequest) {
         track: track || null,
         looking_for_roles: looking_for_roles || [],
         max_size: max_size || 4,
-        join_password: join_password || null,
+        join_password: trimmedPassword || null,
         status: "forming",
       })
       .select()

@@ -13,6 +13,7 @@ import {
   Shield,
   ScrollText,
 } from "lucide-react";
+import { SafeHtml } from "@/components/ui/safe-html";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { Button } from "@/components/ui/button";
@@ -168,9 +169,9 @@ export default function HackathonOverviewPage() {
                   <CardTitle>About</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div
+                  <SafeHtml
+                    content={hackathon.description}
                     className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1 [&_p:empty]:hidden"
-                    dangerouslySetInnerHTML={{ __html: hackathon.description }}
                   />
                 </CardContent>
               </Card>
@@ -398,9 +399,9 @@ export default function HackathonOverviewPage() {
                         className="flex items-start gap-3"
                       >
                         <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1.5" />
-                        <span
-                          className="text-sm [&_p]:inline [&_ul]:hidden [&_ol]:hidden"
-                          dangerouslySetInnerHTML={{ __html: item }}
+                        <SafeHtml
+                          content={item}
+                          className="text-sm [&_p]:inline [&_ul]:hidden [&_ol]:hidden inline"
                         />
                       </motion.li>
                     ))}
@@ -438,9 +439,9 @@ export default function HackathonOverviewPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div
+                  <SafeHtml
+                    content={hackathon.rules}
                     className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1 [&_p:empty]:hidden"
-                    dangerouslySetInnerHTML={{ __html: hackathon.rules }}
                   />
                 </CardContent>
               </Card>

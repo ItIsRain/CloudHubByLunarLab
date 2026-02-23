@@ -27,7 +27,7 @@ function buildHackathonParams(filters?: HackathonFilters & { page?: number; page
   return str ? `?${str}` : "";
 }
 
-export function useHackathons(filters?: HackathonFilters & { page?: number; pageSize?: number }) {
+export function useHackathons(filters?: HackathonFilters & { page?: number; pageSize?: number; organizerId?: string }) {
   return useQuery<PaginatedResponse<Hackathon>>({
     queryKey: ["hackathons", filters],
     queryFn: () =>

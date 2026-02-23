@@ -9,6 +9,29 @@ export async function GET(
     const { hackathonId } = await params;
     const supabase = await getSupabaseServerClient();
 
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Verify user is the hackathon organizer
+    const { data: hackathon } = await supabase
+      .from("hackathons")
+      .select("organizer_id")
+      .eq("id", hackathonId)
+      .single();
+
+    if (!hackathon) {
+      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+    }
+    if (hackathon.organizer_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     // 1. Registration counts grouped by status
     const { data: registrations, error: regError } = await supabase
       .from("hackathon_registrations")

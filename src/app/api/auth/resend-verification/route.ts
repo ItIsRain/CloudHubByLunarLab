@@ -14,17 +14,14 @@ export async function POST(request: NextRequest) {
 
     const supabase = await getSupabaseServerClient();
 
-    const { error } = await supabase.auth.resend({
+    // Fire-and-forget: always return success to prevent email enumeration
+    await supabase.auth.resend({
       type: "signup",
       email,
     });
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
     return NextResponse.json({
-      message: "Verification code resent",
+      message: "If an account exists with that email, a verification code has been sent",
     });
   } catch {
     return NextResponse.json(

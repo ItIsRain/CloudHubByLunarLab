@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { profileToPublicUser } from "@/lib/supabase/mappers";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +21,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return NextResponse.json(
+        { error: "Invalid email or password" },
+        { status: 401 }
+      );
     }
 
     // Fetch the profile
@@ -30,7 +34,10 @@ export async function POST(request: NextRequest) {
       .eq("id", data.user.id)
       .single();
 
-    return NextResponse.json({ user: data.user, profile });
+    return NextResponse.json({
+      user: { id: data.user.id, email: data.user.email },
+      profile: profile ? profileToPublicUser(profile as Record<string, unknown>) : null,
+    });
   } catch {
     return NextResponse.json(
       { error: "Internal server error" },

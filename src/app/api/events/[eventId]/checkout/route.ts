@@ -16,6 +16,12 @@ export async function POST(
 ) {
   try {
     const { eventId } = await params;
+
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(eventId)) {
+      return NextResponse.json({ error: "Invalid event ID" }, { status: 400 });
+    }
+
     const supabase = await getSupabaseServerClient();
 
     const {
@@ -36,12 +42,19 @@ export async function POST(
     // Fetch event to get ticket data
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, title, slug, tickets")
+      .select("id, title, slug, tickets, status")
       .eq("id", eventId)
       .single();
 
     if (eventError || !event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+
+    if (event.status === "draft" || event.status === "cancelled" || event.status === "completed") {
+      return NextResponse.json(
+        { error: "Ticket sales are not available for this event" },
+        { status: 400 }
+      );
     }
 
     // Find the matching ticket
@@ -71,13 +84,33 @@ export async function POST(
       );
     }
 
+    if (ticket.price > 999999) {
+      return NextResponse.json(
+        { error: "Ticket price exceeds maximum allowed" },
+        { status: 400 }
+      );
+    }
+
+    // Validate currency is a supported 3-letter ISO code
+    const SUPPORTED_CURRENCIES = ["usd", "eur", "gbp", "cad", "aud", "aed", "inr", "sgd", "jpy", "chf"];
+    if (!SUPPORTED_CURRENCIES.includes(ticket.currency.toLowerCase())) {
+      return NextResponse.json(
+        { error: "Unsupported currency" },
+        { status: 400 }
+      );
+    }
+
     // Check for existing registration
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from("event_registrations")
       .select("id, payment_status")
       .eq("event_id", eventId)
       .eq("user_id", user.id)
       .maybeSingle();
+
+    if (existingError) {
+      return NextResponse.json({ error: "Failed to check registration status" }, { status: 500 });
+    }
 
     if (existing && existing.payment_status === "paid") {
       return NextResponse.json(
@@ -113,36 +146,55 @@ export async function POST(
         .eq("id", user.id);
     }
 
-    const origin = request.headers.get("origin") || "http://localhost:3000";
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
     // Use admin client for the registration insert (bypass RLS for pending)
     const supabaseAdmin = getSupabaseAdmin();
 
-    // Delete any existing pending registration for this event
-    if (existing && existing.payment_status !== "paid") {
-      await supabaseAdmin
-        .from("event_registrations")
-        .delete()
-        .eq("id", existing.id);
-    }
+    let registration: { id: string };
+    let regError;
 
-    // Insert a pending registration
-    const { data: registration, error: regError } = await supabaseAdmin
-      .from("event_registrations")
-      .insert({
-        event_id: eventId,
-        user_id: user.id,
-        ticket_type: {
-          id: ticket.id,
-          name: ticket.name,
-          price: ticket.price,
-          currency: ticket.currency,
-        },
-        status: "pending",
-        payment_status: "pending",
-      })
-      .select("id")
-      .single();
+    if (existing && existing.payment_status !== "paid") {
+      // Update existing pending registration instead of delete+insert (prevents race condition)
+      const result = await supabaseAdmin
+        .from("event_registrations")
+        .update({
+          ticket_type: {
+            id: ticket.id,
+            name: ticket.name,
+            price: ticket.price,
+            currency: ticket.currency,
+          },
+          status: "pending",
+          payment_status: "pending",
+          stripe_session_id: null,
+        })
+        .eq("id", existing.id)
+        .select("id")
+        .single();
+      registration = result.data!;
+      regError = result.error;
+    } else {
+      // Insert a new pending registration
+      const result = await supabaseAdmin
+        .from("event_registrations")
+        .insert({
+          event_id: eventId,
+          user_id: user.id,
+          ticket_type: {
+            id: ticket.id,
+            name: ticket.name,
+            price: ticket.price,
+            currency: ticket.currency,
+          },
+          status: "pending",
+          payment_status: "pending",
+        })
+        .select("id")
+        .single();
+      registration = result.data!;
+      regError = result.error;
+    }
 
     if (regError) {
       console.error("Registration insert error:", regError);

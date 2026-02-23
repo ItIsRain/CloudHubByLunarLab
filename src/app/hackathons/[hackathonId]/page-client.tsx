@@ -30,6 +30,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { SafeHtml } from "@/components/ui/safe-html";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -316,9 +317,9 @@ export default function HackathonDetailPage() {
                 <Card>
                   <CardHeader><CardTitle>About</CardTitle></CardHeader>
                   <CardContent>
-                    <div
+                    <SafeHtml
+                      content={hackathon.description}
                       className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1 [&_p:empty]:hidden"
-                      dangerouslySetInnerHTML={{ __html: hackathon.description }}
                     />
                   </CardContent>
                 </Card>
@@ -382,9 +383,9 @@ export default function HackathonDetailPage() {
                   <CardHeader><CardTitle>Rules & Eligibility</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
                     {hackathon.rules && (
-                      <div
+                      <SafeHtml
+                        content={hackathon.rules}
                         className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1 [&_p:empty]:hidden"
-                        dangerouslySetInnerHTML={{ __html: hackathon.rules }}
                       />
                     )}
                     <div>
@@ -393,9 +394,9 @@ export default function HackathonDetailPage() {
                         {hackathon.eligibility.map((e, i) => (
                           <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
                             <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                            <span
-                              className="[&_p]:inline [&_ul]:hidden [&_ol]:hidden"
-                              dangerouslySetInnerHTML={{ __html: e }}
+                            <SafeHtml
+                              content={e}
+                              className="[&_p]:inline [&_ul]:hidden [&_ol]:hidden inline"
                             />
                           </li>
                         ))}

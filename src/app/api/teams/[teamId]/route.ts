@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToTeam } from "@/lib/supabase/mappers";
+import { verifyIsTeamLeaderOrOrganizer } from "@/lib/supabase/auth-helpers";
 
 export async function GET(
   _request: NextRequest,
@@ -57,6 +58,15 @@ export async function PATCH(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    // Verify user is team leader or hackathon organizer
+    const authorized = await verifyIsTeamLeaderOrOrganizer(supabase, teamId, user.id);
+    if (!authorized) {
+      return NextResponse.json(
+        { error: "Only the team leader or hackathon organizer can update this team" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const updates: Record<string, unknown> = {};
 
@@ -65,9 +75,39 @@ export async function PATCH(
     if (body.track !== undefined) updates.track = body.track;
     if (body.looking_for_roles !== undefined)
       updates.looking_for_roles = body.looking_for_roles;
-    if (body.max_size !== undefined) updates.max_size = body.max_size;
-    if (body.status !== undefined) updates.status = body.status;
-    if (body.join_password !== undefined) updates.join_password = body.join_password;
+    if (body.max_size !== undefined) {
+      if (typeof body.max_size !== "number" || body.max_size < 1 || body.max_size > 20) {
+        return NextResponse.json(
+          { error: "max_size must be a number between 1 and 20" },
+          { status: 400 }
+        );
+      }
+      updates.max_size = body.max_size;
+    }
+    if (body.status !== undefined) {
+      const VALID_STATUSES = ["forming", "full", "locked"];
+      if (!VALID_STATUSES.includes(body.status)) {
+        return NextResponse.json({ error: "Invalid team status" }, { status: 400 });
+      }
+      updates.status = body.status;
+    }
+    if (body.join_password !== undefined) {
+      const trimmedPw = typeof body.join_password === "string" ? body.join_password.trim() : body.join_password;
+      if (typeof trimmedPw === "string" && trimmedPw.length > 0 && trimmedPw.length < 4) {
+        return NextResponse.json({ error: "Team password must be at least 4 characters" }, { status: 400 });
+      }
+      if (typeof trimmedPw === "string" && trimmedPw.length > 100) {
+        return NextResponse.json({ error: "Team password is too long" }, { status: 400 });
+      }
+      updates.join_password = trimmedPw || null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { error: "No valid fields to update" },
+        { status: 400 }
+      );
+    }
 
     const { data, error } = await supabase
       .from("teams")
@@ -107,6 +147,15 @@ export async function DELETE(
 
     if (authError || !user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Verify user is team leader or hackathon organizer
+    const authorized = await verifyIsTeamLeaderOrOrganizer(supabase, teamId, user.id);
+    if (!authorized) {
+      return NextResponse.json(
+        { error: "Only the team leader or hackathon organizer can delete this team" },
+        { status: 403 }
+      );
     }
 
     // Get the hackathon_id before deleting so we can update team_count

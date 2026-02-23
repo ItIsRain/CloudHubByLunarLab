@@ -44,6 +44,18 @@ export default function ExplorePage() {
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([]);
   const [sortBy, setSortBy] = React.useState("trending");
   const [showFilters, setShowFilters] = React.useState(false);
+  const [showSort, setShowSort] = React.useState(false);
+  const sortRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
+        setShowSort(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const { data: eventsData, isLoading: eventsLoading } = useEvents({
     search: searchQuery || undefined,
@@ -222,11 +234,27 @@ export default function ExplorePage() {
               )}
 
               {/* Sort Dropdown */}
-              <div className="relative">
-                <Button variant="outline" size="sm">
+              <div className="relative" ref={sortRef}>
+                <Button variant="outline" size="sm" onClick={() => setShowSort(!showSort)}>
                   Sort: {sortOptions.find((o) => o.value === sortBy)?.label}
-                  <ChevronDown className="h-4 w-4 ml-1" />
+                  <ChevronDown className={cn("h-4 w-4 ml-1 transition-transform", showSort && "rotate-180")} />
                 </Button>
+                {showSort && (
+                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-lg border bg-background shadow-lg py-1">
+                    {sortOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => { setSortBy(opt.value); setShowSort(false); }}
+                        className={cn(
+                          "w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors",
+                          sortBy === opt.value && "text-primary font-medium"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* View Mode Toggle */}
@@ -357,12 +385,12 @@ export default function ExplorePage() {
             </motion.div>
           )}
 
-          {/* Load More */}
+          {/* Results count */}
           {!isLoading && totalResults > 0 && (
             <div className="text-center mt-12">
-              <Button variant="outline" size="lg">
-                Load More
-              </Button>
+              <p className="text-sm text-muted-foreground">
+                Showing {totalResults} result{totalResults !== 1 ? "s" : ""}
+              </p>
             </div>
           )}
         </div>

@@ -23,27 +23,36 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useSubmission, useHackathonSubmissions, useSubmitScore } from "@/hooks/use-submissions";
+import { useHackathonPhase } from "@/hooks/use-hackathon-phase";
 
-const scoringCriteria = [
+const defaultCriteria = [
   {
     id: "innovation",
-    label: "Innovation",
+    name: "Innovation",
     description: "How novel and creative is the solution?",
+    weight: 25,
+    maxScore: 10,
   },
   {
     id: "technical",
-    label: "Technical Excellence",
+    name: "Technical Excellence",
     description: "Quality of code, architecture, and implementation.",
+    weight: 25,
+    maxScore: 10,
   },
   {
     id: "design",
-    label: "Design & UX",
+    name: "Design & UX",
     description: "User interface and overall user experience.",
+    weight: 25,
+    maxScore: 10,
   },
   {
     id: "impact",
-    label: "Impact",
+    name: "Impact",
     description: "How well does it solve the problem? Is it useful?",
+    weight: 25,
+    maxScore: 10,
   },
 ];
 
@@ -55,6 +64,7 @@ export default function ScoringPage() {
   const { data: hackathonData, isLoading } = useHackathon(hackathonId);
   const hackathon = hackathonData?.data;
   const { data: submissionData, isLoading: submissionLoading } = useSubmission(submissionId);
+  const phase = useHackathonPhase(hackathon);
   const submission = submissionData?.data;
   const { data: allSubmissionsData, isLoading: allSubsLoading } = useHackathonSubmissions(hackathonId);
   const allSubmissions = allSubmissionsData?.data || [];
@@ -66,20 +76,35 @@ export default function ScoringPage() {
       : null;
   const submitScoreMutation = useSubmitScore();
 
-  const [scores, setScores] = React.useState<Record<string, number>>({
-    innovation: 7,
-    technical: 7,
-    design: 7,
-    impact: 7,
-  });
-  const [feedback, setFeedback] = React.useState<Record<string, string>>({
-    innovation: "",
-    technical: "",
-    design: "",
-    impact: "",
-  });
+  const scoringCriteria = React.useMemo(() => {
+    if (hackathon?.judgingCriteria && hackathon.judgingCriteria.length > 0) {
+      return hackathon.judgingCriteria;
+    }
+    return defaultCriteria;
+  }, [hackathon]);
+
+  const [scores, setScores] = React.useState<Record<string, number>>({});
+  const [feedback, setFeedback] = React.useState<Record<string, string>>({});
   const [overallComments, setOverallComments] = React.useState("");
   const [flagged, setFlagged] = React.useState(false);
+
+  // Initialize scores/feedback when criteria load
+  React.useEffect(() => {
+    setScores((prev) => {
+      const next: Record<string, number> = {};
+      for (const c of scoringCriteria) {
+        next[c.id] = prev[c.id] ?? Math.round((c.maxScore || 10) * 0.7);
+      }
+      return next;
+    });
+    setFeedback((prev) => {
+      const next: Record<string, string> = {};
+      for (const c of scoringCriteria) {
+        next[c.id] = prev[c.id] ?? "";
+      }
+      return next;
+    });
+  }, [scoringCriteria]);
 
   if (isLoading || submissionLoading || allSubsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
 
@@ -115,20 +140,26 @@ export default function ScoringPage() {
     try {
       const criteria = scoringCriteria.map((c) => ({
         criteriaId: c.id,
-        score: scores[c.id],
+        score: scores[c.id] ?? 0,
+        maxScore: c.maxScore || 10,
+        weight: c.weight,
         feedback: feedback[c.id] || undefined,
       }));
-      const totalScoreNum = parseFloat(
-        (
-          Object.values(scores).reduce((a, b) => a + b, 0) /
-          Object.values(scores).length
-        ).toFixed(1)
-      );
+      // Weighted average normalized to 0-100
+      const totalWeight = scoringCriteria.reduce((s, c) => s + (c.weight || 1), 0);
+      const weightedSum = scoringCriteria.reduce((s, c) => {
+        const score = scores[c.id] ?? 0;
+        const max = c.maxScore || 10;
+        return s + (score / max) * (c.weight || 1);
+      }, 0);
+      const totalScoreNum = parseFloat(((weightedSum / totalWeight) * 100).toFixed(1));
+
       await submitScoreMutation.mutateAsync({
         submissionId,
         criteria,
         totalScore: totalScoreNum,
         overallFeedback: overallComments || undefined,
+        flagged,
       });
       toast.success("Score submitted successfully!", {
         description: `Your review for "${submission.projectName}" has been saved.`,
@@ -140,10 +171,14 @@ export default function ScoringPage() {
     }
   };
 
-  const totalScore = (
-    Object.values(scores).reduce((a, b) => a + b, 0) /
-    Object.values(scores).length
-  ).toFixed(1);
+  // Weighted average for display (0-10 scale)
+  const totalWeight = scoringCriteria.reduce((s, c) => s + (c.weight || 1), 0);
+  const weightedAvg = scoringCriteria.reduce((s, c) => {
+    const score = scores[c.id] ?? 0;
+    const max = c.maxScore || 10;
+    return s + (score / max) * (c.weight || 1) * 10;
+  }, 0) / totalWeight;
+  const totalScore = weightedAvg.toFixed(1);
 
   const reviewedCount = allSubmissions.filter((s) => s.scores && s.scores.length > 0).length;
   const totalForReview = allSubmissions.length;
@@ -256,6 +291,11 @@ export default function ScoringPage() {
               transition={{ delay: 0.1 }}
               className="lg:col-span-2 space-y-6"
             >
+              {!phase.canJudge && (
+                <div className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground mb-6">
+                  {phase.getMessage("judge")}
+                </div>
+              )}
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -273,54 +313,61 @@ export default function ScoringPage() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {/* Criteria Sliders */}
-                  {scoringCriteria.map((criteria) => (
-                    <div key={criteria.id} className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <label className="font-medium text-sm">
-                            {criteria.label}
-                          </label>
-                          <p className="text-xs text-muted-foreground">
-                            {criteria.description}
-                          </p>
+                  {scoringCriteria.map((criteria) => {
+                    const maxScore = criteria.maxScore || 10;
+                    const midScore = Math.round(maxScore / 2);
+                    return (
+                      <div key={criteria.id} className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <label className="font-medium text-sm">
+                              {criteria.name}
+                            </label>
+                            <p className="text-xs text-muted-foreground">
+                              {criteria.description}
+                            </p>
+                            {criteria.weight && (
+                              <p className="text-xs text-muted-foreground/70">Weight: {criteria.weight}%</p>
+                            )}
+                          </div>
+                          <span className="font-display text-xl font-bold min-w-[2ch] text-right">
+                            {scores[criteria.id] ?? 0}
+                          </span>
                         </div>
-                        <span className="font-display text-xl font-bold min-w-[2ch] text-right">
-                          {scores[criteria.id]}
-                        </span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={maxScore}
+                          step={1}
+                          value={scores[criteria.id] ?? 0}
+                          onChange={(e) =>
+                            setScores((prev) => ({
+                              ...prev,
+                              [criteria.id]: parseInt(e.target.value),
+                            }))
+                          }
+                          className="w-full h-2 rounded-full appearance-none bg-muted cursor-pointer accent-primary"
+                        />
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>0</span>
+                          <span>{midScore}</span>
+                          <span>{maxScore}</span>
+                        </div>
+                        <textarea
+                          placeholder={`Feedback on ${criteria.name.toLowerCase()}...`}
+                          value={feedback[criteria.id] ?? ""}
+                          onChange={(e) =>
+                            setFeedback((prev) => ({
+                              ...prev,
+                              [criteria.id]: e.target.value,
+                            }))
+                          }
+                          rows={2}
+                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                        />
                       </div>
-                      <input
-                        type="range"
-                        min={0}
-                        max={10}
-                        step={1}
-                        value={scores[criteria.id]}
-                        onChange={(e) =>
-                          setScores((prev) => ({
-                            ...prev,
-                            [criteria.id]: parseInt(e.target.value),
-                          }))
-                        }
-                        className="w-full h-2 rounded-full appearance-none bg-muted cursor-pointer accent-primary"
-                      />
-                      <div className="flex justify-between text-[10px] text-muted-foreground">
-                        <span>0</span>
-                        <span>5</span>
-                        <span>10</span>
-                      </div>
-                      <textarea
-                        placeholder={`Feedback on ${criteria.label.toLowerCase()}...`}
-                        value={feedback[criteria.id]}
-                        onChange={(e) =>
-                          setFeedback((prev) => ({
-                            ...prev,
-                            [criteria.id]: e.target.value,
-                          }))
-                        }
-                        rows={2}
-                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                      />
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {/* Overall Comments */}
                   <div className="space-y-2">
@@ -353,10 +400,10 @@ export default function ScoringPage() {
                     onClick={handleSubmitScore}
                     className="w-full"
                     size="lg"
-                    disabled={submitScoreMutation.isPending}
+                    disabled={submitScoreMutation.isPending || !phase.canJudge}
                   >
                     <Send className="mr-2 h-4 w-4" />
-                    {submitScoreMutation.isPending ? "Submitting..." : "Submit Score"}
+                    {submitScoreMutation.isPending ? "Submitting..." : !phase.canJudge ? "Judging Closed" : "Submit Score"}
                   </Button>
                 </CardContent>
               </Card>

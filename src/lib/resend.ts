@@ -5,6 +5,16 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = "noreply@1i1.ae";
 const FROM_NAME = "CloudHub by Lunar Labs";
 
+/** Escape user-supplied text before embedding in HTML emails */
+export function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function emailWrapper(content: string) {
   return `
 <!DOCTYPE html>
@@ -55,7 +65,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
     to: email,
     subject: "Welcome to CloudHub!",
     html: emailWrapper(`
-      <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;">Welcome, ${name}!</h1>
+      <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;">Welcome, ${escapeHtml(name)}!</h1>
       <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
         Your account is all set up. Start exploring events and hackathons, or create your own.
       </p>

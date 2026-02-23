@@ -45,8 +45,8 @@ export default function PublicProfilePage() {
     },
   });
   const user = profileData?.data;
-  const { data: eventsData } = useEvents();
-  const { data: hackathonsData } = useHackathons();
+  const { data: eventsData } = useEvents(user ? { organizerId: user.id } : undefined);
+  const { data: hackathonsData } = useHackathons(user ? { organizerId: user.id } : undefined);
   const { data: submissionsData } = useSubmissions(user ? { userId: user.id } : undefined);
 
   if (profileLoading) {

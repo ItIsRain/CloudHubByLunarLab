@@ -27,6 +27,7 @@ import { cn, getInitials } from "@/lib/utils";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
 import { useHackathonRegistration } from "@/hooks/use-registrations";
+import { useHackathonPhase } from "@/hooks/use-hackathon-phase";
 import { useAuthStore } from "@/store/auth-store";
 import type { Team, TeamStatus } from "@/lib/types";
 
@@ -54,6 +55,7 @@ export default function TeamsPage() {
   const { data: regData } = useHackathonRegistration(hackathon?.id);
   const isRegistered = regData?.registered ?? false;
   const isOrganizer = user?.id && hackathon?.organizerId === user.id;
+  const phase = useHackathonPhase(hackathon);
 
   const filteredTeams = useMemo(() => {
     return allTeams.filter((team) => {
@@ -123,11 +125,18 @@ export default function TeamsPage() {
                   </p>
                 )}
               </div>
-              <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Create Team
-              </Button>
+              {phase.canFormTeams && (
+                <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create Team
+                </Button>
+              )}
             </div>
+            {!phase.canFormTeams && (
+              <div className="mt-4 rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+                {phase.getMessage("formTeams")}
+              </div>
+            )}
           </div>
 
           {/* Filters */}
@@ -172,10 +181,12 @@ export default function TeamsPage() {
                   ? "Try a different search term"
                   : "Be the first to create a team!"}
               </p>
-              <Button onClick={() => setShowCreateDialog(true)} className="mt-4 gap-2">
-                <Plus className="h-4 w-4" />
-                Create Team
-              </Button>
+              {phase.canFormTeams && (
+                <Button onClick={() => setShowCreateDialog(true)} className="mt-4 gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create Team
+                </Button>
+              )}
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -265,7 +276,7 @@ export default function TeamsPage() {
                           );
                         }
 
-                        if (!isMember && team.status === "forming" && team.members.length < team.maxSize) {
+                        if (!isMember && team.status === "forming" && team.members.length < team.maxSize && phase.canFormTeams) {
                           if (!isRegistered) {
                             return (
                               <Button

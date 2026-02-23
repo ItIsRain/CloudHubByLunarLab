@@ -32,7 +32,7 @@ function buildNotificationParams(filters?: NotificationFilters): string {
 export function useNotifications(filters?: NotificationFilters) {
   const user = useAuthStore((s) => s.user);
   return useQuery<PaginatedResponse<Notification>>({
-    queryKey: ["notifications", filters],
+    queryKey: ["notifications", user?.id, filters],
     queryFn: () =>
       fetchJson<PaginatedResponse<Notification>>(
         `/api/notifications${buildNotificationParams(filters)}`
@@ -44,10 +44,11 @@ export function useNotifications(filters?: NotificationFilters) {
 export function useUnreadNotificationCount() {
   const user = useAuthStore((s) => s.user);
   return useQuery<{ count: number }>({
-    queryKey: ["notifications", "unread-count"],
+    queryKey: ["notifications", "unread-count", user?.id],
     queryFn: () => fetchJson<{ count: number }>("/api/notifications/unread-count"),
     enabled: !!user?.id,
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 }
 

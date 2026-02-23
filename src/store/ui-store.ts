@@ -31,11 +31,12 @@ export const useUIStore = create<UIState>()(
 
       setTheme: (theme) => {
         set({ theme });
-        // Apply theme to document
+        // Apply theme to document (guard for SSR)
+        if (typeof document === "undefined") return;
         const root = document.documentElement;
         if (theme === "system") {
-          const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-            .matches
+          const systemTheme = typeof window !== "undefined" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
             ? "dark"
             : "light";
           root.classList.remove("light", "dark");

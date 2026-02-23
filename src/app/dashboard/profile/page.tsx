@@ -26,8 +26,8 @@ import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
 import { useAuthStore } from "@/store/auth-store";
 import { cn, getInitials } from "@/lib/utils";
-import { useEvents } from "@/hooks/use-events";
-import { useHackathons } from "@/hooks/use-hackathons";
+import { useMyEvents } from "@/hooks/use-events";
+import { useMyHackathons } from "@/hooks/use-hackathons";
 import { useMySubmissions } from "@/hooks/use-submissions";
 
 export default function ProfilePage() {
@@ -54,8 +54,8 @@ export default function ProfilePage() {
     { label: "Wins", value: user.wins, icon: Award },
   ];
 
-  const { data: eventsData } = useEvents();
-  const { data: hackathonsData } = useHackathons();
+  const { data: eventsData } = useMyEvents();
+  const { data: hackathonsData } = useMyHackathons();
   const { data: submissionsData } = useMySubmissions();
   const userEvents = (eventsData?.data || []).slice(0, 3);
   const userHackathons = (hackathonsData?.data || []).slice(0, 2);

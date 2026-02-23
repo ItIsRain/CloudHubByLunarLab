@@ -19,9 +19,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn, formatDate, getInitials } from "@/lib/utils";
-import { mockUsers } from "@/lib/mock-data";
+import type { User } from "@/lib/types";
 
-const members = mockUsers.slice(0, 10);
+// Community members will come from a dedicated API once built.
+// Until then, show an empty state rather than fake mock data.
+const members: User[] = [];
 
 const roleColors: Record<string, string> = {
   organizer: "bg-purple-500/10 text-purple-600",

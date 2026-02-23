@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { profileToUser } from "@/lib/supabase/mappers";
+import { profileToPublicUser } from "@/lib/supabase/mappers";
 import type { User } from "@/lib/types";
 
-export async function GET(
+export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ hackathonId: string }> }
 ) {
   try {
     const { hackathonId } = await params;
-    const token = request.nextUrl.searchParams.get("token");
+    const { token } = await request.json().catch(() => ({ token: null }));
 
     if (!token) {
       return NextResponse.json({ error: "Token is required" }, { status: 400 });
@@ -95,6 +95,23 @@ export async function POST(
       );
     }
 
+    // Verify the authenticated user's email matches the invitation email
+    const { data: acceptorProfile } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", user.id)
+      .single();
+
+    if (
+      !acceptorProfile?.email ||
+      acceptorProfile.email.toLowerCase() !== invitation.email.toLowerCase()
+    ) {
+      return NextResponse.json(
+        { error: "This invitation was sent to a different email address" },
+        { status: 403 }
+      );
+    }
+
     // Mark invitation as accepted
     const { error: updateError } = await supabase
       .from("judge_invitations")
@@ -122,7 +139,7 @@ export async function POST(
       );
     }
 
-    const userObj = profileToUser(profile as Record<string, unknown>);
+    const userObj = profileToPublicUser(profile as Record<string, unknown>);
 
     // Add judge role to user profile if not already present
     const currentRoles = (profile.roles as string[]) || [];

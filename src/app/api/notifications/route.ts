@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
     const url = request.nextUrl;
     const type = url.searchParams.get("type");
     const unreadOnly = url.searchParams.get("unread") === "true";
-    const page = parseInt(url.searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(url.searchParams.get("pageSize") || "50", 10);
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get("pageSize") || "50", 10) || 50));
     const offset = (page - 1) * pageSize;
 
     let query = supabase
@@ -76,7 +76,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { user_id, type, title, message, link } = body;
+    const { type, title, message, link } = body;
+
+    // Only allow user-initiated notification types from the client.
+    // System-only types (registration-confirmed, payment-received, submission-scored)
+    // are created server-side and must NOT be creatable by users.
+    const allowedTypes = [
+      "event-reminder", "event-update",
+      "hackathon-update", "hackathon-deadline",
+      "team-invite", "team-update", "announcement", "general",
+    ];
 
     if (!type || !title || !message) {
       return NextResponse.json(
@@ -85,14 +94,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!allowedTypes.includes(type)) {
+      return NextResponse.json(
+        { error: "Invalid notification type" },
+        { status: 400 }
+      );
+    }
+
+    if (typeof title !== "string" || title.length > 200) {
+      return NextResponse.json(
+        { error: "Title must be a string under 200 characters" },
+        { status: 400 }
+      );
+    }
+
+    if (typeof message !== "string" || message.length > 2000) {
+      return NextResponse.json(
+        { error: "Message must be a string under 2000 characters" },
+        { status: 400 }
+      );
+    }
+
     const { data, error } = await supabase
       .from("notifications")
       .insert({
-        user_id: user_id || user.id,
+        user_id: user.id,
         type,
-        title,
-        message,
-        link: link || null,
+        title: title.slice(0, 200),
+        message: message.slice(0, 2000),
+        link: link ? String(link).slice(0, 500) : null,
       })
       .select()
       .single();

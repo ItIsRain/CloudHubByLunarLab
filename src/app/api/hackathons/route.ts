@@ -4,6 +4,7 @@ import { dbRowToHackathon } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
 import { canCreateHackathon, getHackathonLimit } from "@/lib/stripe/plan-limits";
 import type { SubscriptionTier } from "@/lib/types";
+import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,16 +17,18 @@ export async function GET(request: NextRequest) {
     const featured = searchParams.get("featured");
     const organizerId = searchParams.get("organizerId");
     const sortBy = searchParams.get("sortBy") || "newest";
-    const page = parseInt(searchParams.get("page") || "1");
-    const pageSize = parseInt(searchParams.get("pageSize") || "20");
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1") || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "20") || 20));
 
     let query = supabase
       .from("hackathons")
       .select("*, organizer:profiles!organizer_id(*), teams(count), submissions(count)", { count: "exact" });
 
     if (search) {
+      // Escape PostgREST special characters to prevent filter injection
+      const safe = search.replace(/[%_,.()\\]/g, (c) => `\\${c}`);
       query = query.or(
-        `name.ilike.%${search}%,tagline.ilike.%${search}%,description.ilike.%${search}%`
+        `name.ilike.%${safe}%,tagline.ilike.%${safe}%,description.ilike.%${safe}%`
       );
     }
     if (category) {
@@ -46,7 +49,13 @@ export async function GET(request: NextRequest) {
     // Filter by specific IDs (for bookmarks page)
     const ids = searchParams.get("ids");
     if (ids) {
-      query = query.in("id", ids.split(","));
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const validIds = ids.split(",").filter((id) => uuidRe.test(id)).slice(0, 50);
+      if (validIds.length > 0) {
+        query = query.in("id", validIds);
+      } else {
+        return NextResponse.json({ data: [], total: 0, page, pageSize, totalPages: 0, hasMore: false });
+      }
     }
 
     // Sorting
@@ -77,9 +86,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    const hackathons = (data || []).map((row: Record<string, unknown>) =>
-      dbRowToHackathon(row)
-    );
+    const hackathons = (data || []).map((row: Record<string, unknown>) => {
+      // Compute phase in-memory based on timeline dates
+      const timeline = rowToTimeline(row);
+      const computedPhase = getCurrentPhase(timeline);
+      const effectiveRow =
+        timeline.status !== "draft" && row.status !== computedPhase
+          ? { ...row, status: computedPhase }
+          : row;
+      return dbRowToHackathon(effectiveRow);
+    });
 
     return NextResponse.json({
       data: hackathons,
@@ -110,12 +126,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Check plan limits
+    // Check plan limits and organizer role
     const { data: profile } = await supabase
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, roles")
       .eq("id", user.id)
       .single();
+
+    const roles = (Array.isArray(profile?.roles) ? profile.roles : []) as string[];
+    if (!roles.includes("organizer") && !roles.includes("admin")) {
+      return NextResponse.json(
+        { error: "Only organizers can create hackathons" },
+        { status: 403 }
+      );
+    }
 
     const tier = (profile?.subscription_tier as SubscriptionTier) || "free";
 
@@ -153,17 +177,23 @@ export async function POST(request: NextRequest) {
       slug = `${slug}-${Date.now().toString(36)}`;
     }
 
-    const insertData = {
-      ...body,
+    // Allowlist: only permit fields organizers should set
+    const HACK_FIELDS = [
+      "name", "tagline", "description", "cover_image", "logo", "category",
+      "tags", "type", "status", "location",
+      "min_team_size", "max_team_size", "allow_solo", "total_prize_pool",
+      "registration_start", "registration_end", "hacking_start", "hacking_end",
+      "submission_deadline", "judging_start", "judging_end", "winners_announcement",
+      "tracks", "prizes", "rules", "eligibility", "requirements", "resources", "sponsors",
+      "faqs", "schedule", "judges", "mentors", "judging_criteria",
+    ];
+    const insertData: Record<string, unknown> = {
       slug,
       organizer_id: user.id,
     };
-
-    // Remove fields that shouldn't be in insert
-    delete insertData.id;
-    delete insertData.created_at;
-    delete insertData.updated_at;
-    delete insertData.organizer;
+    for (const key of HACK_FIELDS) {
+      if (key in body) insertData[key] = body[key];
+    }
 
     const { data, error } = await supabase
       .from("hackathons")

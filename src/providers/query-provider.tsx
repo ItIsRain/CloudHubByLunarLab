@@ -27,13 +27,14 @@ function getQueryClient() {
   }
 }
 
+/** Exported so the auth store can clear cache on logout */
+export const queryClient: QueryClient = getQueryClient();
+
 interface QueryProviderProps {
   children: React.ReactNode;
 }
 
 export function QueryProvider({ children }: QueryProviderProps) {
-  const queryClient = getQueryClient();
-
   return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );

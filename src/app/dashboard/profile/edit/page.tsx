@@ -79,10 +79,13 @@ export default function EditProfilePage() {
   };
 
   const onSubmit = async (data: ProfileFormData) => {
-    await new Promise((r) => setTimeout(r, 1000));
-    updateUser({ ...data, skills: selectedSkills });
-    toast.success("Profile updated successfully!");
-    router.push("/dashboard/profile");
+    try {
+      await updateUser({ ...data, skills: selectedSkills });
+      toast.success("Profile updated successfully!");
+      router.push("/dashboard/profile");
+    } catch {
+      toast.error("Failed to update profile");
+    }
   };
 
   if (!user) return null;

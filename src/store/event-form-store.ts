@@ -104,6 +104,12 @@ export const useEventFormStore = create<EventFormState>()(
     }),
     {
       name: "event-form-storage",
+      partialize: (state) => {
+        // Exclude large base64 image data from localStorage
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { coverImage, ...rest } = state;
+        return rest;
+      },
     }
   )
 );

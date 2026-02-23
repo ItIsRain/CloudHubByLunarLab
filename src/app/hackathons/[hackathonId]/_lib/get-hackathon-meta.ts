@@ -9,11 +9,11 @@ export type HackathonMeta = {
   tagline: string | null;
   description: string | null;
   cover_image: string | null;
-  start_date: string | null;
-  end_date: string | null;
+  hacking_start: string | null;
+  hacking_end: string | null;
   type: string | null;
   organizer_id: string | null;
-  prize_pool: number | null;
+  total_prize_pool: number | null;
 };
 
 export async function getHackathonMeta(hackathonId: string): Promise<HackathonMeta | null> {
@@ -25,7 +25,7 @@ export async function getHackathonMeta(hackathonId: string): Promise<HackathonMe
   const filter = UUID_RE.test(hackathonId) ? "id" : "slug";
   const { data } = await supabase
     .from("hackathons")
-    .select("id, slug, name, tagline, description, cover_image, start_date, end_date, type, organizer_id, prize_pool")
+    .select("id, slug, name, tagline, description, cover_image, hacking_start, hacking_end, type, organizer_id, total_prize_pool")
     .eq(filter, hackathonId)
     .single();
 

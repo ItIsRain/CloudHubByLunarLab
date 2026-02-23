@@ -22,9 +22,11 @@ import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { TagSelector } from "@/components/forms/tag-selector";
 import { useHackathons } from "@/hooks/use-hackathons";
 import { useCreateSubmission } from "@/hooks/use-submissions";
+import { useMyTeams } from "@/hooks/use-teams";
 
 const submissionSchema = z.object({
   hackathonId: z.string().min(1, "Select a hackathon"),
+  teamId: z.string().min(1, "Select a team"),
   trackId: z.string().min(1, "Select a track"),
   projectName: z.string().min(2, "Project name is required"),
   tagline: z.string().min(5, "Tagline is required").max(120),
@@ -42,6 +44,8 @@ export default function NewSubmissionPage() {
   const router = useRouter();
   const { data: hackathonsData } = useHackathons();
   const hackathons = hackathonsData?.data || [];
+  const { data: teamsData } = useMyTeams();
+  const myTeams = teamsData?.data || [];
   const createMutation = useCreateSubmission();
   const [techStack, setTechStack] = useState<string[]>([]);
 
@@ -57,6 +61,8 @@ export default function NewSubmissionPage() {
 
   const selectedHackathonId = watch("hackathonId");
   const selectedHackathon = hackathons.find((h) => h.id === selectedHackathonId);
+  // Filter teams belonging to the selected hackathon
+  const hackathonTeams = myTeams.filter((t) => t.hackathonId === selectedHackathonId);
   const coverImage = watch("coverImage");
   const description = watch("description");
   const readme = watch("readme");
@@ -115,6 +121,31 @@ export default function NewSubmissionPage() {
                     <p className="text-xs text-destructive">{errors.hackathonId.message}</p>
                   )}
                 </div>
+
+                {selectedHackathonId && (
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Team *</label>
+                    <select
+                      {...register("teamId")}
+                      className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Select your team</option>
+                      {hackathonTeams.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                    {hackathonTeams.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        You are not a member of any team in this hackathon.
+                      </p>
+                    )}
+                    {errors.teamId && (
+                      <p className="text-xs text-destructive">{errors.teamId.message}</p>
+                    )}
+                  </div>
+                )}
 
                 {selectedHackathon && (
                   <div className="space-y-1">

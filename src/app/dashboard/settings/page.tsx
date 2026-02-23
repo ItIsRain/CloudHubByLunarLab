@@ -21,9 +21,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuthStore } from "@/store/auth-store";
 import { useRouter } from "next/navigation";
+import { useTheme } from "@/providers/theme-provider";
 import { cn } from "@/lib/utils";
 
-const themes = [
+const themes: { id: "light" | "dark" | "system"; label: string; icon: React.ElementType }[] = [
   { id: "light", label: "Light", icon: Sun },
   { id: "dark", label: "Dark", icon: Moon },
   { id: "system", label: "System", icon: Monitor },
@@ -36,12 +37,14 @@ const settingsNav = [
 export default function SettingsPage() {
   const router = useRouter();
   const { logout, user } = useAuthStore();
-  const [activeTheme, setActiveTheme] = React.useState("system");
+  const { theme: currentTheme, setTheme } = useTheme();
+  const [activeTheme, setActiveTheme] = React.useState(currentTheme || "system");
   const [language, setLanguage] = React.useState("en");
   const [timezone, setTimezone] = React.useState("America/Los_Angeles");
 
-  const handleThemeChange = (theme: string) => {
+  const handleThemeChange = (theme: "light" | "dark" | "system") => {
     setActiveTheme(theme);
+    setTheme(theme);
     toast.success(`Theme set to ${theme}`);
   };
 

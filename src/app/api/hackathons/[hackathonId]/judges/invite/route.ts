@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { sendEmail, emailWrapper } from "@/lib/resend";
+import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 
 export async function POST(
   request: NextRequest,
@@ -46,6 +46,15 @@ export async function POST(
       );
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return NextResponse.json(
+        { error: "Invalid email format" },
+        { status: 400 }
+      );
+    }
+
     // Upsert into judge_invitations — regenerate token if re-inviting
     const { data: invitation, error: insertError } = await supabase
       .from("judge_invitations")
@@ -81,11 +90,11 @@ export async function POST(
           You're Invited to Judge!
         </h1>
         <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
-          Hi <strong style="color:#fff;">${name}</strong>,
+          Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,
         </p>
         <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
           You've been invited to serve as a judge for
-          <strong style="color:#e8440a;">${hackathonName}</strong>.
+          <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong>.
           We'd love your expertise to help evaluate the amazing projects
           our participants have built.
         </p>

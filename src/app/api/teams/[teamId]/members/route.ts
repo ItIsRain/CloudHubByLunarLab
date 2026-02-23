@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToTeam } from "@/lib/supabase/mappers";
+import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
+import { canFormTeams, getPhaseMessage } from "@/lib/hackathon-phases";
 
 export async function POST(
   request: NextRequest,
@@ -19,18 +21,31 @@ export async function POST(
     }
 
     const body = await request.json();
-    const userId = body.user_id || user.id;
-    const role = body.role || "Developer";
+    // Only allow users to add themselves — prevent IDOR
+    const userId = user.id;
+
+    // Validate role against allowed values
+    const VALID_ROLES = ["Developer", "Designer", "Product Manager", "Data Scientist", "DevOps", "QA", "Other"];
+    const role = VALID_ROLES.includes(body.role) ? body.role : "Developer";
 
     // Check team capacity and password
     const { data: team, error: teamError } = await supabase
       .from("teams")
-      .select("max_size, join_password, team_members(id)")
+      .select("hackathon_id, max_size, join_password, team_members(id)")
       .eq("id", teamId)
       .single();
 
     if (teamError) {
       return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    }
+
+    // Verify team formation window is open
+    const timeline = await getHackathonTimeline(supabase, team.hackathon_id);
+    if (timeline && !canFormTeams(timeline)) {
+      return NextResponse.json(
+        { error: getPhaseMessage(timeline, "formTeams") },
+        { status: 403 }
+      );
     }
 
     // Verify password if team has one
@@ -105,13 +120,63 @@ export async function DELETE(
     }
 
     const body = await request.json();
-    const userId = body.user_id || user.id;
+    const targetUserId = body.user_id || user.id;
+
+    // Fetch caller's membership and team info in one query
+    const { data: team } = await supabase
+      .from("teams")
+      .select("hackathon_id, team_members(user_id, is_leader)")
+      .eq("id", teamId)
+      .single();
+
+    if (!team) {
+      return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    }
+
+    const members = (team.team_members as unknown as { user_id: string; is_leader: boolean }[]) || [];
+    const callerMember = members.find((m) => m.user_id === user.id);
+    const callerIsLeader = callerMember?.is_leader === true;
+
+    // Verify the target is actually a member of this team
+    const targetMember = members.find((m) => m.user_id === targetUserId);
+    if (!targetMember) {
+      return NextResponse.json({ error: "User is not a member of this team" }, { status: 404 });
+    }
+
+    // Check if caller is hackathon organizer
+    let callerIsOrganizer = false;
+    if (team.hackathon_id) {
+      const { data: hack } = await supabase
+        .from("hackathons")
+        .select("organizer_id")
+        .eq("id", team.hackathon_id)
+        .single();
+      callerIsOrganizer = hack?.organizer_id === user.id;
+    }
+
+    if (targetUserId === user.id) {
+      // Self-removal: prevent leader from leaving (would leave leaderless team)
+      if (callerIsLeader) {
+        return NextResponse.json(
+          { error: "Team leaders cannot leave. Transfer leadership first or delete the team." },
+          { status: 400 }
+        );
+      }
+    } else {
+      // Removing someone else: must be leader or organizer
+      if (!callerIsLeader && !callerIsOrganizer) {
+        return NextResponse.json(
+          { error: "Only team leaders or organizers can remove other members" },
+          { status: 403 }
+        );
+      }
+    }
 
     const { error } = await supabase
       .from("team_members")
       .delete()
       .eq("team_id", teamId)
-      .eq("user_id", userId);
+      .eq("user_id", targetUserId);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

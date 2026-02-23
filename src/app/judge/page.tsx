@@ -17,22 +17,26 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
 import { useHackathons } from "@/hooks/use-hackathons";
-
-const stats = [
-  { label: "Total Assigned", value: 38, icon: ClipboardCheck, color: "text-blue-500" },
-  { label: "Completed", value: 15, icon: Gavel, color: "text-green-500" },
-  { label: "Pending", value: 23, icon: Clock, color: "text-amber-500" },
-  { label: "Avg Score", value: "8.2", icon: Star, color: "text-primary" },
-];
+import { useAuthStore } from "@/store/auth-store";
 
 export default function JudgeDashboardPage() {
+  const user = useAuthStore((state) => state.user);
   const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons();
   const hackathons = hackathonsData?.data || [];
-  const assignedHackathons = hackathons.slice(0, 2);
+  const assignedHackathons = hackathons.filter(
+    (h) => h.status === "judging" || h.status === "submission"
+  );
 
-  const reviewed = 15;
-  const total = 38;
-  const progressPercent = Math.round((reviewed / total) * 100);
+  const stats = [
+    { label: "Assigned Hackathons", value: assignedHackathons.length, icon: ClipboardCheck, color: "text-blue-500" },
+    { label: "Completed", value: 0, icon: Gavel, color: "text-green-500" },
+    { label: "Pending", value: assignedHackathons.length, icon: Clock, color: "text-amber-500" },
+    { label: "Avg Score", value: "-", icon: Star, color: "text-primary" },
+  ];
+
+  const reviewed = 0;
+  const total = assignedHackathons.length || 1;
+  const progressPercent = total > 0 ? Math.round((reviewed / total) * 100) : 0;
 
   if (hackathonsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
 
@@ -128,9 +132,11 @@ export default function JudgeDashboardPage() {
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-xl font-bold">Assigned Hackathons</h2>
-              <Badge variant="default" dot pulse>
-                12 pending
-              </Badge>
+              {assignedHackathons.length > 0 && (
+                <Badge variant="default" dot pulse>
+                  {assignedHackathons.length} active
+                </Badge>
+              )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

@@ -40,6 +40,7 @@ export default function AllEventsPage() {
   const [priceFilter, setPriceFilter] = React.useState<PriceFilter>("all");
   const [sortBy, setSortBy] = React.useState("date");
   const [showSortDropdown, setShowSortDropdown] = React.useState(false);
+  const [pageSize, setPageSize] = React.useState(24);
 
   const sortDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -61,10 +62,16 @@ export default function AllEventsPage() {
     category: selectedCategory ? [selectedCategory as EventCategory] : undefined,
     isFree: priceFilter === "free" ? true : priceFilter === "paid" ? false : undefined,
     sortBy: (sortBy === "date" || sortBy === "popularity" || sortBy === "newest") ? sortBy as EventFilters["sortBy"] : undefined,
-    pageSize: 24,
+    pageSize,
   });
 
-  const filteredEvents = eventsData?.data || [];
+  const allEvents = eventsData?.data || [];
+  const filteredEvents = priceFilter === "all"
+    ? allEvents
+    : allEvents.filter((e) => {
+        const eventIsFree = e.tickets.length === 0 || e.tickets.every((t) => t.price === 0);
+        return priceFilter === "free" ? eventIsFree : !eventIsFree;
+      });
 
   const clearFilters = () => {
     setSearchQuery("");
@@ -343,7 +350,7 @@ export default function AllEventsPage() {
           {/* Load More */}
           {!isLoading && eventsData?.hasMore && (
             <div className="text-center mt-12">
-              <Button variant="outline" size="lg">
+              <Button variant="outline" size="lg" onClick={() => setPageSize((s) => s + 24)}>
                 Load More Events
               </Button>
             </div>

@@ -32,15 +32,24 @@ export function formatRelativeTime(date: Date | string): string {
   const d = new Date(date);
   const now = new Date();
   const diff = d.getTime() - now.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor(diff / (1000 * 60));
+  const absDiff = Math.abs(diff);
+  const days = Math.floor(absDiff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor(absDiff / (1000 * 60 * 60));
+  const minutes = Math.floor(absDiff / (1000 * 60));
 
-  if (days > 0) return `in ${days} day${days > 1 ? "s" : ""}`;
-  if (hours > 0) return `in ${hours} hour${hours > 1 ? "s" : ""}`;
-  if (minutes > 0) return `in ${minutes} minute${minutes > 1 ? "s" : ""}`;
-  if (minutes < 0) return `${Math.abs(minutes)} minute${Math.abs(minutes) > 1 ? "s" : ""} ago`;
-  return "now";
+  if (diff > 0) {
+    // Future
+    if (days > 0) return `in ${days} day${days > 1 ? "s" : ""}`;
+    if (hours > 0) return `in ${hours} hour${hours > 1 ? "s" : ""}`;
+    if (minutes > 0) return `in ${minutes} minute${minutes > 1 ? "s" : ""}`;
+    return "now";
+  } else {
+    // Past
+    if (days > 0) return `${days} day${days > 1 ? "s" : ""} ago`;
+    if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    if (minutes > 0) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+    return "now";
+  }
 }
 
 export function formatCurrency(amount: number, currency: string = "USD"): string {
@@ -107,7 +116,7 @@ export function getTimeRemaining(deadline: Date | string): {
   seconds: number;
   total: number;
 } {
-  const total = new Date(deadline).getTime() - new Date().getTime();
+  const total = Math.max(0, new Date(deadline).getTime() - new Date().getTime());
   const seconds = Math.floor((total / 1000) % 60);
   const minutes = Math.floor((total / 1000 / 60) % 60);
   const hours = Math.floor((total / (1000 * 60 * 60)) % 24);

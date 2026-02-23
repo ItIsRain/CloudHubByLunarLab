@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { SafeHtml } from "@/components/ui/safe-html";
 import { ShareDialog } from "@/components/dialogs/share-dialog";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { useSubmission } from "@/hooks/use-submissions";
@@ -205,9 +206,9 @@ export default function SubmissionDetailPage() {
               <CardTitle>About</CardTitle>
             </CardHeader>
             <CardContent>
-              <div
+              <SafeHtml
+                content={submission.description}
                 className="prose prose-sm dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: submission.description }}
               />
             </CardContent>
           </Card>

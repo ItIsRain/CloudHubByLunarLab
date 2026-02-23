@@ -16,89 +16,35 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/layout/navbar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { useHackathon } from "@/hooks/use-hackathons";
-import { mockUsers } from "@/lib/mock-data";
-
-const assignedTeams = [
-  {
-    id: "team-a",
-    name: "AI Pioneers",
-    avatar: "https://api.dicebear.com/7.x/shapes/svg?seed=aipioneers",
-    members: [mockUsers[0], mockUsers[1], mockUsers[4]],
-    track: "AI/ML Innovation",
-    sessionCount: 3,
-  },
-  {
-    id: "team-b",
-    name: "Web3 Wizards",
-    avatar: "https://api.dicebear.com/7.x/shapes/svg?seed=web3wizards",
-    members: [mockUsers[3], mockUsers[2]],
-    track: "Web3 & Blockchain",
-    sessionCount: 2,
-  },
-  {
-    id: "team-c",
-    name: "Code Crusaders",
-    avatar: "https://api.dicebear.com/7.x/shapes/svg?seed=team3",
-    members: [mockUsers[0], mockUsers[4]],
-    track: "Developer Tools",
-    sessionCount: 2,
-  },
-  {
-    id: "team-d",
-    name: "Debug Squad",
-    avatar: "https://api.dicebear.com/7.x/shapes/svg?seed=team8",
-    members: [mockUsers[2], mockUsers[1], mockUsers[3]],
-    track: "Social Impact",
-    sessionCount: 1,
-  },
-];
-
-const sessionLog = [
-  {
-    id: "log-1",
-    teamName: "AI Pioneers",
-    date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "ML Model Architecture Review",
-    duration: "45 min",
-    notes: "Discussed transformer vs. CNN approach. Recommended starting with a lighter model.",
-  },
-  {
-    id: "log-2",
-    teamName: "Web3 Wizards",
-    date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "Smart Contract Audit",
-    duration: "30 min",
-    notes: "Reviewed gas optimization and reentrancy guards.",
-  },
-  {
-    id: "log-3",
-    teamName: "Code Crusaders",
-    date: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "CI/CD Pipeline Setup",
-    duration: "30 min",
-    notes: "Set up GitHub Actions workflow for automated testing and deployment.",
-  },
-];
-
-const quickStats = [
-  { label: "Teams Assigned", value: 4, icon: Users },
-  { label: "Sessions Completed", value: 8, icon: Video },
-  { label: "Avg Rating", value: "4.8/5", icon: Star },
-];
+import { useTeams } from "@/hooks/use-teams";
 
 export default function HackathonMentoringPage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
   const { data: hackathonData, isLoading } = useHackathon(hackathonId);
   const hackathon = hackathonData?.data;
+  const { data: teamsData, isLoading: teamsLoading } = useTeams(
+    hackathon ? { hackathonId: hackathon.id } : undefined
+  );
+  const teams = teamsData?.data || [];
 
-  if (isLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
+  if (isLoading || teamsLoading)
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-background pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="shimmer rounded-xl h-96 w-full" />
+          </div>
+        </main>
+      </>
+    );
 
   if (!hackathon) {
     return (
@@ -133,6 +79,12 @@ export default function HackathonMentoringPage() {
       description: `A mentoring session has been scheduled with ${teamName}.`,
     });
   };
+
+  const quickStats = [
+    { label: "Teams", value: teams.length, icon: Users },
+    { label: "Total Members", value: teams.reduce((sum, t) => sum + (t.members?.length || 0), 0), icon: Video },
+    { label: "Tracks", value: [...new Set(teams.map((t) => typeof t.track === "string" ? t.track : t.track?.name).filter(Boolean))].length || "—", icon: Star },
+  ];
 
   return (
     <>
@@ -199,7 +151,7 @@ export default function HackathonMentoringPage() {
             ))}
           </div>
 
-          {/* Assigned Teams */}
+          {/* Teams */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -207,124 +159,81 @@ export default function HackathonMentoringPage() {
             className="mb-8"
           >
             <h2 className="font-display text-xl font-bold mb-4">
-              Assigned Teams
+              Teams
             </h2>
-            <div className="grid gap-4 md:grid-cols-2">
-              {assignedTeams.map((team, i) => (
-                <motion.div
-                  key={team.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.25 + i * 0.05 }}
-                >
-                  <Card className="hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
-                    <CardContent className="p-5">
-                      <div className="flex items-start gap-4">
-                        {/* Avatar Group */}
-                        <div className="flex -space-x-2 shrink-0">
-                          {team.members.slice(0, 3).map((member) => (
-                            <Avatar
-                              key={member.id}
-                              size="sm"
-                              className="border-2 border-background"
-                            >
-                              <AvatarImage
-                                src={member.avatar}
-                                alt={member.name}
-                              />
-                              <AvatarFallback>
-                                {getInitials(member.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                          ))}
-                          {team.members.length > 3 && (
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted border-2 border-background text-xs font-medium">
-                              +{team.members.length - 3}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold">{team.name}</h3>
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] mt-1"
-                          >
-                            {team.track}
-                          </Badge>
-                          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Users className="h-3 w-3" />
-                              {team.members.length} members
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Video className="h-3 w-3" />
-                              {team.sessionCount} sessions
-                            </span>
+            {teams.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <Users className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-muted-foreground">No teams formed yet.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {teams.map((team, i) => (
+                  <motion.div
+                    key={team.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 + i * 0.05 }}
+                  >
+                    <Card className="hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
+                      <CardContent className="p-5">
+                        <div className="flex items-start gap-4">
+                          <div className="flex -space-x-2 shrink-0">
+                            {(team.members || []).slice(0, 3).map((member) => (
+                              <Avatar
+                                key={member.id}
+                                size="sm"
+                                className="border-2 border-background"
+                              >
+                                <AvatarImage
+                                  src={member.user?.avatar}
+                                  alt={member.user?.name || "Member"}
+                                />
+                                <AvatarFallback>
+                                  {getInitials(member.user?.name || "?")}
+                                </AvatarFallback>
+                              </Avatar>
+                            ))}
+                            {(team.members?.length || 0) > 3 && (
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted border-2 border-background text-xs font-medium">
+                                +{(team.members?.length || 0) - 3}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        className="w-full mt-4"
-                        onClick={() => handleSchedule(team.name)}
-                      >
-                        <Calendar className="mr-1.5 h-4 w-4" />
-                        Schedule Session
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Session Log */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <h2 className="font-display text-xl font-bold mb-4">
-              Session Log
-            </h2>
-            <div className="space-y-3">
-              {sessionLog.map((session, i) => (
-                <motion.div
-                  key={session.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.55 + i * 0.05 }}
-                >
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-semibold text-sm">
-                              {session.teamName}
-                            </h4>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>{formatDate(session.date)}</span>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold">{team.name}</h3>
+                            {team.track && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] mt-1"
+                              >
+                                {typeof team.track === "string" ? team.track : team.track.name}
+                              </Badge>
+                            )}
+                            <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {session.duration}
+                                <Users className="h-3 w-3" />
+                                {team.members?.length || 0} members
                               </span>
                             </div>
                           </div>
-                          <p className="text-sm font-medium mt-0.5">
-                            {session.topic}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {session.notes}
-                          </p>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
+                        <Button
+                          size="sm"
+                          className="w-full mt-4"
+                          onClick={() => handleSchedule(team.name)}
+                        >
+                          <Calendar className="mr-1.5 h-4 w-4" />
+                          Schedule Session
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </motion.div>
         </div>
       </main>

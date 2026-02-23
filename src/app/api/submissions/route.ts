@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
+import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
+import { canSubmit, getPhaseMessage } from "@/lib/hackathon-phases";
 
 const SUBMISSION_SELECT =
   "*, team:teams(*, team_members(*, user:profiles!team_members_user_id_fkey(*)))";
@@ -14,9 +16,12 @@ export async function GET(request: NextRequest) {
     const userId = url.searchParams.get("userId");
     const status = url.searchParams.get("status");
     const sortBy = url.searchParams.get("sortBy") || "recent";
-    const page = parseInt(url.searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(url.searchParams.get("pageSize") || "50", 10);
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get("pageSize") || "50", 10) || 50));
     const offset = (page - 1) * pageSize;
+
+    // Check if user is authenticated (optional — unauthenticated users only see submitted)
+    const { data: { user } } = await supabase.auth.getUser();
 
     let query = supabase
       .from("submissions")
@@ -24,14 +29,37 @@ export async function GET(request: NextRequest) {
 
     if (hackathonId) query = query.eq("hackathon_id", hackathonId);
     if (teamId) query = query.eq("team_id", teamId);
-    if (status) query = query.eq("status", status);
 
-    // If filtering by userId, find their team IDs first
+    // Unauthenticated users can ONLY see submitted submissions and cannot filter by userId/teamId
+    if (!user) {
+      query = query.eq("status", "submitted");
+      if (userId || teamId) {
+        return NextResponse.json(
+          { error: "Authentication required to filter by user or team" },
+          { status: 401 }
+        );
+      }
+    } else if (status) {
+      query = query.eq("status", status);
+    }
+
+    // If filtering by userId, only allow own ID — prevent IDOR
     if (userId) {
+      const effectiveUserId = user ? userId === user.id ? userId : user.id : null;
+      if (!effectiveUserId) {
+        return NextResponse.json({
+          data: [],
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+          hasMore: false,
+        });
+      }
       const { data: memberTeamIds } = await supabase
         .from("team_members")
         .select("team_id")
-        .eq("user_id", userId);
+        .eq("user_id", effectiveUserId);
 
       const teamIds = (memberTeamIds || []).map((m) => m.team_id);
       if (teamIds.length === 0) {
@@ -99,7 +127,34 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+
+    // Require hackathonId and teamId
+    if (!body.hackathonId && !body.hackathon_id) {
+      return NextResponse.json(
+        { error: "hackathonId is required" },
+        { status: 400 }
+      );
+    }
+    if (!body.teamId && !body.team_id) {
+      return NextResponse.json(
+        { error: "teamId is required" },
+        { status: 400 }
+      );
+    }
+
     const dbPayload = submissionFormToDbRow(body);
+
+    // Verify submission window is open
+    const hackathonId = dbPayload.hackathon_id as string;
+    if (hackathonId) {
+      const timeline = await getHackathonTimeline(supabase, hackathonId);
+      if (timeline && !canSubmit(timeline)) {
+        return NextResponse.json(
+          { error: getPhaseMessage(timeline, "submit") },
+          { status: 403 }
+        );
+      }
+    }
 
     // Verify user is a team member
     const { data: membership } = await supabase
@@ -116,8 +171,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Default status to draft
+    // Validate and default status
     if (!dbPayload.status) dbPayload.status = "draft";
+    if (dbPayload.status !== "draft" && dbPayload.status !== "submitted") {
+      return NextResponse.json(
+        { error: "Status must be 'draft' or 'submitted'" },
+        { status: 400 }
+      );
+    }
 
     const { data, error } = await supabase
       .from("submissions")

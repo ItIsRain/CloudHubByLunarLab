@@ -48,7 +48,11 @@ export async function updateSession(request: NextRequest) {
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("redirect", pathname + request.nextUrl.search);
+    // Only set redirect for relative paths to prevent open redirect attacks
+    const redirectPath = pathname + request.nextUrl.search;
+    if (redirectPath.startsWith("/") && !redirectPath.startsWith("//")) {
+      url.searchParams.set("redirect", redirectPath);
+    }
     return NextResponse.redirect(url);
   }
 

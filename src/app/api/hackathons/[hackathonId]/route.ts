@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToHackathon } from "@/lib/supabase/mappers";
+import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -29,8 +30,23 @@ export async function GET(
       );
     }
 
+    // Auto-update status based on timeline dates
+    const row = data as Record<string, unknown>;
+    const timeline = rowToTimeline(row);
+    const computedPhase = getCurrentPhase(timeline);
+    if (timeline.status !== "draft" && row.status !== computedPhase) {
+      row.status = computedPhase;
+      // Fire-and-forget DB update
+      Promise.resolve(
+        supabase
+          .from("hackathons")
+          .update({ status: computedPhase })
+          .eq("id", row.id as string)
+      ).catch(() => {});
+    }
+
     return NextResponse.json({
-      data: dbRowToHackathon(data as Record<string, unknown>),
+      data: dbRowToHackathon(row),
     });
   } catch {
     return NextResponse.json(
@@ -74,37 +90,74 @@ export async function PATCH(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const rawUpdates = await request.json();
+    const body = await request.json();
 
-    // Prevent updating protected fields
-    delete rawUpdates.id;
-    delete rawUpdates.organizer_id;
-    delete rawUpdates.created_at;
-    delete rawUpdates.updated_at;
-    delete rawUpdates.organizer;
-
-    // Map camelCase keys to snake_case DB columns
+    // Allowlist + camelCase-to-snake_case key mapping
     const keyMap: Record<string, string> = {
-      registrationStart: "registration_start",
-      registrationEnd: "registration_end",
-      hackingStart: "hacking_start",
-      hackingEnd: "hacking_end",
-      submissionDeadline: "submission_deadline",
-      judgingStart: "judging_start",
-      judgingEnd: "judging_end",
-      winnersAnnouncement: "winners_announcement",
-      maxTeamSize: "max_team_size",
-      minTeamSize: "min_team_size",
-      allowSolo: "allow_solo",
-      totalPrizePool: "total_prize_pool",
-      coverImage: "cover_image",
-      isFeatured: "is_featured",
-      judgingCriteria: "judging_criteria",
+      name: "name", tagline: "tagline", description: "description",
+      cover_image: "cover_image", coverImage: "cover_image",
+      logo: "logo", category: "category", tags: "tags", status: "status",
+      location: "location",
+      registration_start: "registration_start", registrationStart: "registration_start",
+      registration_end: "registration_end", registrationEnd: "registration_end",
+      hacking_start: "hacking_start", hackingStart: "hacking_start",
+      hacking_end: "hacking_end", hackingEnd: "hacking_end",
+      submission_deadline: "submission_deadline", submissionDeadline: "submission_deadline",
+      judging_start: "judging_start", judgingStart: "judging_start",
+      judging_end: "judging_end", judgingEnd: "judging_end",
+      winners_announcement: "winners_announcement", winnersAnnouncement: "winners_announcement",
+      max_team_size: "max_team_size", maxTeamSize: "max_team_size",
+      min_team_size: "min_team_size", minTeamSize: "min_team_size",
+      allow_solo: "allow_solo", allowSolo: "allow_solo",
+      total_prize_pool: "total_prize_pool", totalPrizePool: "total_prize_pool",
+      judging_criteria: "judging_criteria", judgingCriteria: "judging_criteria",
+      tracks: "tracks", prizes: "prizes", rules: "rules",
+      requirements: "requirements", resources: "resources", sponsors: "sponsors",
+      faqs: "faqs", schedule: "schedule", judges: "judges", mentors: "mentors",
     };
-
     const updates: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(rawUpdates)) {
-      updates[keyMap[key] || key] = value;
+    for (const [key, value] of Object.entries(body)) {
+      if (key in keyMap) updates[keyMap[key]] = value;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
+
+    // Validate status against allowed values
+    if (updates.status) {
+      const allowedStatuses = [
+        "draft", "registration-open", "hacking", "judging",
+        "completed", "cancelled", "upcoming",
+      ];
+      if (!allowedStatuses.includes(updates.status as string)) {
+        return NextResponse.json(
+          { error: "Invalid hackathon status" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Prevent publishing without required dates
+    const targetStatus = updates.status as string | undefined;
+    if (targetStatus && targetStatus !== "draft") {
+      // Fetch current hackathon to merge with updates
+      const { data: current } = await supabase
+        .from("hackathons")
+        .select("hacking_start, hacking_end, submission_deadline")
+        .or(hackathonFilter(hackathonId))
+        .single();
+
+      const hackStart = updates.hacking_start ?? current?.hacking_start;
+      const hackEnd = updates.hacking_end ?? current?.hacking_end;
+      const subDeadline = updates.submission_deadline ?? current?.submission_deadline;
+
+      if (!hackStart || !hackEnd || !subDeadline) {
+        return NextResponse.json(
+          { error: "Hacking start, hacking end, and submission deadline are required before publishing" },
+          { status: 400 }
+        );
+      }
     }
 
     const { data, error } = await supabase

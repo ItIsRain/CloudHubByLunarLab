@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { profileToUser } from "@/lib/supabase/mappers";
+import { profileToPublicUser } from "@/lib/supabase/mappers";
 
 export async function GET(
   _request: NextRequest,
@@ -25,7 +25,7 @@ export async function GET(
     }
 
     return NextResponse.json({
-      data: profileToUser(data as Record<string, unknown>),
+      data: profileToPublicUser(data as Record<string, unknown>),
     });
   } catch {
     return NextResponse.json(

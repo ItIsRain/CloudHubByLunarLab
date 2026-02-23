@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { ShareDialog } from "@/components/dialogs/share-dialog";
 import { getCertificatesForUser } from "@/lib/mock-data";
 import { formatDate } from "@/lib/utils";
+import { useAuthStore } from "@/store/auth-store";
 import type { Certificate } from "@/lib/types";
 
 const typeConfig: Record<Certificate["type"], { icon: React.ElementType; color: string; bgColor: string }> = {
@@ -31,7 +32,8 @@ const typeConfig: Record<Certificate["type"], { icon: React.ElementType; color: 
 };
 
 export default function CertificatesPage() {
-  const certificates = getCertificatesForUser("user-1");
+  const user = useAuthStore((state) => state.user);
+  const certificates = getCertificatesForUser(user?.id ?? "");
   const [shareOpen, setShareOpen] = React.useState(false);
   const [shareTitle, setShareTitle] = React.useState("");
 

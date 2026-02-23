@@ -34,6 +34,13 @@ export function profileToUser(profile: Record<string, unknown>): User {
   };
 }
 
+/** Public-safe variant that strips billing / Stripe fields */
+export function profileToPublicUser(profile: Record<string, unknown>): Omit<User, "stripeCustomerId" | "currentPeriodEnd"> {
+  const user = profileToUser(profile);
+  const { stripeCustomerId: _s, currentPeriodEnd: _c, ...publicUser } = user;
+  return publicUser;
+}
+
 // =====================================================
 // DB row → Event
 // =====================================================
@@ -63,7 +70,7 @@ export function dbRowToEvent(
     speakers: (row.speakers as Event["speakers"]) || [],
     agenda: (row.agenda as Event["agenda"]) || [],
     faq: (row.faq as Event["faq"]) || [],
-    organizer: org ? profileToUser(org) : ({} as User),
+    organizer: org ? (profileToPublicUser(org) as User) : ({} as User),
     organizerId: row.organizer_id as string,
     communityId: (row.community_id as string) || undefined,
     capacity: (row.capacity as number) || undefined,
@@ -123,7 +130,7 @@ export function dbRowToHackathon(
     minTeamSize: (row.min_team_size as number) || 1,
     maxTeamSize: (row.max_team_size as number) || 4,
     allowSolo: (row.allow_solo as boolean) ?? true,
-    organizer: org ? profileToUser(org) : ({} as User),
+    organizer: org ? (profileToPublicUser(org) as User) : ({} as User),
     organizerId: row.organizer_id as string,
     participantCount: (row.participant_count as number) || 0,
     teamCount: liveTeamCount ?? ((row.team_count as number) || 0),
@@ -159,7 +166,7 @@ export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
   const userProfile = row.user as Record<string, unknown>;
   return {
     id: row.id as string,
-    user: userProfile ? profileToUser(userProfile) : ({} as User),
+    user: userProfile ? profileToPublicUser(userProfile) : ({} as User),
     role: (row.role as string) || "Developer",
     isLeader: (row.is_leader as boolean) || false,
     joinedAt: row.joined_at as string,
@@ -183,7 +190,7 @@ export function dbRowToTeam(row: Record<string, unknown>): Team {
     lookingForRoles: (row.looking_for_roles as string[]) || undefined,
     maxSize: (row.max_size as number) || 4,
     status: (row.status as TeamStatus) || "forming",
-    joinPassword: (row.join_password as string) || null,
+    joinPassword: row.join_password ? "••••••" : null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -198,7 +205,7 @@ export function dbRowToTestimonial(row: Record<string, unknown>): Testimonial {
   return {
     id: row.id as string,
     userId: row.user_id as string,
-    user: userProfile ? profileToUser(userProfile) : ({} as User),
+    user: userProfile ? profileToPublicUser(userProfile) : ({} as User),
     quote: row.quote as string,
     role: row.role as string,
     company: row.company as string,
@@ -254,11 +261,11 @@ export function eventFormToDbRow(
     end_date: form.endDate || null,
     location: {
       type: form.locationType || "in-person",
-      address: form.address || undefined,
-      city: form.city || undefined,
-      country: form.country || undefined,
-      platform: form.platform || undefined,
-      meetingUrl: form.meetingUrl || undefined,
+      address: form.address || null,
+      city: form.city || null,
+      country: form.country || null,
+      platform: form.platform || null,
+      meetingUrl: form.meetingUrl || null,
     },
     tickets: form.tickets,
     speakers: form.speakers,
@@ -278,7 +285,7 @@ export function dbRowToScore(row: Record<string, unknown>): Score {
     id: row.id as string,
     submissionId: row.submission_id as string,
     judgeId: row.judge_id as string,
-    judge: judgeProfile ? profileToUser(judgeProfile) : ({} as User),
+    judge: judgeProfile ? profileToPublicUser(judgeProfile) : ({} as User),
     criteria: (row.criteria as Score["criteria"]) || [],
     totalScore: (row.total_score as number) || 0,
     overallFeedback: (row.overall_feedback as string) || undefined,
@@ -298,8 +305,8 @@ export function dbRowToSubmission(row: Record<string, unknown>): Submission {
     id: row.id as string,
     hackathonId: row.hackathon_id as string,
     teamId: row.team_id as string,
-    team: rawTeam ? dbRowToTeam(rawTeam) : ({} as Team),
-    track: (row.track as Track) || ({} as Track),
+    team: rawTeam ? dbRowToTeam(rawTeam) : ({ id: "", name: "Unknown Team", description: "", avatar: "", hackathonId: "", track: undefined, lookingForRoles: [], members: [], maxSize: 4, status: "forming", createdAt: "", updatedAt: "" } as unknown as Team),
+    track: (row.track as Track) || ({ id: "general", name: "General", description: "General track", prizes: [] } as Track),
     projectName: row.project_name as string,
     tagline: (row.tagline as string) || "",
     description: (row.description as string) || "",
@@ -326,23 +333,40 @@ export function dbRowToSubmission(row: Record<string, unknown>): Submission {
 // =====================================================
 
 export function submissionFormToDbRow(form: Record<string, unknown>): Record<string, unknown> {
+  // Strict allowlist: only these fields can be set by clients.
+  // Fields like average_score, upvotes, rank are server-managed.
   const keyMap: Record<string, string> = {
     hackathonId: "hackathon_id",
+    hackathon_id: "hackathon_id",
     teamId: "team_id",
+    team_id: "team_id",
     projectName: "project_name",
+    project_name: "project_name",
+    description: "description",
     coverImage: "cover_image",
+    cover_image: "cover_image",
     demoVideo: "demo_video",
+    demo_video: "demo_video",
     githubUrl: "github_url",
+    github_url: "github_url",
     demoUrl: "demo_url",
+    demo_url: "demo_url",
+    tagline: "tagline",
     techStack: "tech_stack",
-    averageScore: "average_score",
+    tech_stack: "tech_stack",
+    screenshots: "screenshots",
+    readme: "readme",
+    track: "track",
+    status: "status",
     submittedAt: "submitted_at",
+    submitted_at: "submitted_at",
   };
 
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(form)) {
-    if (key === "id" || key === "created_at" || key === "updated_at" || key === "team" || key === "scores") continue;
-    result[keyMap[key] || key] = value;
+    if (key in keyMap) {
+      result[keyMap[key]] = value;
+    }
   }
   return result;
 }
@@ -417,11 +441,11 @@ export function hackathonFormToDbRow(
     winners_announcement: form.winnersAnnouncement || null,
     location: {
       type: form.type || "online",
-      address: form.address || undefined,
-      city: form.city || undefined,
-      country: form.country || undefined,
-      platform: form.platform || undefined,
-      meetingUrl: form.meetingUrl || undefined,
+      address: form.address || null,
+      city: form.city || null,
+      country: form.country || null,
+      platform: form.platform || null,
+      meetingUrl: form.meetingUrl || null,
     },
     tracks: form.tracks,
     prizes: form.prizes,

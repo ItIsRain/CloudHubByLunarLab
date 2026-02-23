@@ -11,8 +11,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const h = await getHackathonMeta(hackathonId);
   if (!h) return buildMetadata({ title: "Hackathon Not Found" });
 
-  const desc = h.prize_pool
-    ? `${h.tagline ?? h.name} — $${h.prize_pool.toLocaleString()} in prizes.`
+  const desc = h.total_prize_pool
+    ? `${h.tagline ?? h.name} — $${h.total_prize_pool.toLocaleString()} in prizes.`
     : h.tagline ?? h.description?.slice(0, 160) ?? undefined;
 
   return buildMetadata({
@@ -34,12 +34,12 @@ export default async function Page({ params }: Props) {
           data={buildHackathonJsonLd({
             name: h.name,
             description: h.description ?? undefined,
-            startDate: h.start_date ?? "",
-            endDate: h.end_date ?? "",
+            startDate: h.hacking_start ?? "",
+            endDate: h.hacking_end ?? "",
             coverImage: h.cover_image ?? undefined,
             type: h.type ?? undefined,
             slug: h.slug,
-            prizePool: h.prize_pool ?? undefined,
+            prizePool: h.total_prize_pool ?? undefined,
           })}
         />
       )}

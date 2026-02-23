@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { sendEmail, emailWrapper } from "@/lib/resend";
+import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 
 export async function GET(
   _request: NextRequest,
@@ -9,6 +9,29 @@ export async function GET(
   try {
     const { eventId } = await params;
     const supabase = await getSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Verify user is the event organizer
+    const { data: event } = await supabase
+      .from("events")
+      .select("organizer_id")
+      .eq("id", eventId)
+      .single();
+
+    if (!event) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+    if (event.organizer_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const { data, error } = await supabase
       .from("event_emails")
@@ -78,6 +101,29 @@ export async function POST(
       );
     }
 
+    if (typeof subject !== "string" || subject.length > 200) {
+      return NextResponse.json(
+        { error: "Subject must be a string under 200 characters" },
+        { status: 400 }
+      );
+    }
+
+    if (typeof body !== "string" || body.length > 10000) {
+      return NextResponse.json(
+        { error: "Body must be a string under 10,000 characters" },
+        { status: 400 }
+      );
+    }
+
+    // Validate recipientFilter against allowed values
+    const allowedFilters = ["all", "confirmed", "pending", "cancelled"];
+    if (recipientFilter && !allowedFilters.includes(recipientFilter)) {
+      return NextResponse.json(
+        { error: "Invalid recipient filter" },
+        { status: 400 }
+      );
+    }
+
     // Fetch recipients based on filter
     let regQuery = supabase
       .from("event_registrations")
@@ -98,11 +144,11 @@ export async function POST(
 
     // Send emails via Resend
     const htmlContent = emailWrapper(`
-      <h1 style="margin:0 0 16px;color:#fff;font-size:22px;font-weight:700;">${subject}</h1>
+      <h1 style="margin:0 0 16px;color:#fff;font-size:22px;font-weight:700;">${escapeHtml(subject)}</h1>
       <div style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
-        ${body.replace(/\n/g, "<br/>")}
+        ${escapeHtml(body).replace(/\n/g, "<br/>")}
       </div>
-      <p style="color:#a1a1aa;font-size:13px;margin:0;">This email is regarding <strong style="color:#fff;">${event.title}</strong></p>
+      <p style="color:#a1a1aa;font-size:13px;margin:0;">This email is regarding <strong style="color:#fff;">${escapeHtml(event.title)}</strong></p>
     `);
 
     let sentCount = 0;

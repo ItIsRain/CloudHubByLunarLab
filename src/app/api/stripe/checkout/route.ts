@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const { interval = "monthly" } = await request.json();
+    const { interval: rawInterval } = await request.json();
+    const interval = rawInterval === "annual" ? "annual" : "monthly";
 
     // Get profile to check for existing Stripe customer
     const { data: profile } = await supabase
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     const priceId =
       interval === "annual" ? STRIPE_PRICES.proAnnual : STRIPE_PRICES.proMonthly;
 
-    const origin = request.headers.get("origin") || "http://localhost:3000";
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
     // Create Checkout Session with 14-day free trial
     const session = await stripe.checkout.sessions.create({

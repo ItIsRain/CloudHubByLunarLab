@@ -42,6 +42,7 @@ export default function AllHackathonsPage() {
   >("all");
   const [sortBy, setSortBy] = React.useState("date");
   const [showSortDropdown, setShowSortDropdown] = React.useState(false);
+  const [pageSize, setPageSize] = React.useState(24);
 
   const sortDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -62,7 +63,7 @@ export default function AllHackathonsPage() {
     search: searchQuery || undefined,
     status: selectedStatus !== "all" ? [selectedStatus] : undefined,
     sortBy: sortBy as HackathonFilters["sortBy"],
-    pageSize: 24,
+    pageSize,
   });
 
   const filteredHackathons = hackathonsData?.data || [];
@@ -270,7 +271,7 @@ export default function AllHackathonsPage() {
           {/* Load More */}
           {!isLoading && hackathonsData?.hasMore && (
             <div className="text-center mt-12">
-              <Button variant="outline" size="lg">
+              <Button variant="outline" size="lg" onClick={() => setPageSize((s) => s + 24)}>
                 Load More Hackathons
               </Button>
             </div>

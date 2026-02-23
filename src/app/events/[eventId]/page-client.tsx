@@ -26,6 +26,7 @@ import {
   Settings,
 } from "lucide-react";
 import { toast } from "sonner";
+import { SafeHtml } from "@/components/ui/safe-html";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -247,9 +248,9 @@ export default function EventDetailPage() {
                     <CardTitle>About this event</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div
+                    <SafeHtml
+                      content={event.description}
                       className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1"
-                      dangerouslySetInnerHTML={{ __html: event.description }}
                     />
                   </CardContent>
                 </Card>

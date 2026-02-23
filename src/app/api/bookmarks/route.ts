@@ -79,6 +79,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof entityId !== "string" || !UUID_RE.test(entityId)) {
+      return NextResponse.json(
+        { error: "entityId must be a valid UUID" },
+        { status: 400 }
+      );
+    }
+
     // Check if bookmark already exists
     const { data: existing } = await supabase
       .from("bookmarks")

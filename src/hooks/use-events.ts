@@ -11,7 +11,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
-function buildEventParams(filters?: EventFilters & { page?: number; pageSize?: number; organizerId?: string; featured?: boolean; ids?: string[] }): string {
+function buildEventParams(filters?: EventFilters & { page?: number; pageSize?: number; organizerId?: string; featured?: boolean; ids?: string[]; isFree?: boolean }): string {
   const params = new URLSearchParams();
   if (!filters) return "";
   if (filters.search) params.set("search", filters.search);
@@ -23,11 +23,12 @@ function buildEventParams(filters?: EventFilters & { page?: number; pageSize?: n
   if (filters.organizerId) params.set("organizerId", filters.organizerId);
   if (filters.featured) params.set("featured", "true");
   if (filters.ids?.length) params.set("ids", filters.ids.join(","));
+  if (filters.isFree !== undefined) params.set("isFree", String(filters.isFree));
   const str = params.toString();
   return str ? `?${str}` : "";
 }
 
-export function useEvents(filters?: EventFilters & { page?: number; pageSize?: number }) {
+export function useEvents(filters?: EventFilters & { page?: number; pageSize?: number; organizerId?: string }) {
   return useQuery<PaginatedResponse<Event>>({
     queryKey: ["events", filters],
     queryFn: () =>

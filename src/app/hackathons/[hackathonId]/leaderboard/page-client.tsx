@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useHackathonSubmissions } from "@/hooks/use-submissions";
+import { useHackathonPhase } from "@/hooks/use-hackathon-phase";
 import { cn } from "@/lib/utils";
 
 // Generate deterministic scores from submission id
@@ -31,6 +32,7 @@ export default function HackathonLeaderboardPage() {
   const { data: hackathonData, isLoading } = useHackathon(hackathonId);
   const hackathon = hackathonData?.data;
   const { data: subsData } = useHackathonSubmissions(hackathon?.id);
+  const phase = useHackathonPhase(hackathon);
 
   if (isLoading) {
     return (
@@ -116,7 +118,21 @@ export default function HackathonLeaderboardPage() {
             </p>
           </motion.div>
 
-          {hackSubs.length === 0 ? (
+          {!phase.canViewResults ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-16"
+            >
+              <Trophy className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+              <h3 className="font-display text-lg font-bold mb-1">
+                Results Not Available Yet
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {phase.getMessage("viewResults")}
+              </p>
+            </motion.div>
+          ) : hackSubs.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

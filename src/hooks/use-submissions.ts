@@ -42,6 +42,7 @@ export function useSubmissions(filters?: SubmissionFilters) {
       fetchJson<PaginatedResponse<Submission>>(
         `/api/submissions${buildParams(filters)}`
       ),
+    enabled: !!(filters?.hackathonId || filters?.teamId || filters?.userId),
   });
 }
 
@@ -156,6 +157,7 @@ export function useSubmitScore() {
       criteria?: unknown[];
       totalScore: number;
       overallFeedback?: string;
+      flagged?: boolean;
     }) => {
       const res = await fetch(`/api/submissions/${submissionId}/score`, {
         method: "POST",

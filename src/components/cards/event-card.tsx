@@ -33,8 +33,8 @@ export function EventCard({
     toggleBookmark.mutate({ entityType: "event", entityId: event.id });
   };
 
-  const isFree = event.tickets.every((t) => t.price === 0);
-  const lowestPrice = Math.min(...event.tickets.map((t) => t.price));
+  const isFree = event.tickets.length === 0 || event.tickets.every((t) => t.price === 0);
+  const lowestPrice = event.tickets.length > 0 ? Math.min(...event.tickets.map((t) => t.price)) : 0;
 
   if (variant === "compact") {
     return (

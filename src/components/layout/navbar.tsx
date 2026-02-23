@@ -51,7 +51,6 @@ const navLinks: NavLink[] = [
     children: [
       { label: "All Events", href: "/explore/events", description: "Browse upcoming events" },
       { label: "Hackathons", href: "/explore/hackathons", description: "Join competitions" },
-      { label: "Communities", href: "/explore/communities", description: "Find your tribe" },
     ],
   },
   {

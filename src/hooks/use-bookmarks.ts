@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth-store";
 import { toast } from "sonner";
@@ -41,8 +42,9 @@ export function useBookmarks(type?: "event" | "hackathon") {
 export function useBookmarkIds(type?: "event" | "hackathon") {
   const { data, isLoading } = useBookmarks(type);
 
-  const bookmarkIds = new Set(
-    (data?.data || []).map((b) => b.entity_id)
+  const bookmarkIds = useMemo(
+    () => new Set((data?.data || []).map((b) => b.entity_id)),
+    [data]
   );
 
   return { bookmarkIds, isLoading };
@@ -88,7 +90,10 @@ export function useToggleBookmark() {
 export function useBookmarkedEntityIds(type: "event" | "hackathon") {
   const { data, isLoading } = useBookmarks(type);
 
-  const ids = (data?.data || []).map((b) => b.entity_id);
+  const ids = useMemo(
+    () => (data?.data || []).map((b) => b.entity_id),
+    [data]
+  );
 
   return { ids, isLoading };
 }

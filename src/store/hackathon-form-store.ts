@@ -142,6 +142,12 @@ export const useHackathonFormStore = create<HackathonFormState>()(
     }),
     {
       name: "hackathon-form-storage",
+      partialize: (state) => {
+        // Exclude large base64 image data from localStorage
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { coverImage, logo, ...rest } = state;
+        return rest;
+      },
     }
   )
 );

@@ -12,6 +12,8 @@ import {
   Check,
   Camera,
   Loader2,
+  UserCircle,
+  Mail,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/layout/navbar";
@@ -24,11 +26,19 @@ import { useAuthStore } from "@/store/auth-store";
 import { cn } from "@/lib/utils";
 import { mockCommunities } from "@/lib/mock-data";
 import { popularTags } from "@/lib/constants";
+import type { UserRole } from "@/lib/types";
 
-const steps = [
-  { id: 1, label: "Profile", icon: User },
-  { id: 2, label: "Skills & Interests", icon: Sparkles },
-  { id: 3, label: "Communities", icon: Users },
+const roleOptions: { value: UserRole; label: string; description: string }[] = [
+  {
+    value: "attendee",
+    label: "Attendee",
+    description: "Join events and hackathons",
+  },
+  {
+    value: "organizer",
+    label: "Organizer",
+    description: "Host events and hackathons",
+  },
 ];
 
 const skillOptions = [
@@ -47,14 +57,52 @@ const interestOptions = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { user, updateUser } = useAuthStore();
-  const [currentStep, setCurrentStep] = React.useState(1);
+  const { user, updateUser, fetchUser } = useAuthStore();
+
+  // Determine if we need the "Basics" step (OAuth users without name/role)
+  const needsBasics = !user?.name || user.name.trim().length === 0;
+  const startStep = needsBasics ? 0 : 1;
+
+  const [currentStep, setCurrentStep] = React.useState(startStep);
+  const [fullName, setFullName] = React.useState(user?.name || "");
+  const [email, setEmail] = React.useState(user?.email || "");
+  const [selectedRole, setSelectedRole] = React.useState<UserRole | "">(
+    user?.roles?.[0] || ""
+  );
   const [bio, setBio] = React.useState(user?.bio || "");
   const [headline, setHeadline] = React.useState(user?.headline || "");
   const [selectedSkills, setSelectedSkills] = React.useState<string[]>(user?.skills || []);
   const [selectedInterests, setSelectedInterests] = React.useState<string[]>(user?.interests || []);
   const [followedCommunities, setFollowedCommunities] = React.useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  // Refresh user on mount in case we came from OAuth callback
+  React.useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
+  // Update local state when user loads
+  React.useEffect(() => {
+    if (user) {
+      if (!fullName && user.name) setFullName(user.name);
+      if (!email && user.email) setEmail(user.email);
+      if (!selectedRole && user.roles?.[0]) setSelectedRole(user.roles[0]);
+    }
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const allSteps = needsBasics
+    ? [
+        { id: 0, label: "Basics", icon: UserCircle },
+        { id: 1, label: "Profile", icon: User },
+        { id: 2, label: "Skills & Interests", icon: Sparkles },
+        { id: 3, label: "Communities", icon: Users },
+      ]
+    : [
+        { id: 1, label: "Profile", icon: User },
+        { id: 2, label: "Skills & Interests", icon: Sparkles },
+        { id: 3, label: "Communities", icon: Users },
+      ];
+  const maxStep = allSteps[allSteps.length - 1].id;
 
   const toggleSkill = (skill: string) => {
     setSelectedSkills((prev) =>
@@ -76,19 +124,30 @@ export default function OnboardingPage() {
 
   const handleFinish = async () => {
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    updateUser({
-      bio,
-      headline,
-      skills: selectedSkills,
-      interests: selectedInterests,
-    });
-    setIsSubmitting(false);
-    toast.success("Welcome to CloudHub! 🎉");
-    router.push("/dashboard");
+    try {
+      await updateUser({
+        ...(needsBasics && {
+          name: fullName.trim(),
+          roles: selectedRole ? [selectedRole] : ["attendee"],
+        }),
+        bio,
+        headline,
+        skills: selectedSkills,
+        interests: selectedInterests,
+      });
+      toast.success("Welcome to CloudHub!");
+      router.push("/dashboard");
+    } catch {
+      toast.error("Failed to save profile");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const canProceed = () => {
+    if (currentStep === 0) {
+      return fullName.trim().length >= 2 && selectedRole !== "";
+    }
     if (currentStep === 1) return true;
     if (currentStep === 2) return selectedSkills.length > 0;
     return true;
@@ -106,7 +165,7 @@ export default function OnboardingPage() {
             className="mb-8"
           >
             <div className="flex items-center justify-between mb-2">
-              {steps.map((step, i) => (
+              {allSteps.map((step, i) => (
                 <React.Fragment key={step.id}>
                   <div className="flex items-center gap-2">
                     <div
@@ -127,7 +186,7 @@ export default function OnboardingPage() {
                     </div>
                     <span className="text-sm font-medium hidden sm:inline">{step.label}</span>
                   </div>
-                  {i < steps.length - 1 && (
+                  {i < allSteps.length - 1 && (
                     <div
                       className={cn(
                         "flex-1 h-0.5 mx-4",
@@ -142,6 +201,85 @@ export default function OnboardingPage() {
 
           {/* Step Content */}
           <AnimatePresence mode="wait">
+            {/* Step 0: Basics (OAuth users) */}
+            {currentStep === 0 && (
+              <motion.div
+                key="step-0"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+              >
+                <Card>
+                  <CardContent className="p-6 space-y-6">
+                    <div className="text-center">
+                      <h2 className="font-display text-2xl font-bold mb-1">Welcome to CloudHub</h2>
+                      <p className="text-muted-foreground">Let&apos;s set up the basics for your account</p>
+                    </div>
+
+                    <div className="flex justify-center">
+                      <Avatar className="h-20 w-20">
+                        <AvatarImage src={user?.avatar} />
+                        <AvatarFallback className="text-xl">
+                          {fullName?.charAt(0) || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Full Name</label>
+                      <Input
+                        placeholder="Your full name"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        icon={<User className="h-4 w-4" />}
+                      />
+                      {fullName.trim().length > 0 && fullName.trim().length < 2 && (
+                        <p className="text-sm text-destructive mt-1">Name must be at least 2 characters</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Email</label>
+                      <Input
+                        type="email"
+                        value={email}
+                        disabled
+                        icon={<Mail className="h-4 w-4" />}
+                        className="bg-muted"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        This is from your GitHub account
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">I want to...</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {roleOptions.map((role) => (
+                          <button
+                            key={role.value}
+                            type="button"
+                            onClick={() => setSelectedRole(role.value)}
+                            className={cn(
+                              "p-4 rounded-xl border-2 text-left transition-all",
+                              selectedRole === role.value
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-primary/50"
+                            )}
+                          >
+                            <div className="font-medium mb-0.5">{role.label}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {role.description}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+
             {currentStep === 1 && (
               <motion.div
                 key="step-1"
@@ -161,7 +299,7 @@ export default function OnboardingPage() {
                         <Avatar className="h-24 w-24">
                           <AvatarImage src={user?.avatar} />
                           <AvatarFallback className="text-2xl">
-                            {user?.name?.charAt(0) || "U"}
+                            {user?.name?.charAt(0) || fullName?.charAt(0) || "U"}
                           </AvatarFallback>
                         </Avatar>
                         <button
@@ -321,13 +459,13 @@ export default function OnboardingPage() {
             <Button
               variant="ghost"
               onClick={() => setCurrentStep((s) => s - 1)}
-              disabled={currentStep === 1}
+              disabled={currentStep === startStep}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
 
-            {currentStep < 3 ? (
+            {currentStep < maxStep ? (
               <Button onClick={() => setCurrentStep((s) => s + 1)} disabled={!canProceed()}>
                 Next
                 <ArrowRight className="h-4 w-4 ml-2" />

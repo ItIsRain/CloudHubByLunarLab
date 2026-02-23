@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuthStore } from "@/store/auth-store";
 import {
   mockConversations,
   getMessagesForConversation,
@@ -21,7 +22,8 @@ export default function MessagesPage() {
   const [search, setSearch] = React.useState("");
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
-  const currentUserId = "user-1";
+  const user = useAuthStore((state) => state.user);
+  const currentUserId = user?.id ?? "";
 
   const filteredConversations = mockConversations.filter((conv) => {
     const other = conv.participants.find((p) => p.id !== currentUserId);

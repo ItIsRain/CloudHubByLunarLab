@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { profileToUser } from "@/lib/supabase/mappers";
+import { profileToPublicUser } from "@/lib/supabase/mappers";
 
 export async function GET(
   request: NextRequest,
@@ -9,6 +9,29 @@ export async function GET(
   try {
     const { hackathonId } = await params;
     const supabase = await getSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Verify user is the hackathon organizer
+    const { data: hackathonCheck } = await supabase
+      .from("hackathons")
+      .select("organizer_id")
+      .eq("id", hackathonId)
+      .single();
+
+    if (!hackathonCheck) {
+      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+    }
+    if (hackathonCheck.organizer_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
@@ -71,7 +94,7 @@ export async function GET(
           hackathonId: reg.hackathon_id as string,
           status: reg.status as string,
           createdAt: reg.created_at as string,
-          user: userProfile ? profileToUser(userProfile) : null,
+          user: userProfile ? profileToPublicUser(userProfile) : null,
           teamName: userTeamMap[userId] || null,
           trackName: firstTrackName,
         };
@@ -216,7 +239,7 @@ export async function PATCH(
         hackathonId: data.hackathon_id,
         status: data.status,
         createdAt: data.created_at,
-        user: userProfile ? profileToUser(userProfile) : null,
+        user: userProfile ? profileToPublicUser(userProfile) : null,
       },
     });
   } catch {

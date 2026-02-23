@@ -60,6 +60,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   isLoading: false,
 
   login: async (email: string, password: string) => {
+    if (get().isLoading) return false;
     set({ isLoading: true });
 
     try {
@@ -81,9 +82,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+        return true;
+      } else {
+        // Login succeeded at Supabase level but no profile yet — fetch it
+        set({ isLoading: false });
+        await get().fetchUser();
+        return get().isAuthenticated;
       }
-
-      return true;
     } catch (err) {
       set({ isLoading: false });
       throw err;
@@ -91,6 +96,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   register: async (data: RegisterData) => {
+    if (get().isLoading) return false;
     set({ isLoading: true });
 
     try {
@@ -122,7 +128,22 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
   logout: async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, isLoading: false });
+    // Clear TanStack Query cache to prevent data leaking between sessions.
+    // The QueryClient is a singleton in the browser, so we import lazily
+    // to avoid circular dependencies.
+    if (typeof window !== "undefined") {
+      const { QueryClient } = await import("@tanstack/react-query");
+      // Find the mounted QueryClient via the global cache if available
+      // Fall back: the query-provider module exports nothing, but we can
+      // force a page-level reset by navigating — safer approach:
+      try {
+        const { queryClient } = await import("@/providers/query-provider");
+        queryClient.clear();
+      } catch {
+        // If the named export isn't available, navigation will reset state
+      }
+    }
   },
 
   updateUser: async (data: Partial<User>) => {
@@ -171,7 +192,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const res = await fetch("/api/auth/me", { method: "DELETE" });
 
     if (!res.ok) {
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       throw new Error(json.error || "Delete failed");
     }
 

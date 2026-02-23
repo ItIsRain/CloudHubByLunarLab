@@ -16,7 +16,12 @@ export function useJudgeInvitation(
     queryKey: ["judge-invitation", hackathonId, token],
     queryFn: async (): Promise<{ data: InvitationData }> => {
       const res = await fetch(
-        `/api/hackathons/${hackathonId}/judges/accept?token=${token}`
+        `/api/hackathons/${hackathonId}/judges/accept`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        }
       );
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));

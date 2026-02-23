@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useHackathonSubmissions } from "@/hooks/use-submissions";
+import { useHackathonPhase } from "@/hooks/use-hackathon-phase";
 import { cn } from "@/lib/utils";
 
 type SortOption = "votes" | "recent";
@@ -31,6 +32,7 @@ export default function HackathonSubmissionsPage() {
   const { data: hackathonData, isLoading } = useHackathon(hackathonId);
   const hackathon = hackathonData?.data;
   const { data: submissionsData, isLoading: subsLoading } = useHackathonSubmissions(hackathon?.id);
+  const phase = useHackathonPhase(hackathon);
 
   const [searchQuery, setSearchQuery] = React.useState("");
   const [trackFilter, setTrackFilter] = React.useState("all");
@@ -133,13 +135,29 @@ export default function HackathonSubmissionsPage() {
             animate={{ opacity: 1, y: 0 }}
             className="mb-8"
           >
-            <h1 className="font-display text-4xl font-bold mb-2">
-              Submissions
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              {hackSubs.length} project{hackSubs.length !== 1 ? "s" : ""}{" "}
-              submitted to {hackathon.name}
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="font-display text-4xl font-bold mb-2">
+                  Submissions
+                </h1>
+                <p className="text-muted-foreground text-lg">
+                  {hackSubs.length} project{hackSubs.length !== 1 ? "s" : ""}{" "}
+                  submitted to {hackathon.name}
+                </p>
+              </div>
+              {phase.canSubmit && (
+                <Button asChild>
+                  <Link href={`/dashboard/submissions/new?hackathonId=${hackathon.id}`}>
+                    Submit Project
+                  </Link>
+                </Button>
+              )}
+            </div>
+            {!phase.canSubmit && (
+              <div className="mt-4 rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+                {phase.getMessage("submit")}
+              </div>
+            )}
           </motion.div>
 
           {/* Filters */}

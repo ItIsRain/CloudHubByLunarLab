@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { UserRole } from "@/lib/types";
 
 const registerSchema = z.object({
@@ -112,8 +113,25 @@ function RegisterForm() {
     }
   };
 
-  const handleSocialLogin = (provider: string) => {
-    toast.info(`${provider} signup coming soon!`);
+  const [oauthLoading, setOauthLoading] = React.useState(false);
+
+  const handleGitHubLogin = async () => {
+    try {
+      setOauthLoading(true);
+      const supabase = getSupabaseBrowserClient();
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectParam || "/onboarding")}`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "github",
+        options: { redirectTo },
+      });
+      if (error) {
+        toast.error(error.message);
+        setOauthLoading(false);
+      }
+    } catch {
+      toast.error("Failed to connect to GitHub");
+      setOauthLoading(false);
+    }
   };
 
   return (
@@ -143,19 +161,22 @@ function RegisterForm() {
         </p>
       </div>
 
-      {/* Social Login */}
       <div className="mb-6">
         <Button
           variant="outline"
           className="w-full"
-          onClick={() => handleSocialLogin("GitHub")}
+          onClick={handleGitHubLogin}
+          disabled={oauthLoading}
         >
-          <Github className="h-5 w-5 mr-2" />
+          {oauthLoading ? (
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+          ) : (
+            <Github className="h-5 w-5 mr-2" />
+          )}
           Continue with GitHub
         </Button>
       </div>
 
-      {/* Divider */}
       <div className="relative mb-6">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t" />

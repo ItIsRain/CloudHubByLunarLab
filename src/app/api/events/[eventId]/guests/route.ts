@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { profileToUser } from "@/lib/supabase/mappers";
+import { profileToPublicUser } from "@/lib/supabase/mappers";
 
 export async function GET(
   request: NextRequest,
@@ -9,6 +9,29 @@ export async function GET(
   try {
     const { eventId } = await params;
     const supabase = await getSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Verify user is the event organizer
+    const { data: event } = await supabase
+      .from("events")
+      .select("organizer_id")
+      .eq("id", eventId)
+      .single();
+
+    if (!event) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+    if (event.organizer_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
@@ -35,7 +58,7 @@ export async function GET(
         const userProfile = reg.user as Record<string, unknown>;
         return {
           id: reg.id as string,
-          user: userProfile ? profileToUser(userProfile) : null,
+          user: userProfile ? profileToPublicUser(userProfile) : null,
           ticketType: reg.ticket_type || null,
           status: reg.status as string,
           qrCode: (reg.qr_code as string) || null,
@@ -170,7 +193,7 @@ export async function PATCH(
     return NextResponse.json({
       data: {
         id: data.id,
-        user: userProfile ? profileToUser(userProfile) : null,
+        user: userProfile ? profileToPublicUser(userProfile) : null,
         ticketType: data.ticket_type || null,
         status: data.status,
         qrCode: data.qr_code || null,

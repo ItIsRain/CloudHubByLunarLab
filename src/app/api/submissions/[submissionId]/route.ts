@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
+import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
+import { canSubmit, getPhaseMessage } from "@/lib/hackathon-phases";
 
 const SUBMISSION_SELECT =
   "*, team:teams(*, team_members(*, user:profiles!team_members_user_id_fkey(*))), scores(*, judge:profiles!scores_judge_id_fkey(*))";
@@ -26,9 +28,29 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({
-      data: dbRowToSubmission(data as Record<string, unknown>),
-    });
+    const submission = dbRowToSubmission(data as Record<string, unknown>);
+
+    // Strip scores for non-authenticated / non-judge / non-organizer users
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      submission.scores = [];
+    } else {
+      const hackathonId = (data as Record<string, unknown>).hackathon_id as string;
+      if (hackathonId) {
+        const { data: hack } = await supabase
+          .from("hackathons")
+          .select("organizer_id")
+          .eq("id", hackathonId)
+          .single();
+        const isOrganizer = hack?.organizer_id === user.id;
+        const isJudge = submission.scores.some((s) => s.judgeId === user.id);
+        if (!isOrganizer && !isJudge) {
+          submission.scores = [];
+        }
+      }
+    }
+
+    return NextResponse.json({ data: submission });
   } catch {
     return NextResponse.json(
       { error: "Internal server error" },
@@ -87,9 +109,36 @@ export async function PATCH(
     const rawBody = await request.json();
     const updates = submissionFormToDbRow(rawBody);
 
-    // If status is being set to "submitted", set submitted_at
-    if (updates.status === "submitted" && !updates.submitted_at) {
-      updates.submitted_at = new Date().toISOString();
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { error: "No valid fields to update" },
+        { status: 400 }
+      );
+    }
+
+    // Validate status if being changed
+    if (updates.status) {
+      const allowedStatuses = ["draft", "submitted"];
+      if (!allowedStatuses.includes(updates.status as string)) {
+        return NextResponse.json(
+          { error: "Invalid submission status" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // If status is being set to "submitted", enforce submission deadline
+    if (updates.status === "submitted") {
+      const timeline = await getHackathonTimeline(supabase, submission.hackathon_id);
+      if (timeline && !canSubmit(timeline)) {
+        return NextResponse.json(
+          { error: getPhaseMessage(timeline, "submit") },
+          { status: 403 }
+        );
+      }
+      if (!updates.submitted_at) {
+        updates.submitted_at = new Date().toISOString();
+      }
     }
 
     const { data, error } = await supabase
