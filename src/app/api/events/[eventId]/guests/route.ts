@@ -39,7 +39,7 @@ export async function GET(
 
     let query = supabase
       .from("event_registrations")
-      .select("*, user:profiles!event_registrations_user_id_fkey(*)")
+      .select("id, user_id, event_id, status, ticket_type, qr_code, checked_in_at, created_at, user:profiles!event_registrations_user_id_fkey(*)")
       .eq("event_id", eventId)
       .order("created_at", { ascending: false });
 
@@ -80,7 +80,8 @@ export async function GET(
     }
 
     return NextResponse.json({ data: guests });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -145,7 +146,7 @@ export async function PATCH(
       .update(updatePayload)
       .eq("id", registrationId)
       .eq("event_id", eventId)
-      .select("*, user:profiles!event_registrations_user_id_fkey(*)")
+      .select("id, user_id, event_id, status, ticket_type, qr_code, checked_in_at, created_at, user:profiles!event_registrations_user_id_fkey(*)")
       .single();
 
     if (error) {
@@ -201,7 +202,8 @@ export async function PATCH(
         createdAt: data.created_at,
       },
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

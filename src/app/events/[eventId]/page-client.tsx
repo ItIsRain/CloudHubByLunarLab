@@ -24,6 +24,8 @@ import {
   Linkedin,
   Pencil,
   Settings,
+  Lock,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SafeHtml } from "@/components/ui/safe-html";
@@ -32,9 +34,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { RegisterEventDialog } from "@/components/dialogs/register-event-dialog";
-import { ShareDialog } from "@/components/dialogs/share-dialog";
-import { AddToCalendarDialog } from "@/components/dialogs/add-to-calendar-dialog";
+import dynamic from "next/dynamic";
+const RegisterEventDialog = dynamic(() => import("@/components/dialogs/register-event-dialog").then(m => m.RegisterEventDialog), { ssr: false });
+const ShareDialog = dynamic(() => import("@/components/dialogs/share-dialog").then(m => m.ShareDialog), { ssr: false });
+const AddToCalendarDialog = dynamic(() => import("@/components/dialogs/add-to-calendar-dialog").then(m => m.AddToCalendarDialog), { ssr: false });
 import { EventCard } from "@/components/cards/event-card";
 import { useEvent, useEvents } from "@/hooks/use-events";
 import { useEventRegistration, useCancelEventRegistration } from "@/hooks/use-registrations";
@@ -63,7 +66,8 @@ export default function EventDetailPage() {
   const { data: relatedData } = useEvents(relatedFilters);
   const relatedEventsAll = relatedData?.data || [];
 
-  const { user, isAuthenticated } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isOrganizer = !!(user && event && user.id === event.organizerId);
   const { data: regData } = useEventRegistration(event?.id);
   const isRegistered = regData?.registered ?? false;
@@ -145,7 +149,6 @@ export default function EventDetailPage() {
           fill
           className="object-cover"
           priority
-          unoptimized
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
 
@@ -165,6 +168,18 @@ export default function EventDetailPage() {
                   {event.type}
                 </Badge>
                 {event.isFeatured && <Badge className="bg-primary">Featured</Badge>}
+                {isOrganizer && event.visibility === "private" && (
+                  <Badge variant="secondary" className="bg-white/20 text-white border-none gap-1">
+                    <Lock className="h-3 w-3" />
+                    Private
+                  </Badge>
+                )}
+                {isOrganizer && event.visibility === "unlisted" && (
+                  <Badge variant="secondary" className="bg-white/20 text-white border-none gap-1">
+                    <EyeOff className="h-3 w-3" />
+                    Unlisted
+                  </Badge>
+                )}
               </div>
               <h1 className="font-display text-3xl sm:text-4xl font-bold mb-1">{event.title}</h1>
               {event.tagline && <p className="text-white/80 text-lg">{event.tagline}</p>}

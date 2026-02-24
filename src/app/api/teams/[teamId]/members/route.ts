@@ -95,7 +95,8 @@ export async function POST(
     return NextResponse.json({
       data: dbRowToTeam(fullTeam as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -122,10 +123,10 @@ export async function DELETE(
     const body = await request.json();
     const targetUserId = body.user_id || user.id;
 
-    // Fetch caller's membership and team info in one query
+    // Fetch caller's membership, team info, and hackathon organizer in one query
     const { data: team } = await supabase
       .from("teams")
-      .select("hackathon_id, team_members(user_id, is_leader)")
+      .select("hackathon_id, team_members(user_id, is_leader), hackathon:hackathons!teams_hackathon_id_fkey(organizer_id)")
       .eq("id", teamId)
       .single();
 
@@ -143,16 +144,9 @@ export async function DELETE(
       return NextResponse.json({ error: "User is not a member of this team" }, { status: 404 });
     }
 
-    // Check if caller is hackathon organizer
-    let callerIsOrganizer = false;
-    if (team.hackathon_id) {
-      const { data: hack } = await supabase
-        .from("hackathons")
-        .select("organizer_id")
-        .eq("id", team.hackathon_id)
-        .single();
-      callerIsOrganizer = hack?.organizer_id === user.id;
-    }
+    // Check if caller is hackathon organizer (from joined data)
+    const hackathonData = team.hackathon as unknown as { organizer_id: string } | null;
+    const callerIsOrganizer = hackathonData?.organizer_id === user.id;
 
     if (targetUserId === user.id) {
       // Self-removal: prevent leader from leaving (would leave leaderless team)
@@ -183,7 +177,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { Calendar, MapPin, Users, Bookmark, BookmarkCheck, Globe } from "lucide-react";
+import { Calendar, MapPin, Users, Bookmark, BookmarkCheck, Globe, Lock, EyeOff } from "lucide-react";
 import { cn, formatDate, formatCurrency } from "@/lib/utils";
 import { Event } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ interface EventCardProps {
   className?: string;
 }
 
-export function EventCard({
+export const EventCard = React.memo(function EventCard({
   event,
   variant = "default",
   className,
@@ -38,7 +38,7 @@ export function EventCard({
 
   if (variant === "compact") {
     return (
-      <Link href={`/events/${event.slug}`}>
+      <Link href={`/events/${event.slug}`} prefetch={false}>
         <motion.div
           whileHover={{ x: 4 }}
           className={cn(
@@ -51,7 +51,7 @@ export function EventCard({
               src={event.coverImage || "/placeholder-event.svg"}
               alt={event.title}
               fill
-              unoptimized
+
               className="object-cover"
             />
           </div>
@@ -72,7 +72,7 @@ export function EventCard({
 
   if (variant === "featured") {
     return (
-      <Link href={`/events/${event.slug}`}>
+      <Link href={`/events/${event.slug}`} prefetch={false}>
         <motion.div
           whileHover={{ y: -8 }}
           className={cn(
@@ -85,7 +85,6 @@ export function EventCard({
             src={event.coverImage || "/placeholder-event.svg"}
             alt={event.title}
             fill
-            unoptimized
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
 
@@ -95,7 +94,8 @@ export function EventCard({
           {/* Bookmark Button */}
           <button
             onClick={handleBookmark}
-            className="absolute top-4 right-4 p-2 rounded-full bg-black/30 backdrop-blur-sm text-white hover:bg-black/50 transition-colors z-10"
+            disabled={toggleBookmark.isPending}
+            className={cn("absolute top-4 right-4 p-2 rounded-full bg-black/30 backdrop-blur-sm text-white hover:bg-black/50 transition-colors z-10", toggleBookmark.isPending && "opacity-50 pointer-events-none")}
           >
             {isBookmarked ? (
               <BookmarkCheck className="h-5 w-5 fill-current" />
@@ -167,7 +167,7 @@ export function EventCard({
 
   // Default variant
   return (
-    <Link href={`/events/${event.slug}`}>
+    <Link href={`/events/${event.slug}`} prefetch={false}>
       <motion.div
         whileHover={{ y: -4 }}
         className={cn(
@@ -181,7 +181,6 @@ export function EventCard({
             src={event.coverImage || "/placeholder-event.svg"}
             alt={event.title}
             fill
-            unoptimized
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
@@ -189,7 +188,8 @@ export function EventCard({
           {/* Bookmark Button */}
           <button
             onClick={handleBookmark}
-            className="absolute top-3 right-3 p-2 rounded-full bg-black/30 backdrop-blur-sm text-white hover:bg-black/50 transition-colors"
+            disabled={toggleBookmark.isPending}
+            className={cn("absolute top-3 right-3 p-2 rounded-full bg-black/30 backdrop-blur-sm text-white hover:bg-black/50 transition-colors", toggleBookmark.isPending && "opacity-50 pointer-events-none")}
           >
             {isBookmarked ? (
               <BookmarkCheck className="h-4 w-4 fill-current" />
@@ -227,6 +227,18 @@ export function EventCard({
               <Badge variant="muted" className="text-xs">
                 <Globe className="h-3 w-3 mr-1" />
                 {event.type}
+              </Badge>
+            )}
+            {event.visibility === "private" && (
+              <Badge variant="muted" className="text-xs">
+                <Lock className="h-3 w-3 mr-1" />
+                Private
+              </Badge>
+            )}
+            {event.visibility === "unlisted" && (
+              <Badge variant="muted" className="text-xs">
+                <EyeOff className="h-3 w-3 mr-1" />
+                Unlisted
               </Badge>
             )}
           </div>
@@ -277,4 +289,4 @@ export function EventCard({
       </motion.div>
     </Link>
   );
-}
+});

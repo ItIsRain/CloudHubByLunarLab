@@ -20,9 +20,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { CreateTeamDialog } from "@/components/dialogs/create-team-dialog";
-import { JoinTeamDialog } from "@/components/dialogs/join-team-dialog";
-import { EditTeamDialog } from "@/components/dialogs/edit-team-dialog";
+import dynamic from "next/dynamic";
+const CreateTeamDialog = dynamic(() => import("@/components/dialogs/create-team-dialog").then(m => m.CreateTeamDialog), { ssr: false });
+const JoinTeamDialog = dynamic(() => import("@/components/dialogs/join-team-dialog").then(m => m.JoinTeamDialog), { ssr: false });
+const EditTeamDialog = dynamic(() => import("@/components/dialogs/edit-team-dialog").then(m => m.EditTeamDialog), { ssr: false });
 import { cn, getInitials } from "@/lib/utils";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
@@ -46,7 +47,7 @@ export default function TeamsPage() {
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
 
   const { data: hackathonData, isLoading } = useHackathon(hackathonId);
   const hackathon = hackathonData?.data;

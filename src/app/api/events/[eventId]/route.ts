@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToEvent } from "@/lib/supabase/mappers";
+import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { UUID_RE } from "@/lib/constants";
 
 function eventFilter(id: string) {
   return UUID_RE.test(id) ? `id.eq.${id}` : `slug.eq.${id}`;
@@ -26,10 +27,27 @@ export async function GET(
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    return NextResponse.json({
-      data: dbRowToEvent(data as Record<string, unknown>),
-    });
-  } catch {
+    const row = data as Record<string, unknown>;
+
+    // Private events: only organizer or accepted invitees can view
+    if (row.visibility === "private") {
+      const { data: { user } } = await supabase.auth.getUser();
+      const canAccess = await hasPrivateEntityAccess(supabase, "event", row.id as string, user?.id, user?.email ?? undefined);
+      if (!canAccess) {
+        return NextResponse.json({ error: "Event not found" }, { status: 404 });
+      }
+    }
+
+    const headers: Record<string, string> = row.visibility === "public"
+      ? { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" }
+      : {};
+
+    return NextResponse.json(
+      { data: dbRowToEvent(row) },
+      { headers }
+    );
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -80,6 +98,7 @@ export async function PATCH(
       end_date: "end_date", endDate: "end_date",
       timezone: "timezone", tickets: "tickets", speakers: "speakers",
       agenda: "agenda", faq: "faq", capacity: "capacity",
+      visibility: "visibility",
     };
     const updates: Record<string, unknown> = {};
     for (const [key, dbKey] of Object.entries(keyMap)) {
@@ -88,6 +107,13 @@ export async function PATCH(
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
+
+    // Validate visibility
+    if (updates.visibility) {
+      if (!["public", "private", "unlisted"].includes(updates.visibility as string)) {
+        return NextResponse.json({ error: "Invalid visibility" }, { status: 400 });
+      }
     }
 
     // Validate status against allowed values
@@ -117,7 +143,8 @@ export async function PATCH(
     return NextResponse.json({
       data: dbRowToEvent(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -166,7 +193,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({ message: "Event deleted successfully" });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

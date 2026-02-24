@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/config";
-import { createClient } from "@supabase/supabase-js";
-
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
+import { UUID_RE } from "@/lib/constants";
 
 export async function POST(
   request: NextRequest,
@@ -17,7 +12,6 @@ export async function POST(
   try {
     const { eventId } = await params;
 
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!UUID_RE.test(eventId)) {
       return NextResponse.json({ error: "Invalid event ID" }, { status: 400 });
     }
@@ -42,7 +36,7 @@ export async function POST(
     // Fetch event to get ticket data
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, title, slug, tickets, status")
+      .select("id, title, slug, tickets, status, visibility")
       .eq("id", eventId)
       .single();
 
@@ -55,6 +49,17 @@ export async function POST(
         { error: "Ticket sales are not available for this event" },
         { status: 400 }
       );
+    }
+
+    // Block checkout for private events unless user has an invitation
+    if (event.visibility === "private") {
+      const canAccess = await hasPrivateEntityAccess(supabase, "event", eventId, user.id, user.email ?? undefined);
+      if (!canAccess) {
+        return NextResponse.json(
+          { error: "This is a private event. You need an invitation to register." },
+          { status: 403 }
+        );
+      }
     }
 
     // Find the matching ticket
@@ -149,10 +154,9 @@ export async function POST(
     const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
     // Use admin client for the registration insert (bypass RLS for pending)
-    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseAdmin = getSupabaseAdminClient();
 
     let registration: { id: string };
-    let regError;
 
     if (existing && existing.payment_status !== "paid") {
       // Update existing pending registration instead of delete+insert (prevents race condition)
@@ -172,8 +176,14 @@ export async function POST(
         .eq("id", existing.id)
         .select("id")
         .single();
-      registration = result.data!;
-      regError = result.error;
+      if (result.error || !result.data) {
+        console.error("Registration update error:", result.error);
+        return NextResponse.json(
+          { error: "Failed to create registration" },
+          { status: 500 }
+        );
+      }
+      registration = result.data;
     } else {
       // Insert a new pending registration
       const result = await supabaseAdmin
@@ -192,16 +202,14 @@ export async function POST(
         })
         .select("id")
         .single();
-      registration = result.data!;
-      regError = result.error;
-    }
-
-    if (regError) {
-      console.error("Registration insert error:", regError);
-      return NextResponse.json(
-        { error: "Failed to create registration" },
-        { status: 500 }
-      );
+      if (result.error || !result.data) {
+        console.error("Registration insert error:", result.error);
+        return NextResponse.json(
+          { error: "Failed to create registration" },
+          { status: 500 }
+        );
+      }
+      registration = result.data;
     }
 
     // Create Stripe Checkout Session

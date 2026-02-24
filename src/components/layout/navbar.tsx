@@ -71,8 +71,13 @@ const navLinks: NavLink[] = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const { user, isAuthenticated, logout, hasRole } = useAuthStore();
-  const { toggleNotificationPanel, toggleMobileMenu, mobileMenuOpen } = useUIStore();
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const logout = useAuthStore((s) => s.logout);
+  const hasRole = useAuthStore((s) => s.hasRole);
+  const toggleNotificationPanel = useUIStore((s) => s.toggleNotificationPanel);
+  const toggleMobileMenu = useUIStore((s) => s.toggleMobileMenu);
+  const mobileMenuOpen = useUIStore((s) => s.mobileMenuOpen);
   const { setTheme, resolvedTheme } = useTheme();
   const [scrolled, setScrolled] = React.useState(false);
   const [activeDropdown, setActiveDropdown] = React.useState<string | null>(null);

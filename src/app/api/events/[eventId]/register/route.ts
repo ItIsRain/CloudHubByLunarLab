@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { UUID_RE } from "@/lib/constants";
 
 export async function GET(
   _request: NextRequest,
@@ -38,7 +39,8 @@ export async function GET(
       registered: !!data && data.status !== "cancelled",
       registration: data,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -69,7 +71,7 @@ export async function POST(
     // Verify event is published and active
     const { data: eventCheck } = await supabase
       .from("events")
-      .select("status, tickets")
+      .select("status, visibility, tickets")
       .eq("id", eventId)
       .single();
 
@@ -81,6 +83,17 @@ export async function POST(
         { error: "Registration is not available for this event" },
         { status: 400 }
       );
+    }
+
+    // Block registration for private events unless user has an invitation
+    if (eventCheck.visibility === "private") {
+      const canAccess = await hasPrivateEntityAccess(supabase, "event", eventId, user.id, user.email ?? undefined);
+      if (!canAccess) {
+        return NextResponse.json(
+          { error: "This is a private event. You need an invitation to register." },
+          { status: 403 }
+        );
+      }
     }
 
     const body = await request.json().catch(() => ({}));
@@ -203,7 +216,8 @@ export async function POST(
     }
 
     return NextResponse.json({ data });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -275,7 +289,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({ message: "Registration cancelled" });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

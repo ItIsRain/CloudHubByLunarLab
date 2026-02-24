@@ -19,10 +19,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({
-      data: (data || []).map(dbRowToTestimonial),
-    });
-  } catch {
+    return NextResponse.json(
+      { data: (data || []).map(dbRowToTestimonial) },
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } }
+    );
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -109,7 +111,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ data: dbRowToTestimonial(data) }, { status: 201 });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

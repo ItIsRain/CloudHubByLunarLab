@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToHackathon } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
+import { UUID_RE } from "@/lib/constants";
 import { canCreateHackathon, getHackathonLimit } from "@/lib/stripe/plan-limits";
 import type { SubscriptionTier } from "@/lib/types";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
@@ -46,11 +47,26 @@ export async function GET(request: NextRequest) {
       query = query.eq("organizer_id", organizerId);
     }
 
+    // Visibility filtering
+    // Only the organizer themselves can see their own private/unlisted hackathons
+    const { data: { user } } = await supabase.auth.getUser();
+    const isOwnHackathons = organizerId && user?.id === organizerId;
+
+    if (!isOwnHackathons) {
+      const idsParam = searchParams.get("ids");
+      if (idsParam) {
+        // bookmarks: include unlisted, hide private
+        query = query.neq("visibility", "private");
+      } else {
+        // explore / other user's profile: only public
+        query = query.eq("visibility", "public");
+      }
+    }
+
     // Filter by specific IDs (for bookmarks page)
     const ids = searchParams.get("ids");
     if (ids) {
-      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const validIds = ids.split(",").filter((id) => uuidRe.test(id)).slice(0, 50);
+      const validIds = ids.split(",").filter((id) => UUID_RE.test(id)).slice(0, 50);
       if (validIds.length > 0) {
         query = query.in("id", validIds);
       } else {
@@ -97,15 +113,24 @@ export async function GET(request: NextRequest) {
       return dbRowToHackathon(effectiveRow);
     });
 
-    return NextResponse.json({
-      data: hackathons,
-      total: count || 0,
-      page,
-      pageSize,
-      totalPages: Math.ceil((count || 0) / pageSize),
-      hasMore: from + pageSize < (count || 0),
-    });
-  } catch {
+    // Only use public cache headers when response contains exclusively public data
+    const cacheHeaders: Record<string, string> = isOwnHackathons
+      ? { "Cache-Control": "private, no-store" }
+      : { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" };
+
+    return NextResponse.json(
+      {
+        data: hackathons,
+        total: count || 0,
+        page,
+        pageSize,
+        totalPages: Math.ceil((count || 0) / pageSize),
+        hasMore: from + pageSize < (count || 0),
+      },
+      { headers: cacheHeaders }
+    );
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -180,7 +205,7 @@ export async function POST(request: NextRequest) {
     // Allowlist: only permit fields organizers should set
     const HACK_FIELDS = [
       "name", "tagline", "description", "cover_image", "logo", "category",
-      "tags", "type", "status", "location",
+      "tags", "type", "status", "visibility", "location",
       "min_team_size", "max_team_size", "allow_solo", "total_prize_pool",
       "registration_start", "registration_end", "hacking_start", "hacking_end",
       "submission_deadline", "judging_start", "judging_end", "winners_announcement",
@@ -208,7 +233,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       data: dbRowToHackathon(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

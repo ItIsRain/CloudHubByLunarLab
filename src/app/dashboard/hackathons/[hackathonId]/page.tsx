@@ -40,7 +40,8 @@ import { MentorsTab } from "./_components/mentors-tab";
 import { SponsorsTab } from "./_components/sponsors-tab";
 import { PrizesTab } from "./_components/prizes-tab";
 import { AnnouncementsTab } from "./_components/announcements-tab";
-import { AnalyticsTab } from "./_components/analytics-tab";
+import dynamic from "next/dynamic";
+const AnalyticsTab = dynamic(() => import("./_components/analytics-tab").then(m => m.AnalyticsTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 import { SettingsTab } from "./_components/settings-tab";
 import { FAQTab } from "./_components/faq-tab";
 

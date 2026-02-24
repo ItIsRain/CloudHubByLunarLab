@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToTeam } from "@/lib/supabase/mappers";
-import { verifyIsTeamLeaderOrOrganizer } from "@/lib/supabase/auth-helpers";
+import { verifyIsTeamLeaderOrOrganizer, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 
 export async function GET(
   _request: NextRequest,
@@ -27,14 +27,24 @@ export async function GET(
       .eq("id", teamId)
       .single();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
+    if (error || !data) {
+      return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    }
+
+    // Block access to teams from private hackathons for unauthorized users
+    const hackathonId = (data as Record<string, unknown>).hackathon_id as string;
+    if (hackathonId) {
+      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user.id, user.email ?? undefined);
+      if (!canAccess) {
+        return NextResponse.json({ error: "Team not found" }, { status: 404 });
+      }
     }
 
     return NextResponse.json({
       data: dbRowToTeam(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -125,7 +135,8 @@ export async function PATCH(
     return NextResponse.json({
       data: dbRowToTeam(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -174,23 +185,29 @@ export async function DELETE(
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // Update team_count on the hackathon
+    // Update team_count on the hackathon (fire-and-forget — denormalized counter)
     if (team?.hackathon_id) {
-      const { count: teamCount } = await supabase
-        .from("teams")
-        .select("id", { count: "exact", head: true })
-        .eq("hackathon_id", team.hackathon_id);
-
-      if (teamCount !== null) {
-        await supabase
-          .from("hackathons")
-          .update({ team_count: teamCount })
-          .eq("id", team.hackathon_id);
-      }
+      const hId = team.hackathon_id;
+      Promise.resolve(
+        supabase
+          .from("teams")
+          .select("id", { count: "exact", head: true })
+          .eq("hackathon_id", hId)
+      ).then(({ count: teamCount }) => {
+        if (teamCount !== null) {
+          return supabase
+            .from("hackathons")
+            .update({ team_count: teamCount })
+            .eq("id", hId);
+        }
+      }).catch((err) => {
+        console.warn("Failed to update hackathon team_count:", err);
+      });
     }
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

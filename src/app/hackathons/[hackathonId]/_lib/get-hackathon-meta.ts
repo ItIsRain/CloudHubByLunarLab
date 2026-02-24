@@ -14,6 +14,7 @@ export type HackathonMeta = {
   type: string | null;
   organizer_id: string | null;
   total_prize_pool: number | null;
+  visibility: string | null;
 };
 
 export async function getHackathonMeta(hackathonId: string): Promise<HackathonMeta | null> {
@@ -25,9 +26,14 @@ export async function getHackathonMeta(hackathonId: string): Promise<HackathonMe
   const filter = UUID_RE.test(hackathonId) ? "id" : "slug";
   const { data } = await supabase
     .from("hackathons")
-    .select("id, slug, name, tagline, description, cover_image, hacking_start, hacking_end, type, organizer_id, total_prize_pool")
+    .select("id, slug, name, tagline, description, cover_image, hacking_start, hacking_end, type, organizer_id, total_prize_pool, visibility")
     .eq(filter, hackathonId)
     .single();
 
-  return data as HackathonMeta | null;
+  if (!data) return null;
+
+  // Don't leak private entity details in metadata/OG tags
+  if (data.visibility === "private") return null;
+
+  return data as HackathonMeta;
 }

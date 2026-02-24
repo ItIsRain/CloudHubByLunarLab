@@ -22,7 +22,7 @@ function getUtcOffset(tz: string): string {
   }
 }
 
-function getAllTimezones(): { value: string; label: string; region: string }[] {
+function buildTimezoneList(): { value: string; label: string; region: string }[] {
   let zones: string[];
   try {
     zones = Intl.supportedValuesOf("timeZone");
@@ -49,6 +49,9 @@ function getAllTimezones(): { value: string; label: string; region: string }[] {
   });
 }
 
+// Cache at module level — computed once per page load instead of per mount
+const ALL_TIMEZONES = buildTimezoneList();
+
 interface DateTimePickerProps {
   value?: string;
   onChange: (isoString: string) => void;
@@ -73,7 +76,7 @@ export function DateTimePicker({
   const dateValue = value ? new Date(value) : undefined;
   const timeValue = dateValue ? format(dateValue, "HH:mm") : "";
 
-  const allTimezones = useMemo(() => getAllTimezones(), []);
+  const allTimezones = ALL_TIMEZONES;
 
   const filteredTimezones = useMemo(() => {
     if (!tzSearch.trim()) return allTimezones;

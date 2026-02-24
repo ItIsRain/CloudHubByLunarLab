@@ -22,6 +22,71 @@ export async function getHackathonTimeline(
 }
 
 /**
+ * Checks if a user has access to a private entity.
+ * Returns true if:
+ *   - Entity is not private (public/unlisted)
+ *   - User is the organizer
+ *   - User has a pending/accepted entity_invitation
+ *   - (Hackathons only) User has a pending/accepted judge_invitation
+ */
+export async function hasPrivateEntityAccess(
+  supabase: SupabaseClient,
+  entityType: "event" | "hackathon",
+  entityId: string,
+  userId: string | undefined,
+  userEmail: string | undefined
+): Promise<boolean> {
+  const table = entityType === "event" ? "events" : "hackathons";
+  const { data: entity } = await supabase
+    .from(table)
+    .select("visibility, organizer_id")
+    .eq("id", entityId)
+    .single();
+
+  if (!entity) return false;
+  if (entity.visibility !== "private") return true;
+  if (userId && entity.organizer_id === userId) return true;
+
+  if (userEmail) {
+    const email = userEmail.toLowerCase();
+
+    if (entityType === "hackathon") {
+      // Parallelize both invitation checks for hackathons
+      const [entityInviteRes, judgeInviteRes] = await Promise.all([
+        supabase
+          .from("entity_invitations")
+          .select("id")
+          .eq("entity_type", entityType)
+          .eq("entity_id", entityId)
+          .eq("email", email)
+          .in("status", ["accepted", "pending"])
+          .maybeSingle(),
+        supabase
+          .from("judge_invitations")
+          .select("id")
+          .eq("hackathon_id", entityId)
+          .eq("email", email)
+          .in("status", ["accepted", "pending"])
+          .maybeSingle(),
+      ]);
+      if (entityInviteRes.data || judgeInviteRes.data) return true;
+    } else {
+      const { data: invite } = await supabase
+        .from("entity_invitations")
+        .select("id")
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId)
+        .eq("email", email)
+        .in("status", ["accepted", "pending"])
+        .maybeSingle();
+      if (invite) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Verifies the user is a judge for the given hackathon.
  * Checks: judge_invitations (accepted), hackathon judges JSONB, or organizer.
  */
@@ -30,25 +95,25 @@ export async function verifyIsJudge(
   hackathonId: string,
   userId: string
 ): Promise<boolean> {
-  // 1. Check judge_invitations table for accepted invite
-  // The accept endpoint stores the accepting user in `accepted_by`, so check both columns
-  const { data: invitation } = await supabase
-    .from("judge_invitations")
-    .select("id")
-    .eq("hackathon_id", hackathonId)
-    .eq("status", "accepted")
-    .or(`user_id.eq.${userId},accepted_by.eq.${userId}`)
-    .maybeSingle();
+  // Parallelize: check judge_invitations and fetch hackathon data simultaneously
+  const [invitationRes, hackathonRes] = await Promise.all([
+    supabase
+      .from("judge_invitations")
+      .select("id")
+      .eq("hackathon_id", hackathonId)
+      .eq("status", "accepted")
+      .or(`user_id.eq.${userId},accepted_by.eq.${userId}`)
+      .maybeSingle(),
+    supabase
+      .from("hackathons")
+      .select("judges, organizer_id")
+      .eq("id", hackathonId)
+      .single(),
+  ]);
 
-  if (invitation) return true;
+  if (invitationRes.data) return true;
 
-  // 2. Check hackathon's judges JSONB array and organizer_id
-  const { data: hackathon } = await supabase
-    .from("hackathons")
-    .select("judges, organizer_id")
-    .eq("id", hackathonId)
-    .single();
-
+  const hackathon = hackathonRes.data;
   if (!hackathon) return false;
 
   // Organizer can always judge
@@ -78,30 +143,29 @@ export async function verifyIsTeamLeaderOrOrganizer(
   teamId: string,
   userId: string
 ): Promise<boolean> {
-  // Check if user is team leader
-  const { data: leader } = await supabase
-    .from("team_members")
-    .select("id")
-    .eq("team_id", teamId)
-    .eq("user_id", userId)
-    .eq("is_leader", true)
-    .maybeSingle();
+  // Parallelize: check leader status and fetch team data simultaneously
+  const [leaderRes, teamRes] = await Promise.all([
+    supabase
+      .from("team_members")
+      .select("id")
+      .eq("team_id", teamId)
+      .eq("user_id", userId)
+      .eq("is_leader", true)
+      .maybeSingle(),
+    supabase
+      .from("teams")
+      .select("hackathon_id")
+      .eq("id", teamId)
+      .single(),
+  ]);
 
-  if (leader) return true;
-
-  // Check if user is the hackathon organizer
-  const { data: team } = await supabase
-    .from("teams")
-    .select("hackathon_id")
-    .eq("id", teamId)
-    .single();
-
-  if (!team) return false;
+  if (leaderRes.data) return true;
+  if (!teamRes.data) return false;
 
   const { data: hackathon } = await supabase
     .from("hackathons")
     .select("organizer_id")
-    .eq("id", team.hackathon_id)
+    .eq("id", teamRes.data.hackathon_id)
     .single();
 
   return hackathon?.organizer_id === userId;

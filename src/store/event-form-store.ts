@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type {
   EventType,
   EventCategory,
+  EntityVisibility,
   TicketType,
   Speaker,
   AgendaSession,
@@ -33,6 +34,8 @@ interface EventFormState {
   speakers: Speaker[];
   agenda: AgendaSession[];
   faq: { question: string; answer: string }[];
+  // Visibility
+  visibility: EntityVisibility;
 
   // Actions
   setStep: (step: number) => void;
@@ -69,6 +72,7 @@ const initialState = {
   speakers: [],
   agenda: [],
   faq: [],
+  visibility: "public" as EntityVisibility,
 };
 
 export const useEventFormStore = create<EventFormState>()(

@@ -115,7 +115,8 @@ export async function POST(
       success: true,
       message: `Invitation sent to ${email}`,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

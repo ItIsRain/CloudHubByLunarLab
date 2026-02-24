@@ -74,7 +74,7 @@ export default function BlogPostPage() {
               fill
               className="object-cover"
               priority
-              unoptimized
+
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
           </motion.div>
@@ -201,7 +201,7 @@ export default function BlogPostPage() {
                               alt={related.title}
                               width={400}
                               height={200}
-                              unoptimized
+                
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
                           ) : (

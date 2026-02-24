@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: "If an account exists, a reset link has been sent",
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -15,6 +15,7 @@ export type EventMeta = {
   location: Record<string, string> | null;
   organizer_id: string | null;
   tickets: { name: string; price: number; currency?: string }[] | null;
+  visibility: string | null;
 };
 
 export async function getEventMeta(eventId: string): Promise<EventMeta | null> {
@@ -26,9 +27,14 @@ export async function getEventMeta(eventId: string): Promise<EventMeta | null> {
   const filter = UUID_RE.test(eventId) ? "id" : "slug";
   const { data } = await supabase
     .from("events")
-    .select("id, slug, title, tagline, description, cover_image, start_date, end_date, type, location, organizer_id, tickets")
+    .select("id, slug, title, tagline, description, cover_image, start_date, end_date, type, location, organizer_id, tickets, visibility")
     .eq(filter, eventId)
     .single();
 
-  return data as EventMeta | null;
+  if (!data) return null;
+
+  // Don't leak private entity details in metadata/OG tags
+  if (data.visibility === "private") return null;
+
+  return data as EventMeta;
 }

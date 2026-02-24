@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 // ── Constants ──────────────────────────────────────────────────
 export const SITE_URL =
   (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
-export const SITE_NAME = "CloudHub by Lunar Labs";
+export const SITE_NAME = "CloudHub by Lunar Limited";
 export const SITE_DESCRIPTION =
   "The modern platform for hosting events and hackathons. Build communities, manage participants, and create unforgettable experiences.";
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
@@ -95,7 +95,7 @@ export function buildWebsiteJsonLd() {
     description: SITE_DESCRIPTION,
     publisher: {
       "@type": "Organization",
-      name: "Lunar Labs",
+      name: "Lunar Limited",
       url: "https://lnr.ae",
     },
   };

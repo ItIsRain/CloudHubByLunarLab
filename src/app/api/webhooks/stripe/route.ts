@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/config";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type Stripe from "stripe";
-
-// Use service role client to bypass RLS
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
 
 // In Stripe v20+, current_period_end is on subscription items, not the subscription itself
 function getPeriodEnd(subscription: Stripe.Subscription): string | null {
@@ -41,7 +33,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  const supabaseAdmin = getSupabaseAdmin();
+  const supabaseAdmin = getSupabaseAdminClient();
 
   try {
     switch (event.type) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,10 +47,7 @@ export async function POST(request: NextRequest) {
         .filter((r): r is string => typeof r === "string")
         .filter((r) => SELF_ASSIGNABLE_ROLES.includes(r));
       if (safeRoles.length > 0) {
-        const supabaseAdmin = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const supabaseAdmin = getSupabaseAdminClient();
         await supabaseAdmin
           .from("profiles")
           .update({ roles: safeRoles })
@@ -62,7 +59,8 @@ export async function POST(request: NextRequest) {
       user: data.user ? { id: data.user.id, email: data.user.email } : null,
       message: "Account created successfully",
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -357,6 +357,7 @@ Whether you're a seasoned AI practitioner or just starting your journey, this su
     tags: ["AI", "Machine Learning", "Deep Learning", "NLP", "Computer Vision"],
     type: "hybrid",
     status: "published",
+    visibility: "public",
     location: {
       type: "hybrid",
       address: "Moscone Center",
@@ -463,6 +464,7 @@ All skill levels welcome. Bring your questions and enthusiasm!`,
     tags: ["React", "JavaScript", "Frontend", "Web Development"],
     type: "in-person",
     status: "published",
+    visibility: "public",
     location: {
       type: "in-person",
       address: "GitHub HQ",
@@ -518,6 +520,7 @@ Laptops required. All software and tesnet ETH will be provided.`,
     tags: ["Web3", "Blockchain", "Ethereum", "Solidity", "dApps"],
     type: "online",
     status: "published",
+    visibility: "public",
     location: {
       type: "online",
       platform: "Discord",
@@ -563,6 +566,7 @@ Featured topics include component libraries, design tokens, documentation, and c
     tags: ["Design Systems", "UI/UX", "Components", "Figma"],
     type: "in-person",
     status: "published",
+    visibility: "public",
     location: {
       type: "in-person",
       address: "The Design Center",
@@ -607,6 +611,7 @@ Top 3 startups will receive funding and mentorship opportunities.`,
     tags: ["Startups", "Pitching", "Investors", "Entrepreneurship"],
     type: "in-person",
     status: "published",
+    visibility: "public",
     location: {
       type: "in-person",
       address: "WeWork Embarcadero",
@@ -672,6 +677,7 @@ for (let i = 6; i <= 20; i++) {
     tags: [template.category, "networking", "learning"],
     type: template.type,
     status: "published",
+    visibility: "public",
     location: {
       type: template.type,
       city: ["San Francisco", "New York", "Austin", "Seattle", "Los Angeles"][i % 5],
@@ -821,6 +827,7 @@ Whether you're an AI expert or just getting started, BuildAI welcomes all skill 
     category: "ai-ml",
     tags: ["AI", "Machine Learning", "LLM", "Computer Vision", "NLP"],
     status: "registration-open",
+    visibility: "public",
     type: "hybrid",
     location: {
       type: "hybrid",
@@ -922,6 +929,7 @@ Over $100,000 in prizes from leading Web3 protocols. Free food, swag, and worksh
     category: "web3",
     tags: ["Ethereum", "Web3", "DeFi", "NFT", "Smart Contracts"],
     status: "hacking",
+    visibility: "public",
     type: "in-person",
     location: {
       type: "in-person",
@@ -1005,6 +1013,7 @@ Open to developers, designers, scientists, and activists. $25,000 in prizes plus
     category: "tech",
     tags: ["Climate", "Sustainability", "GreenTech", "Environment"],
     status: "completed",
+    visibility: "public",
     type: "online",
     location: {
       type: "online",
@@ -1070,6 +1079,7 @@ for (let i = 4; i <= 10; i++) {
     category: template.category,
     tags: [template.category, "hackathon", "coding"],
     status: template.status,
+    visibility: "public",
     type: "online",
     registrationStart: subtractDays(30 + i * 10),
     registrationEnd: addDays(i * 5),

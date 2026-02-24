@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToNotification } from "@/lib/supabase/mappers";
+import { NOTIFICATION_COLS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,7 +56,8 @@ export async function GET(request: NextRequest) {
       totalPages: Math.ceil(total / pageSize),
       hasMore: offset + pageSize < total,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest) {
         message: message.slice(0, 2000),
         link: link ? String(link).slice(0, 500) : null,
       })
-      .select()
+      .select(NOTIFICATION_COLS)
       .single();
 
     if (error) {
@@ -134,7 +136,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       data: dbRowToNotification(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

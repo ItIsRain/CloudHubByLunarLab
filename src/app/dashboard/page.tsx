@@ -182,7 +182,8 @@ function PlanUsageCard() {
 }
 
 export default function DashboardPage() {
-  const { user, hasRole } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const hasRole = useAuthStore((s) => s.hasRole);
   const firstName = user?.name?.split(" ")[0] || "there";
   const canCreate = hasRole("organizer") || hasRole("admin");
   const quickActions = canCreate

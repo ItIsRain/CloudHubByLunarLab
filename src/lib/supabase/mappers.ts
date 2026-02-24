@@ -1,4 +1,4 @@
-import type { User, UserRole, SubscriptionTier, SubscriptionStatus, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial } from "@/lib/types";
+import type { User, UserRole, SubscriptionTier, SubscriptionStatus, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility } from "@/lib/types";
 
 // =====================================================
 // Profile ↔ User mappers
@@ -62,6 +62,7 @@ export function dbRowToEvent(
     tags: (row.tags as string[]) || [],
     type: row.type as Event["type"],
     status: row.status as Event["status"],
+    visibility: (row.visibility as EntityVisibility) || "public",
     location: (row.location as Event["location"]) || { type: row.type as Event["type"] },
     startDate: row.start_date as string,
     endDate: row.end_date as string,
@@ -108,6 +109,7 @@ export function dbRowToHackathon(
     category: row.category as Hackathon["category"],
     tags: (row.tags as string[]) || [],
     status: row.status as Hackathon["status"],
+    visibility: (row.visibility as EntityVisibility) || "public",
     type: row.type as Hackathon["type"],
     location: (row.location as Hackathon["location"]) || undefined,
     registrationStart: row.registration_start as string,
@@ -242,6 +244,7 @@ export function eventFormToDbRow(
     speakers: unknown[];
     agenda: unknown[];
     faq: unknown[];
+    visibility?: string;
   },
   organizerId: string,
   slug: string
@@ -256,6 +259,7 @@ export function eventFormToDbRow(
     tags: form.tags,
     type: form.locationType || "in-person",
     status: "published",
+    visibility: form.visibility || "public",
     timezone: form.timezone || "America/Los_Angeles",
     start_date: form.startDate || null,
     end_date: form.endDate || null,
@@ -407,6 +411,7 @@ export function hackathonFormToDbRow(
     minTeamSize: number;
     maxTeamSize: number;
     allowSolo: boolean;
+    visibility?: string;
   },
   organizerId: string,
   slug: string
@@ -424,6 +429,7 @@ export function hackathonFormToDbRow(
     tags: form.tags,
     type: form.type || "online",
     status: "published",
+    visibility: form.visibility || "public",
     rules: form.rules || "",
     eligibility: form.eligibility,
     min_team_size: form.minTeamSize,
@@ -451,5 +457,24 @@ export function hackathonFormToDbRow(
     prizes: form.prizes,
     sponsors: form.sponsors,
     judging_criteria: form.judgingCriteria,
+  };
+}
+
+// =====================================================
+// DB row → EntityInvitation
+// =====================================================
+
+export function dbRowToEntityInvitation(row: Record<string, unknown>): EntityInvitation {
+  return {
+    id: row.id as string,
+    entityType: row.entity_type as "event" | "hackathon",
+    entityId: row.entity_id as string,
+    email: row.email as string,
+    name: row.name as string,
+    token: row.token as string,
+    status: (row.status as EntityInvitation["status"]) || "pending",
+    invitedBy: row.invited_by as string,
+    acceptedBy: (row.accepted_by as string) || undefined,
+    createdAt: row.created_at as string,
   };
 }

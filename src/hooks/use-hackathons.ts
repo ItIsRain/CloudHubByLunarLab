@@ -1,15 +1,8 @@
+import { fetchJson } from "@/lib/fetch-json";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Hackathon, HackathonFilters, PaginatedResponse } from "@/lib/types";
 import { useAuthStore } from "@/store/auth-store";
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(json.error || `Request failed: ${res.status}`);
-  }
-  return res.json();
-}
 
 function buildHackathonParams(filters?: HackathonFilters & { page?: number; pageSize?: number; organizerId?: string; featured?: boolean; ids?: string[] }): string {
   const params = new URLSearchParams();

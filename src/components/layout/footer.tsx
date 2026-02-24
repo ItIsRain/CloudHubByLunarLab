@@ -169,7 +169,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="py-6 border-t flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} CloudHub by Lunar Labs. All rights reserved.
+            &copy; {new Date().getFullYear()} CloudHub by Lunar Limited (formerly CloudLynq). All rights reserved.
           </p>
 
           {/* Social Links */}

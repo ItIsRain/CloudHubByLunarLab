@@ -97,7 +97,7 @@ export default function BlogPage() {
                           src={featuredPost.coverImage}
                           alt={featuredPost.title}
                           fill
-                          unoptimized
+
                           className="object-cover"
                         />
                       )}
@@ -165,7 +165,7 @@ export default function BlogPage() {
                             alt={post.title}
                             width={400}
                             height={200}
-                            unoptimized
+  
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
                         ) : (

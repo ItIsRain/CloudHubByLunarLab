@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
+import { PROFILE_PUBLIC_COLS } from "@/lib/constants";
 import type { User } from "@/lib/types";
 
 export async function PUT(
@@ -19,9 +20,10 @@ export async function PUT(
 
     const { data: invitation, error } = await supabase
       .from("judge_invitations")
-      .select("*")
+      .select("id,email,name,status")
       .eq("hackathon_id", hackathonId)
       .eq("token", token)
+      .eq("status", "pending")
       .single();
 
     if (error || !invitation) {
@@ -31,7 +33,7 @@ export async function PUT(
       );
     }
 
-    // Get hackathon name for display
+    // Get hackathon name for display (only after validating pending invitation)
     const { data: hackathon } = await supabase
       .from("hackathons")
       .select("name")
@@ -47,7 +49,8 @@ export async function PUT(
         hackathonName: hackathon?.name || "Unknown Hackathon",
       },
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -82,7 +85,7 @@ export async function POST(
     // Verify invitation
     const { data: invitation, error: invError } = await supabase
       .from("judge_invitations")
-      .select("*")
+      .select("id,email,name,status")
       .eq("hackathon_id", hackathonId)
       .eq("token", token)
       .eq("status", "pending")
@@ -128,7 +131,7 @@ export async function POST(
     // Get user profile to build User object for JSONB
     const { data: profile } = await supabase
       .from("profiles")
-      .select("*")
+      .select(PROFILE_PUBLIC_COLS)
       .eq("id", user.id)
       .single();
 
@@ -177,7 +180,8 @@ export async function POST(
       success: true,
       message: "Invitation accepted! You are now a judge.",
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

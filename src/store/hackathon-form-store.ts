@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type {
   EventType,
   EventCategory,
+  EntityVisibility,
   Track,
   Prize,
   Sponsor,
@@ -49,6 +50,8 @@ interface HackathonFormState {
   judgingCriteria: JudgingCriteria[];
   // Sponsors
   sponsors: Sponsor[];
+  // Visibility
+  visibility: EntityVisibility;
 
   // Actions
   setSection: (section: number) => void;
@@ -98,6 +101,7 @@ const initialState = {
   allowSolo: true,
   judgingCriteria: [],
   sponsors: [],
+  visibility: "public" as EntityVisibility,
 };
 
 export const useHackathonFormStore = create<HackathonFormState>()(

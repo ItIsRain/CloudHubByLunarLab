@@ -37,34 +37,40 @@ export async function GET(
     const status = searchParams.get("status");
     const search = searchParams.get("search");
 
-    // Fetch registrations with user profiles
-    let query = supabase
+    // Fetch registrations, teams, and tracks in parallel
+    let regQuery = supabase
       .from("hackathon_registrations")
-      .select("*, user:profiles!hackathon_registrations_user_id_fkey(*)")
+      .select("id, user_id, hackathon_id, status, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)")
       .eq("hackathon_id", hackathonId)
       .order("created_at", { ascending: false });
 
     if (status) {
-      query = query.eq("status", status);
+      regQuery = regQuery.eq("status", status);
     }
 
-    const { data: registrations, error } = await query;
+    const [regResult, teamsResult, hackathonResult] = await Promise.all([
+      regQuery,
+      supabase
+        .from("teams")
+        .select("id, name, hackathon_id, team_members(user_id)")
+        .eq("hackathon_id", hackathonId),
+      supabase
+        .from("hackathons")
+        .select("tracks")
+        .eq("id", hackathonId)
+        .single(),
+    ]);
+
+    const { data: registrations, error } = regResult;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // Fetch teams for this hackathon with their members so we can resolve
-    // each participant's team name
-    const { data: teams } = await supabase
-      .from("teams")
-      .select("id, name, hackathon_id, team_members(user_id)")
-      .eq("hackathon_id", hackathonId);
-
     // Build a user_id -> team name lookup
     const userTeamMap: Record<string, string> = {};
-    if (teams) {
-      for (const team of teams) {
+    if (teamsResult.data) {
+      for (const team of teamsResult.data) {
         const members = (team.team_members as { user_id: string }[]) || [];
         for (const member of members) {
           userTeamMap[member.user_id] = team.name;
@@ -72,12 +78,7 @@ export async function GET(
       }
     }
 
-    // Fetch hackathon tracks for track name resolution
-    const { data: hackathon } = await supabase
-      .from("hackathons")
-      .select("tracks")
-      .eq("id", hackathonId)
-      .single();
+    const hackathon = hackathonResult.data;
 
     const tracks = (hackathon?.tracks as { id?: string; name: string }[]) || [];
     const firstTrackName = tracks.length > 0 ? tracks[0].name : null;
@@ -114,7 +115,8 @@ export async function GET(
     }
 
     return NextResponse.json({ data: participants });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -140,10 +142,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Verify caller is the hackathon organizer
+    // Verify caller is the hackathon organizer (include name for notifications)
     const { data: hackathon } = await supabase
       .from("hackathons")
-      .select("organizer_id")
+      .select("organizer_id, name")
       .eq("id", hackathonId)
       .single();
 
@@ -179,7 +181,7 @@ export async function PATCH(
       .update({ status })
       .eq("id", registrationId)
       .eq("hackathon_id", hackathonId)
-      .select("*, user:profiles!hackathon_registrations_user_id_fkey(*)")
+      .select("id, user_id, hackathon_id, status, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)")
       .single();
 
     if (error) {
@@ -195,13 +197,7 @@ export async function PATCH(
 
     // Send notification to the participant when their status changes
     if (status === "cancelled" || status === "rejected" || status === "approved") {
-      const { data: hackathonInfo } = await supabase
-        .from("hackathons")
-        .select("name")
-        .eq("id", hackathonId)
-        .single();
-
-      const hackathonName = hackathonInfo?.name || "the hackathon";
+      const hackathonName = hackathon.name || "the hackathon";
       const messages: Record<string, { title: string; message: string }> = {
         cancelled: {
           title: "Registration Cancelled",
@@ -242,7 +238,8 @@ export async function PATCH(
         user: userProfile ? profileToPublicUser(userProfile) : null,
       },
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

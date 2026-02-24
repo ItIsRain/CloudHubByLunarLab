@@ -58,7 +58,8 @@ export async function updateSession(request: NextRequest) {
 
   // Auth routes — redirect to dashboard if already logged in
   const authPaths = ["/login", "/register"];
-  const isAuthPage = authPaths.some((p) => pathname === p);
+  const normalizedPath = pathname.endsWith("/") && pathname !== "/" ? pathname.slice(0, -1) : pathname;
+  const isAuthPage = authPaths.some((p) => normalizedPath === p);
 
   if (isAuthPage && user) {
     const url = request.nextUrl.clone();

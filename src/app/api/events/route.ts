@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToEvent } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
+import { UUID_RE } from "@/lib/constants";
 import { canCreateEvent, getEventLimit } from "@/lib/stripe/plan-limits";
 import type { SubscriptionTier } from "@/lib/types";
 
@@ -49,11 +50,26 @@ export async function GET(request: NextRequest) {
       query = query.eq("organizer_id", organizerId);
     }
 
+    // Visibility filtering
+    // Only the organizer themselves can see their own private/unlisted events
+    const { data: { user } } = await supabase.auth.getUser();
+    const isOwnEvents = organizerId && user?.id === organizerId;
+
+    if (!isOwnEvents) {
+      const idsParam = searchParams.get("ids");
+      if (idsParam) {
+        // bookmarks: include unlisted, hide private
+        query = query.neq("visibility", "private");
+      } else {
+        // explore / other user's profile: only public
+        query = query.eq("visibility", "public");
+      }
+    }
+
     // Filter by specific IDs (for bookmarks page)
     const ids = searchParams.get("ids");
     if (ids) {
-      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const validIds = ids.split(",").filter((id) => uuidRe.test(id)).slice(0, 50);
+      const validIds = ids.split(",").filter((id) => UUID_RE.test(id)).slice(0, 50);
       if (validIds.length > 0) {
         query = query.in("id", validIds);
       } else {
@@ -90,15 +106,24 @@ export async function GET(request: NextRequest) {
       dbRowToEvent(row)
     );
 
-    return NextResponse.json({
-      data: events,
-      total: count || 0,
-      page,
-      pageSize,
-      totalPages: Math.ceil((count || 0) / pageSize),
-      hasMore: from + pageSize < (count || 0),
-    });
-  } catch {
+    // Only use public cache headers when response contains exclusively public data
+    const cacheHeaders: Record<string, string> = isOwnEvents
+      ? { "Cache-Control": "private, no-store" }
+      : { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" };
+
+    return NextResponse.json(
+      {
+        data: events,
+        total: count || 0,
+        page,
+        pageSize,
+        totalPages: Math.ceil((count || 0) / pageSize),
+        hasMore: from + pageSize < (count || 0),
+      },
+      { headers: cacheHeaders }
+    );
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -173,7 +198,7 @@ export async function POST(request: NextRequest) {
     // Allowlist: only permit fields organizers should set
     const EVENT_FIELDS = [
       "title", "tagline", "description", "cover_image", "category", "tags",
-      "type", "status", "location", "start_date", "end_date", "timezone",
+      "type", "status", "visibility", "location", "start_date", "end_date", "timezone",
       "tickets", "speakers", "agenda", "faq", "capacity",
     ];
     const insertData: Record<string, unknown> = {
@@ -197,7 +222,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       data: dbRowToEvent(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

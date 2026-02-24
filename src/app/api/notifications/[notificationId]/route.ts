@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToNotification } from "@/lib/supabase/mappers";
+import { NOTIFICATION_COLS } from "@/lib/constants";
 
 export async function PATCH(
   request: NextRequest,
@@ -30,7 +31,7 @@ export async function PATCH(
       .update(updates)
       .eq("id", notificationId)
       .eq("user_id", user.id)
-      .select()
+      .select(NOTIFICATION_COLS)
       .single();
 
     if (error) {
@@ -40,7 +41,8 @@ export async function PATCH(
     return NextResponse.json({
       data: dbRowToNotification(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -75,7 +77,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

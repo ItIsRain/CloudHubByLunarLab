@@ -67,7 +67,7 @@ export default function CookiePolicyPage() {
               className="max-w-none"
             >
               <p className="mb-10 text-muted-foreground leading-relaxed">
-                This Cookie Policy explains how CloudHub, operated by Lunar Labs (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;), uses cookies and similar tracking technologies when you visit or use our platform. This policy should be read alongside our <Link href="/legal/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+                This Cookie Policy explains how CloudHub, operated by Lunar Limited (formerly CloudLynq), registered in ADGM, Abu Dhabi (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;), uses cookies and similar tracking technologies when you visit or use our platform. This policy should be read alongside our <Link href="/legal/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
               </p>
 
               <section id="what-are-cookies" className="mb-10">
@@ -282,12 +282,12 @@ export default function CookiePolicyPage() {
                   If you have any questions about our use of cookies or this Cookie Policy, please contact us at:
                 </p>
                 <div className="mt-4 rounded-xl border border-border bg-muted/50 p-6">
-                  <p className="font-medium">Lunar Labs - Privacy Team</p>
+                  <p className="font-medium">Lunar Limited - Privacy Team</p>
                   <p className="mt-1 text-muted-foreground">
-                    Email: privacy@cloudhub.io
+                    Email: hello@lnr.ae
                   </p>
                   <p className="text-muted-foreground">
-                    Address: 123 Innovation Drive, San Francisco, CA 94105
+                    Address: Al Reem Island, Addax Office Tower, Office 3507, Abu Dhabi, UAE (ADGM)
                   </p>
                 </div>
               </section>

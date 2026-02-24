@@ -1,14 +1,7 @@
+import { fetchJson } from "@/lib/fetch-json";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { EventGuest, EventEmail } from "@/lib/types";
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(json.error || `Request failed: ${res.status}`);
-  }
-  return res.json();
-}
 
 // ─── Guests ───
 

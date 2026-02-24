@@ -46,7 +46,8 @@ export async function GET(
       .from("hackathon_announcements")
       .select("*, sender:profiles!hackathon_announcements_sent_by_fkey(*)")
       .eq("hackathon_id", hackathonId)
-      .order("sent_at", { ascending: false });
+      .order("sent_at", { ascending: false })
+      .limit(100);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -66,7 +67,8 @@ export async function GET(
     });
 
     return NextResponse.json({ data: announcements });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -209,7 +211,8 @@ export async function POST(
       },
       emailsSent,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

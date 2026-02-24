@@ -328,7 +328,6 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
                                   width={48}
                                   height={48}
                                   className="object-contain"
-                                  unoptimized
                                 />
                               ) : (
                                 <span className="text-lg font-bold text-muted-foreground">

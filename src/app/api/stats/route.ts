@@ -9,16 +9,20 @@ export async function GET() {
       await Promise.all([
         supabase
           .from("events")
-          .select("*", { count: "exact", head: true }),
+          .select("id", { count: "exact", head: true })
+          .eq("visibility", "public"),
         supabase
           .from("hackathons")
-          .select("*", { count: "exact", head: true }),
+          .select("id", { count: "exact", head: true })
+          .eq("visibility", "public"),
         supabase
           .from("events")
-          .select("registration_count"),
+          .select("registration_count")
+          .eq("visibility", "public"),
         supabase
           .from("hackathons")
-          .select("total_prize_pool"),
+          .select("total_prize_pool")
+          .eq("visibility", "public"),
       ]);
 
     const eventsHosted = eventsRes.count || 0;
@@ -34,15 +38,19 @@ export async function GET() {
       0
     );
 
-    return NextResponse.json({
-      data: {
-        eventsHosted,
-        totalAttendees,
-        hackathonsHosted,
-        totalPrizePool,
+    return NextResponse.json(
+      {
+        data: {
+          eventsHosted,
+          totalAttendees,
+          hackathonsHosted,
+          totalPrizePool,
+        },
       },
-    });
-  } catch {
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } }
+    );
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

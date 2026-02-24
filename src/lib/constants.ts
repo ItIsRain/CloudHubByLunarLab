@@ -1,3 +1,20 @@
+// =====================================================
+// UUID Regex (centralized — used across API routes)
+// =====================================================
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// =====================================================
+// Profile SELECT columns (centralized to avoid SELECT *)
+// =====================================================
+/** All profile columns needed by profileToUser mapper (for authenticated user's own data) */
+export const PROFILE_COLS = "id,email,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,stripe_customer_id,subscription_status,current_period_end,created_at,updated_at";
+
+/** Public-safe profile columns (excludes stripe_customer_id, stripe_subscription_id, current_period_end) */
+export const PROFILE_PUBLIC_COLS = "id,email,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,subscription_status,created_at,updated_at";
+
+/** Notification columns needed by dbRowToNotification mapper */
+export const NOTIFICATION_COLS = "id,type,title,message,link,is_read,created_at";
+
 export const categories = [
   { value: "tech", label: "Technology", icon: "laptop" },
   { value: "ai-ml", label: "AI / Machine Learning", icon: "brain" },

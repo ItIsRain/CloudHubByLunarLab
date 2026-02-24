@@ -165,7 +165,7 @@ export default function PrivacyPolicyPage() {
                   <li><strong>Restriction:</strong> You can request that we restrict the processing of your personal information in certain circumstances.</li>
                 </ul>
                 <p className="mt-4 text-muted-foreground leading-relaxed">
-                  To exercise any of these rights, please contact us at privacy@cloudhub.io. We will respond to your request within 30 days.
+                  To exercise any of these rights, please contact us at hello@lnr.ae. We will respond to your request within 30 days.
                 </p>
               </section>
 
@@ -186,7 +186,7 @@ export default function PrivacyPolicyPage() {
                   7. Children&apos;s Privacy
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  The Service is not intended for use by children under the age of 16. We do not knowingly collect personal information from children under 16. If we become aware that a child under 16 has provided us with personal information, we will take steps to delete such information promptly. If you are a parent or guardian and believe your child has provided us with personal information, please contact us at privacy@cloudhub.io.
+                  The Service is not intended for use by children under the age of 16. We do not knowingly collect personal information from children under 16. If we become aware that a child under 16 has provided us with personal information, we will take steps to delete such information promptly. If you are a parent or guardian and believe your child has provided us with personal information, please contact us at hello@lnr.ae.
                 </p>
               </section>
 
@@ -207,15 +207,15 @@ export default function PrivacyPolicyPage() {
                   If you have any questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:
                 </p>
                 <div className="mt-4 rounded-xl border border-border bg-muted/50 p-6">
-                  <p className="font-medium">Lunar Labs - Privacy Team</p>
+                  <p className="font-medium">Lunar Limited - Privacy Team</p>
                   <p className="mt-1 text-muted-foreground">
-                    Email: privacy@cloudhub.io
+                    Email: hello@lnr.ae
                   </p>
                   <p className="text-muted-foreground">
-                    Address: 123 Innovation Drive, San Francisco, CA 94105
+                    Address: Al Reem Island, Addax Office Tower, Office 3507, Abu Dhabi, UAE (ADGM)
                   </p>
                   <p className="text-muted-foreground">
-                    Data Protection Officer: dpo@cloudhub.io
+                    Data Protection Officer: hello@lnr.ae
                   </p>
                 </div>
               </section>

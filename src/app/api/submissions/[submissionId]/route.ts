@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
-import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
+import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canSubmit, getPhaseMessage } from "@/lib/hackathon-phases";
 
 const SUBMISSION_SELECT =
@@ -29,29 +29,40 @@ export async function GET(
     }
 
     const submission = dbRowToSubmission(data as Record<string, unknown>);
+    const hackathonId = (data as Record<string, unknown>).hackathon_id as string;
 
-    // Strip scores for non-authenticated / non-judge / non-organizer users
+    // Auth + visibility check
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      submission.scores = [];
-    } else {
-      const hackathonId = (data as Record<string, unknown>).hackathon_id as string;
-      if (hackathonId) {
+
+    if (hackathonId) {
+      // Block access to submissions from private hackathons for unauthorized users
+      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user?.id, user?.email ?? undefined);
+      if (!canAccess) {
+        return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+      }
+
+      // Strip scores for non-judge / non-organizer users
+      if (!user) {
+        submission.scores = [];
+      } else {
         const { data: hack } = await supabase
           .from("hackathons")
           .select("organizer_id")
           .eq("id", hackathonId)
           .single();
-        const isOrganizer = hack?.organizer_id === user.id;
+        const isOrganizer = user.id === hack?.organizer_id;
         const isJudge = submission.scores.some((s) => s.judgeId === user.id);
         if (!isOrganizer && !isJudge) {
           submission.scores = [];
         }
       }
+    } else if (!user) {
+      submission.scores = [];
     }
 
     return NextResponse.json({ data: submission });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -87,22 +98,24 @@ export async function PATCH(
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
 
-    const { data: membership } = await supabase
-      .from("team_members")
-      .select("id")
-      .eq("team_id", submission.team_id)
-      .eq("user_id", user.id)
-      .single();
+    // Parallelize membership + organizer checks
+    const [membershipRes, hackathonRes] = await Promise.all([
+      supabase
+        .from("team_members")
+        .select("id")
+        .eq("team_id", submission.team_id)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("hackathons")
+        .select("organizer_id")
+        .eq("id", submission.hackathon_id)
+        .single(),
+    ]);
 
-    const { data: hackathon } = await supabase
-      .from("hackathons")
-      .select("organizer_id")
-      .eq("id", submission.hackathon_id)
-      .single();
+    const isOrganizer = hackathonRes.data?.organizer_id === user.id;
 
-    const isOrganizer = hackathon?.organizer_id === user.id;
-
-    if (!membership && !isOrganizer) {
+    if (!membershipRes.data && !isOrganizer) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -155,7 +168,8 @@ export async function PATCH(
     return NextResponse.json({
       data: dbRowToSubmission(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -191,23 +205,25 @@ export async function DELETE(
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
 
-    const { data: leader } = await supabase
-      .from("team_members")
-      .select("id")
-      .eq("team_id", submission.team_id)
-      .eq("user_id", user.id)
-      .eq("is_leader", true)
-      .single();
+    // Parallelize leader + organizer checks
+    const [leaderRes, hackathonDelRes] = await Promise.all([
+      supabase
+        .from("team_members")
+        .select("id")
+        .eq("team_id", submission.team_id)
+        .eq("user_id", user.id)
+        .eq("is_leader", true)
+        .maybeSingle(),
+      supabase
+        .from("hackathons")
+        .select("organizer_id")
+        .eq("id", submission.hackathon_id)
+        .single(),
+    ]);
 
-    const { data: hackathon } = await supabase
-      .from("hackathons")
-      .select("organizer_id")
-      .eq("id", submission.hackathon_id)
-      .single();
+    const isOrganizer = hackathonDelRes.data?.organizer_id === user.id;
 
-    const isOrganizer = hackathon?.organizer_id === user.id;
-
-    if (!leader && !isOrganizer) {
+    if (!leaderRes.data && !isOrganizer) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -221,7 +237,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({ message: "Submission deleted" });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

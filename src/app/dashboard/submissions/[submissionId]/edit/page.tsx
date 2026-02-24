@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImageUpload } from "@/components/forms/image-upload";
-import { RichTextEditor } from "@/components/forms/rich-text-editor";
+import dynamic from "next/dynamic";
+const RichTextEditor = dynamic(() => import("@/components/forms/rich-text-editor").then(m => m.RichTextEditor), { ssr: false, loading: () => <div className="shimmer rounded-xl h-[200px]" /> });
 import { TagSelector } from "@/components/forms/tag-selector";
 import { useSubmission, useUpdateSubmission } from "@/hooks/use-submissions";
 

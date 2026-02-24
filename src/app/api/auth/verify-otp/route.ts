@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { profileToUser } from "@/lib/supabase/mappers";
+import { PROFILE_COLS } from "@/lib/constants";
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     if (data.user) {
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("*")
+        .select(PROFILE_COLS)
         .eq("id", data.user.id)
         .single();
       profile = profileData;
@@ -49,7 +50,8 @@ export async function POST(request: NextRequest) {
       profile: profile ? profileToUser(profile as Record<string, unknown>) : null,
       message: "Email verified successfully",
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

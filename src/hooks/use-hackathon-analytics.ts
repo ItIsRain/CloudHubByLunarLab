@@ -1,13 +1,6 @@
+import { fetchJson } from "@/lib/fetch-json";
 import { useQuery } from "@tanstack/react-query";
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(json.error || `Request failed: ${res.status}`);
-  }
-  return res.json();
-}
 
 export interface HackathonAnalytics {
   registrationsByStatus: Record<string, number>;

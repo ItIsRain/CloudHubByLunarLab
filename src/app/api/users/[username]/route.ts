@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
+import { PROFILE_PUBLIC_COLS } from "@/lib/constants";
 
 export async function GET(
   _request: NextRequest,
@@ -12,7 +13,7 @@ export async function GET(
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select(PROFILE_PUBLIC_COLS)
       .eq("username", username)
       .maybeSingle();
 
@@ -24,10 +25,12 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({
-      data: profileToPublicUser(data as Record<string, unknown>),
-    });
-  } catch {
+    return NextResponse.json(
+      { data: profileToPublicUser(data as Record<string, unknown>) },
+      { headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300" } }
+    );
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -38,8 +38,12 @@ export async function POST(
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
 
-    // Verify user is a judge
-    const isJudge = await verifyIsJudge(supabase, hackathonId, user.id);
+    // Verify judge status and judging window in parallel
+    const [isJudge, timeline] = await Promise.all([
+      verifyIsJudge(supabase, hackathonId, user.id),
+      getHackathonTimeline(supabase, hackathonId),
+    ]);
+
     if (!isJudge) {
       return NextResponse.json(
         { error: "Only judges can score submissions" },
@@ -47,8 +51,6 @@ export async function POST(
       );
     }
 
-    // Verify judging window is open
-    const timeline = await getHackathonTimeline(supabase, hackathonId);
     if (timeline && !canJudge(timeline)) {
       return NextResponse.json(
         { error: getPhaseMessage(timeline, "judge") },
@@ -97,7 +99,8 @@ export async function POST(
     await recalculateAverageScore(supabase, submissionId);
 
     return NextResponse.json({ data });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -128,8 +131,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
 
-    // Verify user is a judge
-    const isJudge = await verifyIsJudge(supabase, hackathonId, user.id);
+    // Verify judge status and judging window in parallel
+    const [isJudge, timeline] = await Promise.all([
+      verifyIsJudge(supabase, hackathonId, user.id),
+      getHackathonTimeline(supabase, hackathonId),
+    ]);
+
     if (!isJudge) {
       return NextResponse.json(
         { error: "Only judges can score submissions" },
@@ -137,8 +144,6 @@ export async function PATCH(
       );
     }
 
-    // Verify judging window is open
-    const timeline = await getHackathonTimeline(supabase, hackathonId);
     if (timeline && !canJudge(timeline)) {
       return NextResponse.json(
         { error: getPhaseMessage(timeline, "judge") },
@@ -188,7 +193,8 @@ export async function PATCH(
     await recalculateAverageScore(supabase, submissionId);
 
     return NextResponse.json({ data });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -196,8 +202,10 @@ export async function PATCH(
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function recalculateAverageScore(supabase: any, submissionId: string) {
+async function recalculateAverageScore(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  submissionId: string
+) {
   const { data: scores } = await supabase
     .from("scores")
     .select("total_score")

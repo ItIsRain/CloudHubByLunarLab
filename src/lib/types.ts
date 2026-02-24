@@ -1,5 +1,5 @@
 // =====================================================
-// Core Types for CloudHub by Lunar Labs Platform
+// Core Types for CloudHub by Lunar Limited Platform
 // =====================================================
 
 // Subscription Types
@@ -51,6 +51,7 @@ export interface User {
 // Event Types
 export type EventType = "in-person" | "online" | "hybrid";
 export type EventStatus = "draft" | "published" | "cancelled" | "completed";
+export type EntityVisibility = "public" | "private" | "unlisted";
 export type EventCategory =
   | "tech"
   | "ai-ml"
@@ -121,6 +122,7 @@ export interface Event {
   tags: string[];
   type: EventType;
   status: EventStatus;
+  visibility: EntityVisibility;
   location: EventLocation;
   startDate: string;
   endDate: string;
@@ -225,6 +227,7 @@ export interface Hackathon {
   category: EventCategory;
   tags: string[];
   status: HackathonStatus;
+  visibility: EntityVisibility;
   type: EventType;
   location?: EventLocation;
   registrationStart: string;
@@ -511,6 +514,20 @@ export interface PlatformStats {
   totalAttendees: number;
   hackathonsHosted: number;
   totalPrizePool: number;
+}
+
+// Entity Invitation Types
+export interface EntityInvitation {
+  id: string;
+  entityType: "event" | "hackathon";
+  entityId: string;
+  email: string;
+  name: string;
+  token: string;
+  status: "pending" | "accepted" | "declined";
+  invitedBy: string;
+  acceptedBy?: string;
+  createdAt: string;
 }
 
 // API Types

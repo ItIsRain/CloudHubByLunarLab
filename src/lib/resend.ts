@@ -3,7 +3,7 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM_EMAIL = "noreply@1i1.ae";
-const FROM_NAME = "CloudHub by Lunar Labs";
+const FROM_NAME = "CloudHub by Lunar Limited";
 
 /** Escape user-supplied text before embedding in HTML emails */
 export function escapeHtml(str: string): string {
@@ -24,13 +24,13 @@ function emailWrapper(content: string) {
   <div style="max-width:480px;margin:40px auto;background:#18181b;border-radius:16px;overflow:hidden;border:1px solid #27272a;">
     <div style="padding:32px 32px 0;text-align:center;">
       <h2 style="margin:0 0 4px;color:#fff;font-size:20px;font-weight:700;">CloudHub</h2>
-      <p style="margin:0;color:#a1a1aa;font-size:13px;">by Lunar Labs</p>
+      <p style="margin:0;color:#a1a1aa;font-size:13px;">by Lunar Limited</p>
     </div>
     <div style="padding:32px;">
       ${content}
     </div>
     <div style="padding:24px 32px;border-top:1px solid #27272a;text-align:center;">
-      <p style="margin:0;color:#71717a;font-size:12px;">&copy; ${new Date().getFullYear()} CloudHub by Lunar Labs. All rights reserved.</p>
+      <p style="margin:0;color:#71717a;font-size:12px;">&copy; ${new Date().getFullYear()} CloudHub by Lunar Limited (formerly CloudLynq). All rights reserved.</p>
     </div>
   </div>
 </body>

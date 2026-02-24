@@ -3,7 +3,7 @@ import AboutPage from "./page-client";
 
 export const metadata = buildMetadata({
   title: "About CloudHub",
-  description: "Learn about CloudHub by Lunar Labs — our mission, team, and vision for the future of events.",
+  description: "Learn about CloudHub by Lunar Limited (formerly CloudLynq) — our mission, team, and vision for the future of events.",
   path: "/about",
 });
 

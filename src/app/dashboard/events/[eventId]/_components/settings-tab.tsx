@@ -12,13 +12,23 @@ import {
   Trash2,
   XCircle,
   AlertTriangle,
+  Mail,
+  Plus,
+  X,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { Event } from "@/lib/types";
+import type { Event, EntityInvitation } from "@/lib/types";
 import { useUpdateEvent, useDeleteEvent } from "@/hooks/use-events";
+import {
+  useEntityInvitations,
+  useSendEntityInvitation,
+  useRevokeEntityInvitation,
+} from "@/hooks/use-invitations";
 import { toast } from "sonner";
 
 interface SettingsTabProps {
@@ -59,7 +69,45 @@ export function SettingsTab({ event, eventId }: SettingsTabProps) {
   const updateEvent = useUpdateEvent();
   const deleteEvent = useDeleteEvent();
 
-  const [visibility, setVisibility] = React.useState<Visibility>("public");
+  const [visibility, setVisibility] = React.useState<Visibility>(
+    (event.visibility as Visibility) || "public"
+  );
+
+  // Invitation hooks
+  const { data: invitations = [] } = useEntityInvitations("event", event.id, visibility === "private");
+  const sendInvitation = useSendEntityInvitation();
+  const revokeInvitation = useRevokeEntityInvitation();
+  const [inviteEmail, setInviteEmail] = React.useState("");
+  const [inviteName, setInviteName] = React.useState("");
+
+  const handleSendInvite = async () => {
+    if (!inviteEmail || !inviteName) {
+      toast.error("Both name and email are required.");
+      return;
+    }
+    try {
+      await sendInvitation.mutateAsync({
+        entityType: "event",
+        entityId: event.id,
+        email: inviteEmail,
+        name: inviteName,
+      });
+      toast.success(`Invitation sent to ${inviteEmail}`);
+      setInviteEmail("");
+      setInviteName("");
+    } catch {
+      toast.error("Failed to send invitation.");
+    }
+  };
+
+  const handleRevokeInvite = async (invitationId: string) => {
+    try {
+      await revokeInvitation.mutateAsync(invitationId);
+      toast.success("Invitation revoked.");
+    } catch {
+      toast.error("Failed to revoke invitation.");
+    }
+  };
 
   const eventUrl =
     typeof window !== "undefined"
@@ -67,6 +115,7 @@ export function SettingsTab({ event, eventId }: SettingsTabProps) {
       : `/events/${event.slug}`;
 
   const handleVisibilityChange = async (newVisibility: Visibility) => {
+    const previousVisibility = visibility;
     setVisibility(newVisibility);
     try {
       await updateEvent.mutateAsync({
@@ -75,6 +124,7 @@ export function SettingsTab({ event, eventId }: SettingsTabProps) {
       });
       toast.success(`Event visibility set to ${newVisibility}.`);
     } catch {
+      setVisibility(previousVisibility);
       toast.error("Failed to update visibility.");
     }
   };
@@ -182,6 +232,97 @@ export function SettingsTab({ event, eventId }: SettingsTabProps) {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Invite Participants (only for private events) */}
+      {visibility === "private" && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.075 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Mail className="h-5 w-5" />
+                Invite Participants
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Input
+                  placeholder="Name"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  className="flex-1"
+                />
+                <Input
+                  placeholder="Email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={handleSendInvite}
+                  disabled={sendInvitation.isPending}
+                  className="gap-2 shrink-0"
+                >
+                  {sendInvitation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Send Invite
+                </Button>
+              </div>
+
+              {invitations.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Sent Invitations ({invitations.length})
+                  </p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {invitations.map((inv: EntityInvitation) => (
+                      <div
+                        key={inv.id}
+                        className="flex items-center justify-between rounded-lg border p-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {inv.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {inv.email}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={inv.status === "accepted" ? "success" : "muted"}
+                          >
+                            {inv.status}
+                          </Badge>
+                          {inv.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRevokeInvite(inv.id)}
+                              disabled={revokeInvitation.isPending}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Event URL */}
       <motion.div

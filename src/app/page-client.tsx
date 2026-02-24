@@ -84,7 +84,7 @@ const typewriterTexts = [
   "Webinars",
 ];
 
-function TypewriterText() {
+const TypewriterText = React.memo(function TypewriterText() {
   const [index, setIndex] = React.useState(0);
   const [text, setText] = React.useState("");
   const [isDeleting, setIsDeleting] = React.useState(false);
@@ -117,9 +117,9 @@ function TypewriterText() {
       <span className="animate-pulse">|</span>
     </span>
   );
-}
+});
 
-function VideoPlayer({ videoId }: { videoId: string }) {
+const VideoPlayer = React.memo(function VideoPlayer({ videoId }: { videoId: string }) {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
 
@@ -166,7 +166,7 @@ function VideoPlayer({ videoId }: { videoId: string }) {
       )}
     </div>
   );
-}
+});
 
 export default function HomePage() {
   const { data: eventsData, isLoading: eventsLoading } = useUpcomingEvents(4);

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe/config";
 import { profileToUser } from "@/lib/supabase/mappers";
+import { PROFILE_COLS } from "@/lib/constants";
 
 export async function GET() {
   try {
@@ -19,7 +20,7 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("*")
+      .select(PROFILE_COLS)
       .eq("id", user.id)
       .single();
 
@@ -31,7 +32,8 @@ export async function GET() {
     }
 
     return NextResponse.json({ user, profile: profileToUser(profile as Record<string, unknown>) });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -73,7 +75,7 @@ export async function PATCH(request: NextRequest) {
       .from("profiles")
       .update(updates)
       .eq("id", user.id)
-      .select()
+      .select(PROFILE_COLS)
       .single();
 
     if (error) {
@@ -81,7 +83,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     return NextResponse.json({ profile });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -112,8 +115,9 @@ export async function DELETE() {
     if (profile?.stripe_subscription_id) {
       try {
         await stripe.subscriptions.cancel(profile.stripe_subscription_id);
-      } catch {
+      } catch (err) {
         // Subscription may already be canceled — continue with deletion
+        console.warn("Stripe subscription cancel failed (may be already canceled):", err);
       }
     }
 
@@ -121,17 +125,15 @@ export async function DELETE() {
     await supabase.from("profiles").delete().eq("id", user.id);
 
     // Delete the Supabase Auth user using service-role admin client
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseAdmin = getSupabaseAdminClient();
     await supabaseAdmin.auth.admin.deleteUser(user.id);
 
     // Sign out the current session
     await supabase.auth.signOut();
 
     return NextResponse.json({ message: "Account deleted successfully" });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

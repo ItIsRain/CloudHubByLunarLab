@@ -133,15 +133,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // The QueryClient is a singleton in the browser, so we import lazily
     // to avoid circular dependencies.
     if (typeof window !== "undefined") {
-      const { QueryClient } = await import("@tanstack/react-query");
-      // Find the mounted QueryClient via the global cache if available
-      // Fall back: the query-provider module exports nothing, but we can
-      // force a page-level reset by navigating — safer approach:
       try {
         const { queryClient } = await import("@/providers/query-provider");
         queryClient.clear();
-      } catch {
-        // If the named export isn't available, navigation will reset state
+      } catch (err) {
+        console.warn("Failed to clear query cache on logout:", err);
       }
     }
   },

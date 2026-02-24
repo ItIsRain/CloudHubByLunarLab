@@ -19,17 +19,21 @@ import {
   Trash2,
   Check,
   X,
+  Globe,
+  Lock,
+  EyeOff,
 } from "lucide-react";
 import { useHackathonFormStore } from "@/store/hackathon-form-store";
 import { ImageUpload } from "@/components/forms/image-upload";
-import { RichTextEditor } from "@/components/forms/rich-text-editor";
+import dynamic from "next/dynamic";
+const RichTextEditor = dynamic(() => import("@/components/forms/rich-text-editor").then(m => m.RichTextEditor), { ssr: false, loading: () => <div className="shimmer rounded-xl h-[200px]" /> });
 import { TagSelector } from "@/components/forms/tag-selector";
 import { DateTimePicker } from "@/components/forms/date-time-picker";
 import { LocationPicker } from "@/components/forms/location-picker";
-import { AddTrackDialog } from "@/components/dialogs/add-track-dialog";
-import { AddPrizeDialog } from "@/components/dialogs/add-prize-dialog";
-import { AddSponsorDialog } from "@/components/dialogs/add-sponsor-dialog";
-import { JudgingCriteriaDialog } from "@/components/dialogs/judging-criteria-dialog";
+const AddTrackDialog = dynamic(() => import("@/components/dialogs/add-track-dialog").then(m => m.AddTrackDialog), { ssr: false });
+const AddPrizeDialog = dynamic(() => import("@/components/dialogs/add-prize-dialog").then(m => m.AddPrizeDialog), { ssr: false });
+const AddSponsorDialog = dynamic(() => import("@/components/dialogs/add-sponsor-dialog").then(m => m.AddSponsorDialog), { ssr: false });
+const JudgingCriteriaDialog = dynamic(() => import("@/components/dialogs/judging-criteria-dialog").then(m => m.JudgingCriteriaDialog), { ssr: false });
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,9 +45,9 @@ import { useAuthStore } from "@/store/auth-store";
 import { hackathonFormToDbRow } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
 import { useUsage } from "@/hooks/use-usage";
-import { UpgradeDialog } from "@/components/dialogs/upgrade-dialog";
+const UpgradeDialog = dynamic(() => import("@/components/dialogs/upgrade-dialog").then(m => m.UpgradeDialog), { ssr: false });
 import { PLAN_LIMITS } from "@/lib/constants";
-import type { EventType } from "@/lib/types";
+import type { EventType, EntityVisibility } from "@/lib/types";
 
 const sections = [
   { id: "basic", title: "Basic Info", icon: <FileText className="h-4 w-4" /> },
@@ -315,6 +319,34 @@ export default function CreateHackathonPage() {
                                 store.updateField("meetingUrl", data.meetingUrl || "");
                               }}
                             />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">Visibility</label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {([
+                                { value: "public", label: "Public", description: "Listed everywhere", icon: Globe },
+                                { value: "private", label: "Private", description: "Invite-only", icon: Lock },
+                                { value: "unlisted", label: "Unlisted", description: "Link access only", icon: EyeOff },
+                              ] as const).map((opt) => (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => store.updateField("visibility", opt.value as EntityVisibility)}
+                                  className={cn(
+                                    "flex flex-col items-start gap-1.5 rounded-xl border-2 p-3 text-left transition-all",
+                                    store.visibility === opt.value
+                                      ? "border-primary bg-primary/5"
+                                      : "border-border hover:border-primary/30"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <opt.icon className={cn("h-3.5 w-3.5", store.visibility === opt.value ? "text-primary" : "text-muted-foreground")} />
+                                    <span className="text-sm font-medium">{opt.label}</span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">{opt.description}</p>
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -636,6 +668,15 @@ export default function CreateHackathonPage() {
                           <div>
                             <p className="text-xs text-muted-foreground uppercase tracking-wider">Hacking Start</p>
                             <p className="font-semibold">{store.hackingStart ? formatDate(store.hackingStart) : "Not set"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wider">Visibility</p>
+                            <p className="font-semibold capitalize flex items-center gap-1.5">
+                              {store.visibility === "private" && <Lock className="h-3.5 w-3.5" />}
+                              {store.visibility === "unlisted" && <EyeOff className="h-3.5 w-3.5" />}
+                              {store.visibility === "public" && <Globe className="h-3.5 w-3.5" />}
+                              {store.visibility || "Public"}
+                            </p>
                           </div>
                         </div>
 

@@ -15,12 +15,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ? `${h.tagline ?? h.name} — $${h.total_prize_pool.toLocaleString()} in prizes.`
     : h.tagline ?? h.description?.slice(0, 160) ?? undefined;
 
-  return buildMetadata({
+  const meta = buildMetadata({
     title: h.name,
     description: desc,
     path: `/hackathons/${h.slug}`,
     image: h.cover_image ?? undefined,
   });
+
+  // Prevent indexing for private/unlisted hackathons
+  if (h.visibility && h.visibility !== "public") {
+    meta.robots = { index: false, follow: false };
+  }
+
+  return meta;
 }
 
 export default async function Page({ params }: Props) {

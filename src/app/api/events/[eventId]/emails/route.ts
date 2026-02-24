@@ -35,9 +35,10 @@ export async function GET(
 
     const { data, error } = await supabase
       .from("event_emails")
-      .select("*")
+      .select("id, event_id, subject, body, recipient_filter, recipient_count, created_at")
       .eq("event_id", eventId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -54,7 +55,8 @@ export async function GET(
     }));
 
     return NextResponse.json({ data: emails });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -156,7 +158,7 @@ export async function POST(
       try {
         await sendEmail({ to: email, subject, html: htmlContent });
         sentCount++;
-      } catch {
+      } catch (err) {
         // Skip individual send failures
       }
     }
@@ -178,7 +180,8 @@ export async function POST(
     }
 
     return NextResponse.json({ sent: sentCount });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

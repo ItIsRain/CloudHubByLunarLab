@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToHackathon } from "@/lib/supabase/mappers";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
+import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { UUID_RE } from "@/lib/constants";
 
 function hackathonFilter(id: string) {
   return UUID_RE.test(id) ? `id.eq.${id}` : `slug.eq.${id}`;
@@ -30,8 +31,18 @@ export async function GET(
       );
     }
 
-    // Auto-update status based on timeline dates
     const row = data as Record<string, unknown>;
+
+    // Private hackathons: only organizer or accepted invitees can view
+    if (row.visibility === "private") {
+      const { data: { user } } = await supabase.auth.getUser();
+      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", row.id as string, user?.id, user?.email ?? undefined);
+      if (!canAccess) {
+        return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      }
+    }
+
+    // Auto-update status based on timeline dates
     const timeline = rowToTimeline(row);
     const computedPhase = getCurrentPhase(timeline);
     if (timeline.status !== "draft" && row.status !== computedPhase) {
@@ -42,13 +53,21 @@ export async function GET(
           .from("hackathons")
           .update({ status: computedPhase })
           .eq("id", row.id as string)
-      ).catch(() => {});
+      ).catch((err) => {
+        console.warn("Failed to auto-update hackathon status:", err);
+      });
     }
 
-    return NextResponse.json({
-      data: dbRowToHackathon(row),
-    });
-  } catch {
+    const headers: Record<string, string> = row.visibility === "public"
+      ? { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" }
+      : {};
+
+    return NextResponse.json(
+      { data: dbRowToHackathon(row) },
+      { headers }
+    );
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -114,6 +133,7 @@ export async function PATCH(
       tracks: "tracks", prizes: "prizes", rules: "rules",
       requirements: "requirements", resources: "resources", sponsors: "sponsors",
       faqs: "faqs", schedule: "schedule", judges: "judges", mentors: "mentors",
+      visibility: "visibility",
     };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
@@ -122,6 +142,13 @@ export async function PATCH(
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
+
+    // Validate visibility
+    if (updates.visibility) {
+      if (!["public", "private", "unlisted"].includes(updates.visibility as string)) {
+        return NextResponse.json({ error: "Invalid visibility" }, { status: 400 });
+      }
     }
 
     // Validate status against allowed values
@@ -174,7 +201,8 @@ export async function PATCH(
     return NextResponse.json({
       data: dbRowToHackathon(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -226,7 +254,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({ message: "Hackathon deleted successfully" });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

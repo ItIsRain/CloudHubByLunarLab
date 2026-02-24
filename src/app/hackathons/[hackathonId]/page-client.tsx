@@ -28,6 +28,7 @@ import {
   UserPlus,
   Lock,
   HelpCircle,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SafeHtml } from "@/components/ui/safe-html";
@@ -37,12 +38,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShareDialog } from "@/components/dialogs/share-dialog";
-import { AddToCalendarDialog } from "@/components/dialogs/add-to-calendar-dialog";
-import { BookMentorDialog } from "@/components/dialogs/book-mentor-dialog";
-import { CreateTeamDialog } from "@/components/dialogs/create-team-dialog";
-import { EditTeamDialog } from "@/components/dialogs/edit-team-dialog";
-import { JoinTeamDialog } from "@/components/dialogs/join-team-dialog";
+import dynamic from "next/dynamic";
+const ShareDialog = dynamic(() => import("@/components/dialogs/share-dialog").then(m => m.ShareDialog), { ssr: false });
+const AddToCalendarDialog = dynamic(() => import("@/components/dialogs/add-to-calendar-dialog").then(m => m.AddToCalendarDialog), { ssr: false });
+const BookMentorDialog = dynamic(() => import("@/components/dialogs/book-mentor-dialog").then(m => m.BookMentorDialog), { ssr: false });
+const CreateTeamDialog = dynamic(() => import("@/components/dialogs/create-team-dialog").then(m => m.CreateTeamDialog), { ssr: false });
+const EditTeamDialog = dynamic(() => import("@/components/dialogs/edit-team-dialog").then(m => m.EditTeamDialog), { ssr: false });
+const JoinTeamDialog = dynamic(() => import("@/components/dialogs/join-team-dialog").then(m => m.JoinTeamDialog), { ssr: false });
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useHackathonSubmissions } from "@/hooks/use-submissions";
 import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
@@ -101,7 +103,8 @@ export default function HackathonDetailPage() {
   const hackathon = hackathonData?.data;
   const { data: teamsData } = useHackathonTeams(hackathon?.id);
   const { data: submissionsData } = useHackathonSubmissions(hackathon?.id);
-  const { isAuthenticated, user } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
   const { data: regData } = useHackathonRegistration(hackathon?.id);
   const isRegistered = regData?.registered ?? false;
   const registerMutation = useRegisterForHackathon();
@@ -190,7 +193,6 @@ export default function HackathonDetailPage() {
           fill
           className="object-cover"
           priority
-          unoptimized
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
 
@@ -205,10 +207,22 @@ export default function HackathonDetailPage() {
                 <div className="flex items-center gap-3 mb-3">
                   <Badge className={cn(status.color, "text-white")}>{status.label}</Badge>
                   <Badge variant="secondary" className="bg-white/20 text-white border-none">{hackathon.category}</Badge>
+                  {isOrganizer && hackathon.visibility === "private" && (
+                    <Badge variant="secondary" className="bg-white/20 text-white border-none gap-1">
+                      <Lock className="h-3 w-3" />
+                      Private
+                    </Badge>
+                  )}
+                  {isOrganizer && hackathon.visibility === "unlisted" && (
+                    <Badge variant="secondary" className="bg-white/20 text-white border-none gap-1">
+                      <EyeOff className="h-3 w-3" />
+                      Unlisted
+                    </Badge>
+                  )}
                 </div>
                 {hackathon.logo && (
                   <div className="w-14 h-14 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center mb-3 overflow-hidden">
-                    <Image src={hackathon.logo} alt="" width={40} height={40} className="object-contain" unoptimized/>
+                    <Image src={hackathon.logo} alt="" width={40} height={40} className="object-contain" />
                   </div>
                 )}
                 <h1 className="font-display text-4xl sm:text-5xl font-bold mb-2">{hackathon.name}</h1>
@@ -660,7 +674,6 @@ export default function HackathonDetailPage() {
                                 alt={sponsor.name}
                                 width={tier === "platinum" ? 80 : 48}
                                 height={tier === "platinum" ? 80 : 48}
-                                unoptimized
                                 className="rounded-lg mb-3"
                               />
                               <p className="font-medium">{sponsor.name}</p>

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToTeam } from "@/lib/supabase/mappers";
-import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
+import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canFormTeams, getPhaseMessage } from "@/lib/hackathon-phases";
+import { UUID_RE } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,6 +42,10 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false });
 
     if (hackathonId) {
+      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user.id, user.email ?? undefined);
+      if (!canAccess) {
+        return NextResponse.json({ data: [], total: 0, page, pageSize, totalPages: 0, hasMore: false });
+      }
       query = query.eq("hackathon_id", hackathonId);
     }
     if (status) {
@@ -58,6 +63,11 @@ export async function GET(request: NextRequest) {
           { count: "exact" }
         )
         .order("created_at", { ascending: false });
+
+      // Re-apply hackathonId filter (was set before this block)
+      if (hackathonId) {
+        query = query.eq("hackathon_id", hackathonId);
+      }
 
       // We need to filter by user membership through a join
       const { data: memberTeamIds } = await supabase
@@ -100,7 +110,8 @@ export async function GET(request: NextRequest) {
       totalPages: Math.ceil(total / pageSize),
       hasMore: offset + pageSize < total,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -138,8 +149,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(hackathon_id)) {
+    if (!UUID_RE.test(hackathon_id)) {
       return NextResponse.json(
         { error: "Invalid hackathon_id format" },
         { status: 400 }
@@ -163,44 +173,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify hackathon exists
-    const { data: hackathonCheck } = await supabase
-      .from("hackathons")
-      .select("id")
-      .eq("id", hackathon_id)
-      .single();
+    // Run validation queries in parallel
+    const [hackathonRes, registrationRes, membershipRes] = await Promise.all([
+      supabase.from("hackathons").select("id").eq("id", hackathon_id).single(),
+      supabase.from("hackathon_registrations").select("id").eq("hackathon_id", hackathon_id).eq("user_id", user.id).in("status", ["confirmed", "approved"]).maybeSingle(),
+      supabase.from("team_members").select("team_id, teams!inner(hackathon_id)").eq("user_id", user.id).eq("teams.hackathon_id", hackathon_id),
+    ]);
 
-    if (!hackathonCheck) {
+    if (!hackathonRes.data) {
       return NextResponse.json(
         { error: "Hackathon not found" },
         { status: 404 }
       );
     }
 
-    // Verify user is registered for this hackathon
-    const { data: registration } = await supabase
-      .from("hackathon_registrations")
-      .select("id")
-      .eq("hackathon_id", hackathon_id)
-      .eq("user_id", user.id)
-      .in("status", ["confirmed", "approved"])
-      .maybeSingle();
-
-    if (!registration) {
+    if (!registrationRes.data) {
       return NextResponse.json(
         { error: "You must be registered for this hackathon to create a team" },
         { status: 403 }
       );
     }
 
-    // Prevent user from being on multiple teams in the same hackathon
-    const { data: existingMemberships } = await supabase
-      .from("team_members")
-      .select("team_id, teams!inner(hackathon_id)")
-      .eq("user_id", user.id)
-      .eq("teams.hackathon_id", hackathon_id);
-
-    if (existingMemberships && existingMemberships.length > 0) {
+    if (membershipRes.data && membershipRes.data.length > 0) {
       return NextResponse.json(
         { error: "You are already on a team in this hackathon" },
         { status: 409 }
@@ -230,7 +224,7 @@ export async function POST(request: NextRequest) {
         join_password: trimmedPassword || null,
         status: "forming",
       })
-      .select()
+      .select("id")
       .single();
 
     if (teamError) {
@@ -251,18 +245,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: memberError.message }, { status: 400 });
     }
 
-    // Update team_count on the hackathon
-    const { count: teamCount } = await supabase
-      .from("teams")
-      .select("id", { count: "exact", head: true })
-      .eq("hackathon_id", hackathon_id);
-
-    if (teamCount !== null) {
-      await supabase
-        .from("hackathons")
-        .update({ team_count: teamCount })
-        .eq("id", hackathon_id);
-    }
+    // Update team_count on the hackathon (fire-and-forget — denormalized counter)
+    Promise.resolve(
+      supabase
+        .from("teams")
+        .select("id", { count: "exact", head: true })
+        .eq("hackathon_id", hackathon_id)
+    ).then(({ count: teamCount }) => {
+      if (teamCount !== null) {
+        return supabase
+          .from("hackathons")
+          .update({ team_count: teamCount })
+          .eq("id", hackathon_id);
+      }
+    }).catch((err) => {
+      console.warn("Failed to update hackathon team_count:", err);
+    });
 
     // Fetch the full team with members
     const { data: fullTeam, error: fetchError } = await supabase
@@ -280,7 +278,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       data: dbRowToTeam(fullTeam as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

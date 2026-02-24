@@ -74,7 +74,7 @@ export default function TermsOfServicePage() {
                   1. Introduction
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  Welcome to CloudHub, operated by Lunar Labs (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). These Terms of Service (&quot;Terms&quot;) govern your access to and use of our platform, including our website, applications, APIs, and all related services (collectively, the &quot;Service&quot;). By accessing or using CloudHub, you agree to be bound by these Terms. If you do not agree to these Terms, you may not access or use the Service.
+                  Welcome to CloudHub, operated by Lunar Limited (formerly CloudLynq), registered in ADGM, Abu Dhabi (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). These Terms of Service (&quot;Terms&quot;) govern your access to and use of our platform, including our website, applications, APIs, and all related services (collectively, the &quot;Service&quot;). By accessing or using CloudHub, you agree to be bound by these Terms. If you do not agree to these Terms, you may not access or use the Service.
                 </p>
                 <p className="mt-4 text-muted-foreground leading-relaxed">
                   CloudHub provides an event management and hackathon platform that enables users to create, discover, and participate in events and hackathons. Our Service includes event creation tools, team formation features, submission management, judging systems, and community interaction capabilities.
@@ -129,7 +129,7 @@ export default function TermsOfServicePage() {
                   5. Intellectual Property
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  The Service and its original content (excluding content provided by users), features, and functionality are and will remain the exclusive property of Lunar Labs and its licensors. The Service is protected by copyright, trademark, and other laws of both the United States and foreign countries.
+                  The Service and its original content (excluding content provided by users), features, and functionality are and will remain the exclusive property of Lunar Limited and its licensors. The Service is protected by copyright, trademark, and other laws of both the United States and foreign countries.
                 </p>
                 <p className="mt-4 text-muted-foreground leading-relaxed">
                   You retain ownership of any intellectual property rights that you hold in content you submit, post, or display on or through the Service. By submitting content, you grant us a worldwide, non-exclusive, royalty-free license to use, reproduce, modify, and distribute such content solely for the purpose of operating, promoting, and improving the Service. For hackathon submissions, intellectual property rights remain with the submitting team unless otherwise specified in the specific hackathon rules.
@@ -141,7 +141,7 @@ export default function TermsOfServicePage() {
                   6. Limitation of Liability
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  To the fullest extent permitted by applicable law, in no event shall Lunar Labs, its affiliates, directors, employees, or agents be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation loss of profits, data, use, goodwill, or other intangible losses, resulting from:
+                  To the fullest extent permitted by applicable law, in no event shall Lunar Limited, its affiliates, directors, employees, or agents be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation loss of profits, data, use, goodwill, or other intangible losses, resulting from:
                 </p>
                 <ul className="mt-4 space-y-2 text-muted-foreground list-disc pl-6">
                   <li>Your access to or use of, or inability to access or use, the Service.</li>
@@ -183,12 +183,12 @@ export default function TermsOfServicePage() {
                   If you have any questions about these Terms, please contact us at:
                 </p>
                 <div className="mt-4 rounded-xl border border-border bg-muted/50 p-6">
-                  <p className="font-medium">Lunar Labs</p>
+                  <p className="font-medium">Lunar Limited (formerly CloudLynq)</p>
                   <p className="mt-1 text-muted-foreground">
-                    Email: legal@cloudhub.io
+                    Email: hello@lnr.ae
                   </p>
                   <p className="text-muted-foreground">
-                    Address: 123 Innovation Drive, San Francisco, CA 94105
+                    Address: Al Reem Island, Addax Office Tower, Office 3507, Abu Dhabi, UAE (ADGM)
                   </p>
                 </div>
               </section>

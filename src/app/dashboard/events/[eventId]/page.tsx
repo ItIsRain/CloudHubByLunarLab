@@ -31,7 +31,8 @@ import { GuestsTab } from "./_components/guests-tab";
 import { TicketsTab } from "./_components/tickets-tab";
 import { CheckInTab } from "./_components/check-in-tab";
 import { EmailsTab } from "./_components/emails-tab";
-import { AnalyticsTab } from "./_components/analytics-tab";
+import dynamic from "next/dynamic";
+const AnalyticsTab = dynamic(() => import("./_components/analytics-tab").then(m => m.AnalyticsTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 import { SettingsTab } from "./_components/settings-tab";
 
 const statusConfig: Record<

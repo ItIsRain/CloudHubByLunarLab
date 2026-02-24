@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
-import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
+import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canSubmit, getPhaseMessage } from "@/lib/hackathon-phases";
 
 const SUBMISSION_SELECT =
@@ -27,7 +27,13 @@ export async function GET(request: NextRequest) {
       .from("submissions")
       .select(SUBMISSION_SELECT, { count: "exact" });
 
-    if (hackathonId) query = query.eq("hackathon_id", hackathonId);
+    if (hackathonId) {
+      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user?.id, user?.email ?? undefined);
+      if (!canAccess) {
+        return NextResponse.json({ data: [], total: 0, page, pageSize, totalPages: 0, hasMore: false });
+      }
+      query = query.eq("hackathon_id", hackathonId);
+    }
     if (teamId) query = query.eq("team_id", teamId);
 
     // Unauthenticated users can ONLY see submitted submissions and cannot filter by userId/teamId
@@ -105,7 +111,8 @@ export async function GET(request: NextRequest) {
       totalPages: Math.ceil(total / pageSize),
       hasMore: offset + pageSize < total,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -193,7 +200,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       data: dbRowToSubmission(data as Record<string, unknown>),
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

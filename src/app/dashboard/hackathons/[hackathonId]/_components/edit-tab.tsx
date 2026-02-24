@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import DOMPurify from "dompurify";
 import { motion } from "framer-motion";
 import {
   Save,
@@ -96,7 +97,7 @@ function RichTextEditor({
       return;
     }
     if (editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value;
+      editorRef.current.innerHTML = DOMPurify.sanitize(value);
     }
   }, [value]);
 
@@ -164,7 +165,7 @@ function RichTextEditor({
                 e.preventDefault();
                 if (b.prompt) {
                   const url = window.prompt("Enter URL:");
-                  if (url) exec(b.command, url);
+                  if (url && /^https?:\/\/.+/i.test(url)) exec(b.command, url);
                 } else {
                   exec(b.command, b.value);
                 }
@@ -285,7 +286,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
   // Strip HTML tags from eligibility items for clean display
   const stripHtml = (html: string) => {
     const tmp = document.createElement("div");
-    tmp.innerHTML = html;
+    tmp.innerHTML = DOMPurify.sanitize(html);
     return tmp.textContent || tmp.innerText || html;
   };
 

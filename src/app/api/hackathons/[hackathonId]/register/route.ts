@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
+import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canRegister, getPhaseMessage } from "@/lib/hackathon-phases";
 
 export async function GET(
@@ -35,7 +35,8 @@ export async function GET(
       registered: !!data && data.status !== "cancelled",
       registration: data,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -58,6 +59,15 @@ export async function POST(
 
     if (authError || !user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Check visibility — private hackathons require an invitation
+    const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user.id, user.email ?? undefined);
+    if (!canAccess) {
+      return NextResponse.json(
+        { error: "This is a private hackathon. You need an invitation to register." },
+        { status: 403 }
+      );
     }
 
     // Verify registration window is open
@@ -129,7 +139,8 @@ export async function POST(
     }
 
     return NextResponse.json({ data });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -179,7 +190,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({ message: "Registration cancelled" });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -45,7 +45,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { data: events } = await supabase
     .from("events")
     .select("slug, updated_at")
-    .eq("status", "published");
+    .eq("status", "published")
+    .eq("visibility", "public");
 
   const eventSubPages = [
     "schedule",
@@ -83,7 +84,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       "submission",
       "judging",
       "completed",
-    ]);
+    ])
+    .eq("visibility", "public");
 
   const hackathonSubPages = [
     "overview",

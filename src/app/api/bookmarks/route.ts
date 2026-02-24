@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
+import { UUID_RE } from "@/lib/constants";
 
 /**
  * GET /api/bookmarks?type=event|hackathon
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from("bookmarks")
-      .select("*")
+      .select("id,entity_type,entity_id,created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
@@ -37,7 +39,8 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ data: data || [] });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -79,7 +82,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (typeof entityId !== "string" || !UUID_RE.test(entityId)) {
       return NextResponse.json(
         { error: "entityId must be a valid UUID" },
@@ -109,6 +111,12 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({ data: { bookmarked: false, entityType, entityId } });
     } else {
+      // Verify entity exists and user has access (block bookmarking private entities without invitation)
+      const canAccess = await hasPrivateEntityAccess(supabase, entityType, entityId, user.id, user.email ?? undefined);
+      if (!canAccess) {
+        return NextResponse.json({ error: "Entity not found" }, { status: 404 });
+      }
+
       // Create bookmark
       const { error } = await supabase.from("bookmarks").insert({
         user_id: user.id,
@@ -125,7 +133,8 @@ export async function POST(request: NextRequest) {
         { status: 201 }
       );
     }
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
