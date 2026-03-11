@@ -85,8 +85,18 @@ export default function ContactPage() {
   });
 
   const onSubmit = async (data: ContactFormData) => {
-    // Simulate sending
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const res = await fetch("/api/contact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      toast.error(body?.error || "Failed to send message. Please try again.");
+      return;
+    }
+
     toast.success("Message sent! We'll get back to you soon.");
     reset();
   };

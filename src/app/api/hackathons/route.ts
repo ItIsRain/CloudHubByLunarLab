@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToHackathon } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
 import { UUID_RE } from "@/lib/constants";
-import { canCreateHackathon, getHackathonLimit } from "@/lib/stripe/plan-limits";
+import { canCreateHackathon, getHackathonLimit } from "@/lib/plan-limits";
 import type { SubscriptionTier } from "@/lib/types";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
 

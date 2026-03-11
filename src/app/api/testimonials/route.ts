@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const tier = profile.subscription_tier as string;
     const roles = (profile.roles as string[]) || [];
 
-    if (!["pro", "enterprise"].includes(tier) || !roles.includes("organizer")) {
+    if (tier !== "enterprise" || !roles.includes("organizer")) {
       return NextResponse.json(
         { error: "Only subscribed organizers can submit testimonials" },
         { status: 403 }

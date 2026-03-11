@@ -47,7 +47,7 @@ export function RegisterEventDialog({
 
     try {
       if (isPaid) {
-        // Paid ticket — redirect to Stripe Checkout
+        // Paid ticket — redirect to checkout
         const { url } = await checkoutMutation.mutateAsync({
           eventId,
           ticketId: selectedTicket,

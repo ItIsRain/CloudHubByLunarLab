@@ -288,9 +288,6 @@ export function Navbar() {
                       <DropdownMenuItem asChild>
                         <Link href="/dashboard/settings">Settings</Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/dashboard/billing">Billing</Link>
-                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={logout} className="text-destructive">
                         Sign Out

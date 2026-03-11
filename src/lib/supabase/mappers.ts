@@ -1,4 +1,4 @@
-import type { User, UserRole, SubscriptionTier, SubscriptionStatus, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility } from "@/lib/types";
+import type { User, UserRole, SubscriptionTier, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility } from "@/lib/types";
 
 // =====================================================
 // Profile ↔ User mappers
@@ -26,19 +26,14 @@ export function profileToUser(profile: Record<string, unknown>): User {
     projectsSubmitted: (profile.projects_submitted as number) || 0,
     wins: (profile.wins as number) || 0,
     subscriptionTier: (profile.subscription_tier as SubscriptionTier) || "free",
-    stripeCustomerId: (profile.stripe_customer_id as string) || undefined,
-    subscriptionStatus: (profile.subscription_status as SubscriptionStatus) || "inactive",
-    currentPeriodEnd: (profile.current_period_end as string) || undefined,
     createdAt: (profile.created_at as string) || new Date().toISOString(),
     updatedAt: (profile.updated_at as string) || new Date().toISOString(),
   };
 }
 
-/** Public-safe variant that strips billing / Stripe fields */
-export function profileToPublicUser(profile: Record<string, unknown>): Omit<User, "stripeCustomerId" | "currentPeriodEnd"> {
-  const user = profileToUser(profile);
-  const { stripeCustomerId: _s, currentPeriodEnd: _c, ...publicUser } = user;
-  return publicUser;
+/** Public-safe variant — identical to profileToUser for now */
+export function profileToPublicUser(profile: Record<string, unknown>): User {
+  return profileToUser(profile);
 }
 
 // =====================================================

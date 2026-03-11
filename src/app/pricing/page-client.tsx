@@ -37,7 +37,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PRICING_TIERS } from "@/lib/constants";
-import { useCheckout, useSubscriptionTier } from "@/hooks/use-subscription";
 import { useTestimonials } from "@/hooks/use-testimonials";
 import { usePlatformStats } from "@/hooks/use-stats";
 import { useAuthStore } from "@/store/auth-store";
@@ -47,7 +46,6 @@ import { cn } from "@/lib/utils";
 interface ComparisonRow {
   feature: string;
   free: string | boolean;
-  pro: string | boolean;
   enterprise: string | boolean;
   tooltip?: string;
 }
@@ -63,135 +61,135 @@ const comparisonCategories: ComparisonCategory[] = [
     name: "Events & Hosting",
     icon: <Calendar className="h-4 w-4" />,
     rows: [
-      { feature: "Events per month", free: "3", pro: "Unlimited", enterprise: "Unlimited" },
-      { feature: "Attendees per event", free: "100", pro: "2,000", enterprise: "Unlimited" },
-      { feature: "Event page builder", free: "Basic", pro: "Advanced", enterprise: "Custom" },
-      { feature: "Custom domains", free: false, pro: true, enterprise: true },
-      { feature: "Multi-session events", free: false, pro: true, enterprise: true },
-      { feature: "Recurring events", free: false, pro: true, enterprise: true },
-      { feature: "Event templates", free: "3", pro: "Unlimited", enterprise: "Unlimited" },
+      { feature: "Events per month", free: "3", enterprise: "Unlimited" },
+      { feature: "Attendees per event", free: "100", enterprise: "Unlimited" },
+      { feature: "Event page builder", free: "Basic", enterprise: "Custom" },
+      { feature: "Custom domains", free: false, enterprise: true },
+      { feature: "Multi-session events", free: false, enterprise: true },
+      { feature: "Recurring events", free: false, enterprise: true },
+      { feature: "Event templates", free: "3", enterprise: "Unlimited" },
     ],
   },
   {
     name: "Ticketing & Payments",
     icon: <Ticket className="h-4 w-4" />,
     rows: [
-      { feature: "Free ticket types", free: true, pro: true, enterprise: true },
-      { feature: "Paid ticket types", free: false, pro: true, enterprise: true },
-      { feature: "Promo codes & discounts", free: false, pro: true, enterprise: true },
-      { feature: "Group registrations", free: false, pro: true, enterprise: true },
-      { feature: "Waitlist management", free: false, pro: true, enterprise: true },
-      { feature: "Refund automation", free: false, pro: true, enterprise: true },
-      { feature: "Platform fee", free: "0%", pro: "2.5%", enterprise: "0%" },
-      { feature: "Stripe Connect payouts", free: false, pro: true, enterprise: true },
+      { feature: "Free ticket types", free: true, enterprise: true },
+      { feature: "Paid ticket types", free: false, enterprise: true },
+      { feature: "Promo codes & discounts", free: false, enterprise: true },
+      { feature: "Group registrations", free: false, enterprise: true },
+      { feature: "Waitlist management", free: false, enterprise: true },
+      { feature: "Refund automation", free: false, enterprise: true },
+      { feature: "Platform fee", free: "0%", enterprise: "0%" },
+      { feature: "Payment processing", free: false, enterprise: true },
     ],
   },
   {
     name: "Hackathon Management",
     icon: <Trophy className="h-4 w-4" />,
     rows: [
-      { feature: "Hackathons per month", free: "1", pro: "Unlimited", enterprise: "Unlimited" },
-      { feature: "Team formation", free: true, pro: true, enterprise: true },
-      { feature: "Submission portal", free: true, pro: true, enterprise: true },
-      { feature: "Judging workflows", free: "Basic", pro: "Advanced", enterprise: "Custom" },
-      { feature: "Live leaderboard", free: false, pro: true, enterprise: true },
-      { feature: "Mentor matching", free: false, pro: true, enterprise: true },
-      { feature: "Multi-track hackathons", free: false, pro: true, enterprise: true },
-      { feature: "Sponsor portal", free: false, pro: false, enterprise: true },
-      { feature: "Prize disbursement", free: false, pro: false, enterprise: true },
+      { feature: "Hackathons per month", free: "1", enterprise: "Unlimited" },
+      { feature: "Team formation", free: true, enterprise: true },
+      { feature: "Submission portal", free: true, enterprise: true },
+      { feature: "Judging workflows", free: "Basic", enterprise: "Custom" },
+      { feature: "Live leaderboard", free: false, enterprise: true },
+      { feature: "Mentor matching", free: false, enterprise: true },
+      { feature: "Multi-track hackathons", free: false, enterprise: true },
+      { feature: "Sponsor portal", free: false, enterprise: true },
+      { feature: "Prize disbursement", free: false, enterprise: true },
     ],
   },
   {
     name: "Branding & Design",
     icon: <Palette className="h-4 w-4" />,
     rows: [
-      { feature: "CloudHub branding removed", free: false, pro: true, enterprise: true },
-      { feature: "Custom colors & fonts", free: false, pro: true, enterprise: true },
-      { feature: "Custom email templates", free: false, pro: true, enterprise: true },
-      { feature: "Custom registration forms", free: false, pro: true, enterprise: true },
-      { feature: "White-label experience", free: false, pro: false, enterprise: true },
-      { feature: "Custom CSS/JS injection", free: false, pro: false, enterprise: true },
+      { feature: "CloudHub branding removed", free: false, enterprise: true },
+      { feature: "Custom colors & fonts", free: false, enterprise: true },
+      { feature: "Custom email templates", free: false, enterprise: true },
+      { feature: "Custom registration forms", free: false, enterprise: true },
+      { feature: "White-label experience", free: false, enterprise: true },
+      { feature: "Custom CSS/JS injection", free: false, enterprise: true },
     ],
   },
   {
     name: "Engagement & Community",
     icon: <Users className="h-4 w-4" />,
     rows: [
-      { feature: "Attendee messaging", free: true, pro: true, enterprise: true },
-      { feature: "Email campaigns", free: "100/mo", pro: "10,000/mo", enterprise: "Unlimited" },
-      { feature: "Community spaces", free: "1", pro: "10", enterprise: "Unlimited" },
-      { feature: "Live chat during events", free: false, pro: true, enterprise: true },
-      { feature: "Polls & Q&A", free: false, pro: true, enterprise: true },
-      { feature: "Networking AI matchmaking", free: false, pro: false, enterprise: true },
-      { feature: "Gamification & badges", free: false, pro: true, enterprise: true },
+      { feature: "Attendee messaging", free: true, enterprise: true },
+      { feature: "Email campaigns", free: "100/mo", enterprise: "Unlimited" },
+      { feature: "Community spaces", free: "1", enterprise: "Unlimited" },
+      { feature: "Live chat during events", free: false, enterprise: true },
+      { feature: "Polls & Q&A", free: false, enterprise: true },
+      { feature: "Networking AI matchmaking", free: false, enterprise: true },
+      { feature: "Gamification & badges", free: false, enterprise: true },
     ],
   },
   {
     name: "Streaming & Content",
     icon: <Video className="h-4 w-4" />,
     rows: [
-      { feature: "Embedded video player", free: true, pro: true, enterprise: true },
-      { feature: "Live streaming (RTMP)", free: false, pro: true, enterprise: true },
-      { feature: "Multi-stream support", free: false, pro: "Up to 3", enterprise: "Unlimited" },
-      { feature: "Recordings & replays", free: false, pro: true, enterprise: true },
-      { feature: "Speaker green rooms", free: false, pro: true, enterprise: true },
-      { feature: "CDN delivery", free: false, pro: false, enterprise: true },
+      { feature: "Embedded video player", free: true, enterprise: true },
+      { feature: "Live streaming (RTMP)", free: false, enterprise: true },
+      { feature: "Multi-stream support", free: false, enterprise: "Unlimited" },
+      { feature: "Recordings & replays", free: false, enterprise: true },
+      { feature: "Speaker green rooms", free: false, enterprise: true },
+      { feature: "CDN delivery", free: false, enterprise: true },
     ],
   },
   {
     name: "Analytics & Insights",
     icon: <BarChart3 className="h-4 w-4" />,
     rows: [
-      { feature: "Basic dashboard", free: true, pro: true, enterprise: true },
-      { feature: "Real-time analytics", free: false, pro: true, enterprise: true },
-      { feature: "Attendee demographics", free: false, pro: true, enterprise: true },
-      { feature: "Revenue reports", free: false, pro: true, enterprise: true },
-      { feature: "Funnel analytics", free: false, pro: true, enterprise: true },
-      { feature: "Custom report builder", free: false, pro: false, enterprise: true },
-      { feature: "Data export (CSV/PDF)", free: false, pro: true, enterprise: true },
-      { feature: "Google Analytics integration", free: false, pro: true, enterprise: true },
+      { feature: "Basic dashboard", free: true, enterprise: true },
+      { feature: "Real-time analytics", free: false, enterprise: true },
+      { feature: "Attendee demographics", free: false, enterprise: true },
+      { feature: "Revenue reports", free: false, enterprise: true },
+      { feature: "Funnel analytics", free: false, enterprise: true },
+      { feature: "Custom report builder", free: false, enterprise: true },
+      { feature: "Data export (CSV/PDF)", free: false, enterprise: true },
+      { feature: "Google Analytics integration", free: false, enterprise: true },
     ],
   },
   {
     name: "Integrations & API",
     icon: <Code2 className="h-4 w-4" />,
     rows: [
-      { feature: "Zapier integration", free: false, pro: true, enterprise: true },
-      { feature: "Slack notifications", free: false, pro: true, enterprise: true },
-      { feature: "Google Calendar sync", free: true, pro: true, enterprise: true },
-      { feature: "CRM integrations", free: false, pro: false, enterprise: true },
-      { feature: "REST API access", free: false, pro: "1,000 req/day", enterprise: "Unlimited" },
-      { feature: "Webhooks", free: false, pro: true, enterprise: true },
-      { feature: "GraphQL API", free: false, pro: false, enterprise: true },
-      { feature: "Custom OAuth apps", free: false, pro: false, enterprise: true },
+      { feature: "Zapier integration", free: false, enterprise: true },
+      { feature: "Slack notifications", free: false, enterprise: true },
+      { feature: "Google Calendar sync", free: true, enterprise: true },
+      { feature: "CRM integrations", free: false, enterprise: true },
+      { feature: "REST API access", free: false, enterprise: "Unlimited" },
+      { feature: "Webhooks", free: false, enterprise: true },
+      { feature: "GraphQL API", free: false, enterprise: true },
+      { feature: "Custom OAuth apps", free: false, enterprise: true },
     ],
   },
   {
     name: "Security & Compliance",
     icon: <Shield className="h-4 w-4" />,
     rows: [
-      { feature: "SSL encryption", free: true, pro: true, enterprise: true },
-      { feature: "Two-factor authentication", free: true, pro: true, enterprise: true },
-      { feature: "SSO (SAML/OIDC)", free: false, pro: false, enterprise: true },
-      { feature: "Role-based access control", free: false, pro: true, enterprise: true },
-      { feature: "Audit logs", free: false, pro: false, enterprise: true },
-      { feature: "GDPR tools", free: true, pro: true, enterprise: true },
-      { feature: "SOC 2 compliance", free: false, pro: false, enterprise: true },
-      { feature: "Data residency options", free: false, pro: false, enterprise: true },
+      { feature: "SSL encryption", free: true, enterprise: true },
+      { feature: "Two-factor authentication", free: true, enterprise: true },
+      { feature: "SSO (SAML/OIDC)", free: false, enterprise: true },
+      { feature: "Role-based access control", free: false, enterprise: true },
+      { feature: "Audit logs", free: false, enterprise: true },
+      { feature: "GDPR tools", free: true, enterprise: true },
+      { feature: "SOC 2 compliance", free: false, enterprise: true },
+      { feature: "Data residency options", free: false, enterprise: true },
     ],
   },
   {
     name: "Support",
     icon: <Headphones className="h-4 w-4" />,
     rows: [
-      { feature: "Community forum", free: true, pro: true, enterprise: true },
-      { feature: "Email support", free: true, pro: true, enterprise: true },
-      { feature: "Response time SLA", free: "72h", pro: "24h", enterprise: "4h" },
-      { feature: "Live chat support", free: false, pro: true, enterprise: true },
-      { feature: "Phone support", free: false, pro: false, enterprise: true },
-      { feature: "Dedicated account manager", free: false, pro: false, enterprise: true },
-      { feature: "Onboarding assistance", free: false, pro: true, enterprise: true },
-      { feature: "99.9% uptime SLA", free: false, pro: false, enterprise: true },
+      { feature: "Community forum", free: true, enterprise: true },
+      { feature: "Email support", free: true, enterprise: true },
+      { feature: "Response time SLA", free: "72h", enterprise: "4h" },
+      { feature: "Live chat support", free: false, enterprise: true },
+      { feature: "Phone support", free: false, enterprise: true },
+      { feature: "Dedicated account manager", free: false, enterprise: true },
+      { feature: "Onboarding assistance", free: false, enterprise: true },
+      { feature: "99.9% uptime SLA", free: false, enterprise: true },
     ],
   },
 ];
@@ -234,32 +232,17 @@ const highlights = [
 /* ——— FAQs ——— */
 const faqs = [
   {
-    question: "Can I try CloudHub before committing to a paid plan?",
+    question: "Can I try CloudHub before committing?",
     answer:
-      "Absolutely. Our Free plan is not a trial — it is a fully functional tier with no time limit. You can host up to 3 events per month with up to 100 attendees each at zero cost, forever. You also get hackathon management, team formation, and all core features. Upgrade whenever you are ready.",
+      "Absolutely. Our Free plan is not a trial — it is a fully functional tier with no time limit. You can host up to 3 events per month with up to 100 attendees each at zero cost, forever. You also get hackathon management, team formation, and all core features.",
   },
   {
-    question: "How does annual billing work?",
+    question: "How do I get an Enterprise plan?",
     answer:
-      "When you switch to annual billing, you pay for 12 months upfront and receive a 20% discount compared to monthly pricing. Your subscription renews automatically each year, and you can cancel or switch back to monthly at any time before renewal.",
+      "Contact our sales team via the contact form or email hello@lnr.ae. We will work with you to understand your needs and put together a custom plan with tailored pricing, features, and support.",
   },
   {
-    question: "Can I change my plan at any time?",
-    answer:
-      "Yes. You can upgrade or downgrade your plan at any point. When upgrading, you will be charged the prorated difference for the remainder of your billing cycle. When downgrading, the new rate applies at your next billing date. No penalties ever.",
-  },
-  {
-    question: "What payment methods do you accept?",
-    answer:
-      "We accept all major credit and debit cards (Visa, Mastercard, American Express) processed securely through Stripe. Enterprise customers can also pay via invoice with net-30 terms. We also support wire transfers for annual plans.",
-  },
-  {
-    question: "Is there a refund policy?",
-    answer:
-      "We offer a 30-day money-back guarantee on all paid plans. If CloudHub is not the right fit, contact our support team within 30 days of your purchase for a full refund — no questions asked.",
-  },
-  {
-    question: "What happens if I exceed my plan limits?",
+    question: "What happens if I exceed my free plan limits?",
     answer:
       "We will notify you as you approach your plan limits. Your events will never be interrupted — we believe in never ruining your event. We will reach out to help you find the right plan. There are no surprise overage charges.",
   },
@@ -271,7 +254,7 @@ const faqs = [
   {
     question: "Do you offer discounts for nonprofits or education?",
     answer:
-      "Yes. Verified nonprofits, educational institutions, and open-source projects receive 50% off any paid plan. Contact our team with proof of status and we will apply the discount immediately.",
+      "Yes. Verified nonprofits, educational institutions, and open-source projects can receive special pricing. Contact our team with proof of status and we will work out a plan that fits your needs.",
   },
 ];
 
@@ -282,16 +265,14 @@ function formatStatValue(value: number, prefix = ""): string {
 }
 
 export default function PricingPage() {
-  const [isAnnual, setIsAnnual] = React.useState(false);
   const [openFaq, setOpenFaq] = React.useState<number | null>(null);
   const [expandedCategories, setExpandedCategories] = React.useState<Set<string>>(
     new Set(["Events & Hosting"])
   );
-  const [isCheckoutLoading, setIsCheckoutLoading] = React.useState(false);
 
-  const checkout = useCheckout();
-  const currentTier = useSubscriptionTier();
+  const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const currentTier = user?.subscriptionTier || "free";
   const { data: testimonialsData, isLoading: testimonialsLoading } = useTestimonials(6);
   const { data: statsData } = usePlatformStats();
   const testimonials = testimonialsData?.data || [];
@@ -359,43 +340,6 @@ export default function PricingPage() {
               ))}
             </div>
 
-            {/* Billing toggle */}
-            <div className="flex items-center justify-center gap-4 mb-12">
-              <span
-                className={cn(
-                  "text-sm font-medium transition-colors",
-                  !isAnnual ? "text-foreground" : "text-muted-foreground"
-                )}
-              >
-                Monthly
-              </span>
-              <button
-                onClick={() => setIsAnnual(!isAnnual)}
-                className={cn(
-                  "relative h-7 w-12 rounded-full transition-colors duration-200",
-                  isAnnual ? "bg-primary" : "bg-muted-foreground/30"
-                )}
-              >
-                <motion.div
-                  className="absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-md"
-                  animate={{ left: isAnnual ? "calc(100% - 1.625rem)" : "0.125rem" }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                />
-              </button>
-              <span
-                className={cn(
-                  "text-sm font-medium transition-colors",
-                  isAnnual ? "text-foreground" : "text-muted-foreground"
-                )}
-              >
-                Annual
-              </span>
-              {isAnnual && (
-                <Badge variant="success" className="ml-1">
-                  Save 20%
-                </Badge>
-              )}
-            </div>
           </motion.div>
         </div>
       </section>
@@ -403,43 +347,20 @@ export default function PricingPage() {
       {/* ————— Pricing Cards ————— */}
       <section className="pb-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
+          <div className="grid md:grid-cols-2 gap-6 lg:gap-8 max-w-4xl mx-auto">
             {PRICING_TIERS.map((tier, i) => {
               const descriptions: Record<string, string> = {
                 Free: "Perfect for getting started. Host events and hackathons with zero cost — forever.",
-                Pro: "For serious organizers who need powerful tools, branding, and analytics.",
                 Enterprise: "For organizations that demand custom solutions, security, and scale.",
               };
 
               const isCurrentPlan = isAuthenticated && currentTier === tier.id;
-              const displayPrice = tier.isContactSales
-                ? null
-                : isAnnual
-                  ? tier.annualPrice
-                  : tier.monthlyPrice;
-
-              const handleCtaClick = async () => {
-                if (tier.isContactSales) return; // Link handles navigation
-                if (tier.id === "free") return; // Link handles navigation
-                if (isCurrentPlan) return;
-
-                setIsCheckoutLoading(true);
-                try {
-                  await checkout(isAnnual ? "annual" : "monthly");
-                } catch {
-                  // Error handled by checkout
-                } finally {
-                  setIsCheckoutLoading(false);
-                }
-              };
 
               const ctaLabel = isCurrentPlan
                 ? "Current Plan"
                 : tier.isContactSales
                   ? "Talk to Sales"
-                  : tier.id === "free"
-                    ? "Get Started Free"
-                    : "Start Free Trial";
+                  : "Get Started Free";
 
               return (
                 <motion.div
@@ -485,96 +406,46 @@ export default function PricingPage() {
                         <div className="flex items-baseline gap-1">
                           {tier.isContactSales ? (
                             <span className="font-display text-5xl font-bold">Custom</span>
-                          ) : displayPrice === 0 ? (
-                            <span className="font-display text-5xl font-bold">Free</span>
                           ) : (
-                            <>
-                              {isAnnual && tier.monthlyPrice !== null && tier.monthlyPrice > 0 && (
-                                <span className="text-2xl text-muted-foreground/50 line-through mr-1">
-                                  ${tier.monthlyPrice}
-                                </span>
-                              )}
-                              <span className="font-display text-5xl font-bold">
-                                ${displayPrice}
-                              </span>
-                              <span className="text-muted-foreground text-sm">/mo</span>
-                            </>
+                            <span className="font-display text-5xl font-bold">Free</span>
                           )}
                         </div>
-                        {!tier.isContactSales && displayPrice !== null && displayPrice > 0 && isAnnual && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Billed annually (${displayPrice * 12}/yr)
-                          </p>
-                        )}
-                        {tier.isContactSales && (
+                        {tier.isContactSales ? (
                           <p className="text-xs text-muted-foreground mt-1">
                             Tailored to your needs
                           </p>
-                        )}
-                        {displayPrice === 0 && (
+                        ) : (
                           <p className="text-xs text-muted-foreground mt-1">
                             No credit card required
                           </p>
                         )}
                       </div>
 
-                      {tier.isContactSales || tier.id === "free" ? (
-                        <Button
-                          className="w-full mb-6"
-                          variant={tier.isPopular ? "default" : "outline"}
-                          size="lg"
-                          disabled={isCurrentPlan}
-                          asChild={!isCurrentPlan}
-                        >
-                          {isCurrentPlan ? (
-                            <span>{ctaLabel}</span>
-                          ) : (
-                            <Link href={tier.isContactSales ? "/contact" : "/register"}>
-                              {ctaLabel}
-                              <ArrowRight className="ml-2 h-4 w-4" />
-                            </Link>
-                          )}
-                        </Button>
-                      ) : (
-                        <Button
-                          className="w-full mb-6"
-                          variant={tier.isPopular ? "default" : "outline"}
-                          size="lg"
-                          disabled={isCurrentPlan || isCheckoutLoading}
-                          onClick={handleCtaClick}
-                        >
-                          {isCheckoutLoading ? "Redirecting..." : ctaLabel}
-                          {!isCurrentPlan && !isCheckoutLoading && (
+                      <Button
+                        className="w-full mb-6"
+                        variant={tier.isContactSales ? "default" : "outline"}
+                        size="lg"
+                        disabled={isCurrentPlan}
+                        asChild={!isCurrentPlan}
+                      >
+                        {isCurrentPlan ? (
+                          <span>{ctaLabel}</span>
+                        ) : (
+                          <Link href={tier.isContactSales ? "/contact" : "/register"}>
+                            {ctaLabel}
                             <ArrowRight className="ml-2 h-4 w-4" />
-                          )}
-                        </Button>
-                      )}
+                          </Link>
+                        )}
+                      </Button>
 
                       {/* Feature list */}
                       <div className="space-y-3">
-                        {tier.id === "free" && (
-                          <>
-                            {tier.features.map((f) => (
-                              <FeatureLine key={f}>{f}</FeatureLine>
-                            ))}
-                          </>
-                        )}
-                        {tier.id === "pro" && (
-                          <>
-                            <FeatureLine highlight>Everything in Free, plus:</FeatureLine>
-                            {tier.features.map((f) => (
-                              <FeatureLine key={f}>{f}</FeatureLine>
-                            ))}
-                          </>
-                        )}
                         {tier.id === "enterprise" && (
-                          <>
-                            <FeatureLine highlight>Everything in Pro, plus:</FeatureLine>
-                            {tier.features.map((f) => (
-                              <FeatureLine key={f}>{f}</FeatureLine>
-                            ))}
-                          </>
+                          <FeatureLine highlight>Everything in Free, plus:</FeatureLine>
                         )}
+                        {tier.features.map((f) => (
+                          <FeatureLine key={f}>{f}</FeatureLine>
+                        ))}
                       </div>
                     </CardContent>
                   </Card>
@@ -592,17 +463,17 @@ export default function PricingPage() {
           >
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Lock className="h-4 w-4 text-primary" />
-              <span>Secure payments via Stripe</span>
+              <span>Free forever — no credit card needed</span>
             </div>
             <span className="hidden sm:inline text-muted-foreground/40">|</span>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Shield className="h-4 w-4 text-primary" />
-              <span>30-day money-back guarantee</span>
+              <span>Enterprise-grade security</span>
             </div>
             <span className="hidden sm:inline text-muted-foreground/40">|</span>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Infinity className="h-4 w-4 text-primary" />
-              <span>Cancel anytime, no lock-in</span>
+              <span>No hidden fees or lock-in</span>
             </div>
           </motion.div>
         </div>
@@ -782,20 +653,17 @@ export default function PricingPage() {
             <Card className="overflow-hidden">
               {/* Sticky header */}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px]">
+                <table className="w-full min-w-[480px]">
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      <th className="text-left px-6 py-4 text-sm font-semibold w-[45%]">
+                      <th className="text-left px-6 py-4 text-sm font-semibold w-[55%]">
                         Feature
                       </th>
-                      <th className="text-center px-4 py-4 text-sm font-semibold w-[18%]">
+                      <th className="text-center px-4 py-4 text-sm font-semibold w-[22%]">
                         Free
                       </th>
-                      <th className="text-center px-4 py-4 text-sm font-semibold w-[18%]">
-                        <span className="text-primary">Pro</span>
-                      </th>
-                      <th className="text-center px-4 py-4 text-sm font-semibold w-[18%]">
-                        Enterprise
+                      <th className="text-center px-4 py-4 text-sm font-semibold w-[22%]">
+                        <span className="text-primary">Enterprise</span>
                       </th>
                     </tr>
                   </thead>
@@ -810,7 +678,7 @@ export default function PricingPage() {
                             onClick={() => toggleCategory(category.name)}
                           >
                             <td
-                              colSpan={4}
+                              colSpan={3}
                               className="px-6 py-3"
                             >
                               <div className="flex items-center gap-3">
@@ -854,10 +722,7 @@ export default function PricingPage() {
                                     <CellValue value={row.free} />
                                   </td>
                                   <td className="px-4 py-3 text-center">
-                                    <CellValue value={row.pro} highlight />
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <CellValue value={row.enterprise} />
+                                    <CellValue value={row.enterprise} highlight />
                                   </td>
                                 </motion.tr>
                               ))}
@@ -998,7 +863,7 @@ export default function PricingPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-6">
-                  No credit card required. 30-day money-back guarantee on paid plans.
+                  No credit card required. Free forever on the Starter plan.
                 </p>
               </CardContent>
             </Card>
