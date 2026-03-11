@@ -41,7 +41,7 @@ const featureCategories = [
       {
         icon: Ticket,
         title: "Ticketing & Registration",
-        description: "Integrated ticketing with multiple tiers, promo codes, early-bird pricing, and Stripe payments.",
+        description: "Integrated ticketing with multiple tiers, promo codes, early-bird pricing, and secure payments.",
       },
       {
         icon: Users,

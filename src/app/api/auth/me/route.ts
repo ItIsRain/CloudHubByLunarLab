@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { stripe } from "@/lib/stripe/config";
 import { profileToUser } from "@/lib/supabase/mappers";
 import { PROFILE_COLS } from "@/lib/constants";
 
@@ -103,22 +102,6 @@ export async function DELETE() {
 
     if (authError || !user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    // Cancel active Stripe subscription before deleting account
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("stripe_subscription_id")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.stripe_subscription_id) {
-      try {
-        await stripe.subscriptions.cancel(profile.stripe_subscription_id);
-      } catch (err) {
-        // Subscription may already be canceled — continue with deletion
-        console.warn("Stripe subscription cancel failed (may be already canceled):", err);
-      }
     }
 
     // Delete profile (cascade will handle related rows)

@@ -54,7 +54,7 @@ const features = [
     icon: Ticket,
     title: "Ticketing & Payments",
     description:
-      "Flexible ticket types, promo codes, group discounts, and seamless Stripe integration for secure payments.",
+      "Flexible ticket types, promo codes, group discounts, and seamless payment integration for secure transactions.",
   },
   {
     icon: Video,
@@ -600,11 +600,11 @@ export default function HomePage() {
               <span className="gradient-text">pricing</span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Start for free, upgrade when you need more. No hidden fees.
+              Start for free. Need more? Let&apos;s talk.
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {PRICING_TIERS.map((tier, i) => (
               <motion.div
                 key={tier.id}

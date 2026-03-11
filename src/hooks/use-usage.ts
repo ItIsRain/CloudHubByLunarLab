@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useMyEvents } from "@/hooks/use-events";
 import { useMyHackathons } from "@/hooks/use-hackathons";
-import { useSubscriptionTier } from "@/hooks/use-subscription";
+import { useAuthStore } from "@/store/auth-store";
 import { PLAN_LIMITS } from "@/lib/constants";
 import type { SubscriptionTier } from "@/lib/types";
 
@@ -42,6 +42,11 @@ function buildMetric(used: number, limit: number): UsageMetric {
     isAtLimit: !isUnlimited && used >= limit,
     isNearLimit: !isUnlimited && used < limit && percentage >= 70,
   };
+}
+
+function useSubscriptionTier(): SubscriptionTier {
+  const user = useAuthStore((state) => state.user);
+  return user?.subscriptionTier || "free";
 }
 
 export function useUsage(): UsageData {

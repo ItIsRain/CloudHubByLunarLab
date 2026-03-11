@@ -3,8 +3,7 @@
 // =====================================================
 
 // Subscription Types
-export type SubscriptionTier = "free" | "pro" | "enterprise";
-export type SubscriptionStatus = "inactive" | "active" | "past_due" | "canceled" | "trialing";
+export type SubscriptionTier = "free" | "enterprise";
 
 export interface PlanLimits {
   eventsPerMonth: number;
@@ -41,9 +40,6 @@ export interface User {
   projectsSubmitted: number;
   wins: number;
   subscriptionTier: SubscriptionTier;
-  stripeCustomerId?: string;
-  subscriptionStatus: SubscriptionStatus;
-  currentPeriodEnd?: string;
   createdAt: string;
   updatedAt: string;
 }

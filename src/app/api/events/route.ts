@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToEvent } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
 import { UUID_RE } from "@/lib/constants";
-import { canCreateEvent, getEventLimit } from "@/lib/stripe/plan-limits";
+import { canCreateEvent, getEventLimit } from "@/lib/plan-limits";
 import type { SubscriptionTier } from "@/lib/types";
 
 export async function GET(request: NextRequest) {

@@ -7,10 +7,10 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 // Profile SELECT columns (centralized to avoid SELECT *)
 // =====================================================
 /** All profile columns needed by profileToUser mapper (for authenticated user's own data) */
-export const PROFILE_COLS = "id,email,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,stripe_customer_id,subscription_status,current_period_end,created_at,updated_at";
+export const PROFILE_COLS = "id,email,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,created_at,updated_at";
 
-/** Public-safe profile columns (excludes stripe_customer_id, stripe_subscription_id, current_period_end) */
-export const PROFILE_PUBLIC_COLS = "id,email,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,subscription_status,created_at,updated_at";
+/** Public-safe profile columns */
+export const PROFILE_PUBLIC_COLS = "id,email,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,created_at,updated_at";
 
 /** Notification columns needed by dbRowToNotification mapper */
 export const NOTIFICATION_COLS = "id,type,title,message,link,is_read,created_at";
@@ -113,16 +113,6 @@ export const PLAN_LIMITS: Record<SubscriptionTier, PlanLimits> = {
     apiAccess: false,
     prioritySupport: false,
   },
-  pro: {
-    eventsPerMonth: -1, // unlimited
-    hackathonsPerMonth: -1,
-    attendeesPerEvent: 2000,
-    paidTicketing: true,
-    customBranding: true,
-    analytics: true,
-    apiAccess: false,
-    prioritySupport: true,
-  },
   enterprise: {
     eventsPerMonth: -1,
     hackathonsPerMonth: -1,
@@ -170,31 +160,6 @@ export const PRICING_TIERS: PricingTierConfig[] = [
       "Google Calendar sync",
       "SSL & 2FA security",
       "Community forum support",
-    ],
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    monthlyPrice: 49,
-    annualPrice: 39,
-    currency: "USD",
-    isPopular: true,
-    isContactSales: false,
-    features: [
-      "Unlimited events & hackathons",
-      "Up to 2,000 attendees per event",
-      "Paid ticketing + Stripe payouts",
-      "Promo codes & group discounts",
-      "Custom branding & colors",
-      "Advanced judging workflows",
-      "Live streaming (RTMP)",
-      "Recordings & replays",
-      "Real-time analytics & reports",
-      "10,000 emails/month",
-      "Zapier + Slack integrations",
-      "Live chat & polls",
-      "Gamification & badges",
-      "Priority support (24h SLA)",
     ],
   },
   {

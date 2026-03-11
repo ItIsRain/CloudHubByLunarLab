@@ -52,7 +52,6 @@ export function MentorsTab({ hackathon, hackathonId }: MentorsTabProps) {
         projectsSubmitted: 0,
         wins: 0,
         subscriptionTier: "free",
-        subscriptionStatus: "inactive",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },

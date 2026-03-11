@@ -245,7 +245,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Check if registration is a paid one — prevent deletion (must refund via Stripe)
+    // Check if registration is a paid one — prevent deletion (must refund manually)
     const { data: registration } = await supabase
       .from("event_registrations")
       .select("id, payment_status")
