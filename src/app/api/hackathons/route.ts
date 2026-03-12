@@ -1,16 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToHackathon } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
 import { UUID_RE, categories } from "@/lib/constants";
 import { canCreateHackathon, getHackathonLimit } from "@/lib/plan-limits";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import type { SubscriptionTier } from "@/lib/types";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
     const { searchParams } = new URL(request.url);
+
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
+
+    // If a Bearer token was provided but invalid, reject immediately
+    const hasBearer = request.headers.get("authorization")?.startsWith("Bearer ");
+    if (hasBearer && auth.type === "unauthenticated") {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
+
+    // For API key auth, verify the "hackathons" scope
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    // API key requests use admin client (no session cookies);
+    // session requests use the regular server client
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     const search = searchParams.get("search");
     const category = searchParams.get("category");
@@ -58,11 +83,11 @@ export async function GET(request: NextRequest) {
 
     if (!isOwnHackathons) {
       const idsParam = searchParams.get("ids");
-      if (idsParam) {
-        // bookmarks: include unlisted, hide private
+      if (idsParam && auth.type === "session") {
+        // bookmarks (session only): include unlisted, hide private
         query = query.neq("visibility", "private");
       } else {
-        // explore / other user's profile: only public
+        // explore / API key / other user's profile: only public
         query = query.eq("visibility", "public");
       }
     }
