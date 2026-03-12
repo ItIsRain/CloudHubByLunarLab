@@ -2,8 +2,9 @@ import { buildMetadata } from "@/lib/seo";
 import ApiDocsPage from "./page-client";
 
 export const metadata = buildMetadata({
-  title: "API - Coming Soon",
-  description: "The CloudHub developer API is coming soon. Build custom integrations for events, hackathons, teams, and more.",
+  title: "API Reference",
+  description:
+    "Complete REST API documentation for CloudHub. Integrate events, hackathons, teams, and submissions into your workflows with our developer API.",
   path: "/api-docs",
 });
 
