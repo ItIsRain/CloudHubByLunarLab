@@ -22,3 +22,7 @@ export function getEventLimit(tier: SubscriptionTier): number {
 export function getHackathonLimit(tier: SubscriptionTier): number {
   return PLAN_LIMITS[tier].hackathonsPerMonth;
 }
+
+export function canUseApi(tier: SubscriptionTier): boolean {
+  return PLAN_LIMITS[tier].apiAccess;
+}
