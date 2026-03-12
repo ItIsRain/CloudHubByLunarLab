@@ -42,20 +42,23 @@ export async function GET(
       }
     }
 
-    // Auto-update status based on timeline dates
+    // Auto-update status based on timeline dates (immutable — create new row object)
     const timeline = rowToTimeline(row);
     const computedPhase = getCurrentPhase(timeline);
-    if (timeline.status !== "draft" && row.status !== computedPhase) {
-      row.status = computedPhase;
+    const effectiveRow =
+      timeline.status !== "draft" && row.status !== computedPhase
+        ? { ...row, status: computedPhase }
+        : row;
+
+    if (effectiveRow !== row) {
       // Fire-and-forget DB update
-      Promise.resolve(
-        supabase
-          .from("hackathons")
-          .update({ status: computedPhase })
-          .eq("id", row.id as string)
-      ).catch((err) => {
-        console.warn("Failed to auto-update hackathon status:", err);
-      });
+      supabase
+        .from("hackathons")
+        .update({ status: computedPhase })
+        .eq("id", row.id as string)
+        .then(({ error: updateErr }) => {
+          if (updateErr) console.warn("Failed to auto-update hackathon status:", updateErr);
+        });
     }
 
     const headers: Record<string, string> = row.visibility === "public"
@@ -63,7 +66,7 @@ export async function GET(
       : {};
 
     return NextResponse.json(
-      { data: dbRowToHackathon(row) },
+      { data: dbRowToHackathon(effectiveRow) },
       { headers }
     );
   } catch (err) {
@@ -165,6 +168,19 @@ export async function PATCH(
       }
     }
 
+    // Validate category
+    if (updates.category) {
+      const { categories: cats } = await import("@/lib/constants");
+      if (!cats.map((c) => c.value).includes(updates.category as string)) {
+        return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+      }
+    }
+
+    // Validate tags
+    if (updates.tags && (!Array.isArray(updates.tags) || (updates.tags as string[]).length > 20)) {
+      return NextResponse.json({ error: "Tags must be an array of up to 20 items" }, { status: 400 });
+    }
+
     // Prevent publishing without required dates
     const targetStatus = updates.status as string | undefined;
     if (targetStatus && targetStatus !== "draft") {
@@ -195,7 +211,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to update hackathon" }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -250,7 +266,7 @@ export async function DELETE(
       .or(hackathonFilter(hackathonId));
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to delete hackathon" }, { status: 400 });
     }
 
     return NextResponse.json({ message: "Hackathon deleted successfully" });

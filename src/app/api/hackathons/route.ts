@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToHackathon } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
-import { UUID_RE } from "@/lib/constants";
+import { UUID_RE, categories } from "@/lib/constants";
 import { canCreateHackathon, getHackathonLimit } from "@/lib/plan-limits";
 import type { SubscriptionTier } from "@/lib/types";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
@@ -48,8 +48,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Visibility filtering
-    // Only the organizer themselves can see their own private/unlisted hackathons
-    const { data: { user } } = await supabase.auth.getUser();
+    // Only call getUser() when we actually need auth context (organizer's own hackathons)
+    let user = null;
+    if (organizerId) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      user = authUser;
+    }
     const isOwnHackathons = organizerId && user?.id === organizerId;
 
     if (!isOwnHackathons) {
@@ -99,7 +103,8 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to fetch hackathons:", error.message);
+      return NextResponse.json({ error: "Failed to fetch hackathons" }, { status: 400 });
     }
 
     const hackathons = (data || []).map((row: Record<string, unknown>) => {
@@ -220,6 +225,19 @@ export async function POST(request: NextRequest) {
       if (key in body) insertData[key] = body[key];
     }
 
+    // Validate enum fields
+    const VALID_CATEGORIES = categories.map((c) => c.value);
+    if (insertData.category && !VALID_CATEGORIES.includes(insertData.category as string)) {
+      return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+    }
+    const VALID_TYPES = ["in-person", "virtual", "hybrid"];
+    if (insertData.type && !VALID_TYPES.includes(insertData.type as string)) {
+      return NextResponse.json({ error: "Invalid hackathon type" }, { status: 400 });
+    }
+    if (insertData.tags && (!Array.isArray(insertData.tags) || (insertData.tags as string[]).length > 20)) {
+      return NextResponse.json({ error: "Tags must be an array of up to 20 items" }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from("hackathons")
       .insert(insertData)
@@ -227,7 +245,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to create hackathon:", error.message);
+      return NextResponse.json({ error: "Failed to create hackathon" }, { status: 400 });
     }
 
     return NextResponse.json({

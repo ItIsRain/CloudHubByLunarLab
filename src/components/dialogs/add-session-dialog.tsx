@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/forms/date-time-picker";
 import { generateId } from "@/lib/utils";
 import type { AgendaSession, Speaker } from "@/lib/types";
 
@@ -44,6 +45,7 @@ export function AddSessionDialog({
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors },
   } = useForm<SessionForm>({
     resolver: zodResolver(sessionSchema),
@@ -112,14 +114,32 @@ export function AddSessionDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-sm font-medium">Start Time *</label>
-              <Input type="datetime-local" {...register("startTime")} />
+              <Controller
+                name="startTime"
+                control={control}
+                render={({ field }) => (
+                  <DateTimePicker
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
               {errors.startTime && (
                 <p className="text-xs text-destructive">{errors.startTime.message}</p>
               )}
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">End Time *</label>
-              <Input type="datetime-local" {...register("endTime")} />
+              <Controller
+                name="endTime"
+                control={control}
+                render={({ field }) => (
+                  <DateTimePicker
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
               {errors.endTime && (
                 <p className="text-xs text-destructive">{errors.endTime.message}</p>
               )}

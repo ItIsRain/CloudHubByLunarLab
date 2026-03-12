@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Failed to fetch bookmarks:", error.message);
+      return NextResponse.json({ error: "Failed to fetch bookmarks" }, { status: 500 });
     }
 
     return NextResponse.json({ data: data || [] });
@@ -106,7 +107,8 @@ export async function POST(request: NextRequest) {
         .eq("id", existing.id);
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error("Failed to toggle bookmark:", error.message);
+        return NextResponse.json({ error: "Failed to toggle bookmark" }, { status: 500 });
       }
 
       return NextResponse.json({ data: { bookmarked: false, entityType, entityId } });
@@ -125,7 +127,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error("Failed to toggle bookmark:", error.message);
+        return NextResponse.json({ error: "Failed to toggle bookmark" }, { status: 500 });
       }
 
       return NextResponse.json(

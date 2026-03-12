@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     if (insertError || !invitation) {
       return NextResponse.json(
-        { error: insertError?.message || "Failed to create invitation" },
+        { error: "Failed to create invitation" },
         { status: 500 }
       );
     }
@@ -190,7 +190,7 @@ export async function GET(request: NextRequest) {
       .limit(200);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch invitations" }, { status: 400 });
     }
 
     const invitations = (data || []).map((row: Record<string, unknown>) =>
@@ -257,7 +257,7 @@ export async function DELETE(request: NextRequest) {
       .eq("id", invitationId);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to delete invitation" }, { status: 400 });
     }
 
     return NextResponse.json({ message: "Invitation revoked" });

@@ -121,7 +121,7 @@ export async function POST(
     }
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to register" }, { status: 400 });
     }
 
     // Update participant_count on the hackathon
@@ -165,14 +165,15 @@ export async function DELETE(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    // Soft-delete: mark as cancelled (consistent with event registration pattern)
     const { error } = await supabase
       .from("hackathon_registrations")
-      .delete()
+      .update({ status: "cancelled" })
       .eq("hackathon_id", hackathonId)
       .eq("user_id", user.id);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to cancel registration" }, { status: 400 });
     }
 
     // Update participant_count

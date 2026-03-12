@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         // If profile exists but name or roles are missing, redirect to onboarding
         const hasName = profile.name && profile.name.trim().length > 0;
         const hasRoles =
-          Array.isArray(profile.roles) && profile.roles.length > 0 && profile.roles[0] !== "attendee";
+          Array.isArray(profile.roles) && profile.roles.some((r: string) => r !== "attendee");
 
         if (!hasName) {
           return NextResponse.redirect(`${baseUrl}/onboarding`);

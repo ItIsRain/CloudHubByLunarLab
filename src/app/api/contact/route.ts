@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const contactSchema = z.object({
   name: z.string().min(2).max(100),
@@ -9,32 +10,14 @@ const contactSchema = z.object({
   message: z.string().min(10).max(5000),
 });
 
-// Simple in-memory rate limiter: max 5 requests per IP per 15 minutes
-const rateMap = new Map<string, number[]>();
-const RATE_WINDOW_MS = 15 * 60 * 1000;
-const RATE_LIMIT = 5;
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const timestamps = rateMap.get(ip) || [];
-  const recent = timestamps.filter((t) => now - t < RATE_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT) return true;
-  recent.push(now);
-  rateMap.set(ip, recent);
-  return false;
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const ip =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
-
-    if (isRateLimited(ip)) {
+    const ip = getClientIp(request);
+    const rl = checkRateLimit(ip, { namespace: "contact", limit: 5, windowMs: 15 * 60 * 1000 });
+    if (rl.limited) {
       return NextResponse.json(
         { error: "Too many requests. Please try again later." },
-        { status: 429 }
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
       );
     }
 

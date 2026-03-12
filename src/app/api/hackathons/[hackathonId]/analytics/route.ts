@@ -39,7 +39,7 @@ export async function GET(
       .eq("hackathon_id", hackathonId);
 
     if (regError) {
-      return NextResponse.json({ error: regError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch analytics" }, { status: 400 });
     }
 
     const registrationsByStatus: Record<string, number> = {};
@@ -67,7 +67,7 @@ export async function GET(
       .eq("hackathon_id", hackathonId);
 
     if (teamError) {
-      return NextResponse.json({ error: teamError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch analytics" }, { status: 400 });
     }
 
     // 3. Submissions for this hackathon (need full rows for track distribution)
@@ -77,7 +77,7 @@ export async function GET(
       .eq("hackathon_id", hackathonId);
 
     if (subError) {
-      return NextResponse.json({ error: subError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch analytics" }, { status: 400 });
     }
 
     const submissionCount = submissions?.length || 0;
@@ -109,7 +109,7 @@ export async function GET(
 
       if (scoreError) {
         return NextResponse.json(
-          { error: scoreError.message },
+          { error: "Failed to fetch analytics" },
           { status: 400 }
         );
       }

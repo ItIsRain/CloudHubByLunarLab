@@ -132,8 +132,8 @@ export default function EventDetailPage() {
     );
   }
 
-  const isFree = event.tickets.every((t) => t.price === 0);
-  const lowestPrice = Math.min(...event.tickets.map((t) => t.price));
+  const isFree = !event.tickets.length || event.tickets.every((t) => t.price === 0);
+  const lowestPrice = event.tickets.length ? Math.min(...event.tickets.map((t) => t.price)) : 0;
   const relatedEvents = relatedEventsAll.filter((e) => e.id !== event.id).slice(0, 3);
   const faqItems = event.faq ?? [];
 

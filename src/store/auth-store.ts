@@ -193,6 +193,15 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     }
 
     set({ user: null, isAuthenticated: false });
+    // Clear TanStack Query cache (same as logout)
+    if (typeof window !== "undefined") {
+      try {
+        const { queryClient } = await import("@/providers/query-provider");
+        queryClient.clear();
+      } catch (err) {
+        console.warn("Failed to clear query cache on account delete:", err);
+      }
+    }
     return true;
   },
 

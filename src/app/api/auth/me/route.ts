@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileToUser } from "@/lib/supabase/mappers";
@@ -55,16 +56,31 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
 
-    // Allowlist: only permit fields users should be able to update
-    const ALLOWED_FIELDS = [
-      "name", "username", "avatar", "bio", "headline",
-      "location", "website", "github", "twitter", "linkedin",
-      "skills", "interests",
-    ];
-    const updates: Record<string, unknown> = {};
-    for (const key of ALLOWED_FIELDS) {
-      if (key in body) updates[key] = body[key];
+    // Zod schema for profile updates — validates types and constrains sizes
+    const profileUpdateSchema = z.object({
+      name: z.string().min(2).max(100).optional(),
+      username: z.string().min(2).max(50).regex(/^[a-zA-Z0-9_-]+$/, "Username may only contain letters, numbers, hyphens, and underscores").optional(),
+      avatar: z.string().max(2048).nullable().optional(),
+      bio: z.string().max(500).nullable().optional(),
+      headline: z.string().max(120).nullable().optional(),
+      location: z.string().max(100).nullable().optional(),
+      website: z.string().url().max(500).nullable().optional().or(z.literal("").transform(() => null)),
+      github: z.string().max(100).nullable().optional(),
+      twitter: z.string().max(100).nullable().optional(),
+      linkedin: z.string().max(200).nullable().optional(),
+      skills: z.array(z.string().max(50)).max(50).optional(),
+      interests: z.array(z.string().max(50)).max(50).optional(),
+    }).strict();
+
+    const parsed = profileUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid profile data", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
     }
+
+    const updates = parsed.data;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
@@ -78,7 +94,7 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to update profile" }, { status: 400 });
     }
 
     return NextResponse.json({ profile });

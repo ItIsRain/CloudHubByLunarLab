@@ -92,7 +92,7 @@ export async function POST(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to submit score" }, { status: 400 });
     }
 
     // Recalculate average score
@@ -186,7 +186,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to submit score" }, { status: 400 });
     }
 
     // Recalculate average score

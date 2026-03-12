@@ -20,7 +20,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TagSelector } from "@/components/forms/tag-selector";
-import type { Event } from "@/lib/types";
+import { DateTimePicker } from "@/components/forms/date-time-picker";
+import { LocationPicker } from "@/components/forms/location-picker";
+import type { Event, EventType } from "@/lib/types";
 import { useUpdateEvent } from "@/hooks/use-events";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -44,16 +46,6 @@ const eventCategories = [
   "meetup",
   "networking",
 ] as const;
-
-const eventTypes = ["in-person", "online", "hybrid"] as const;
-
-function toDateTimeInputValue(isoStr: string): string {
-  if (!isoStr) return "";
-  const d = new Date(isoStr);
-  if (isNaN(d.getTime())) return isoStr.slice(0, 16);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 const selectClasses =
   "flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50";
@@ -183,12 +175,15 @@ export function EditTab({ event, eventId }: EditTabProps) {
     title: "",
     description: "",
     category: "tech",
-    type: "in-person",
+    type: "in-person" as EventType,
     tags: [] as string[],
     startDate: "",
     endDate: "",
-    location: "",
-    capacity: 100,
+    address: "",
+    city: "",
+    country: "",
+    platform: "",
+    meetingUrl: "",
   });
 
   React.useEffect(() => {
@@ -199,10 +194,13 @@ export function EditTab({ event, eventId }: EditTabProps) {
       category: event.category || "tech",
       type: event.type || "in-person",
       tags: event.tags || [],
-      startDate: toDateTimeInputValue(event.startDate || ""),
-      endDate: toDateTimeInputValue(event.endDate || ""),
-      location: event.location?.city || event.location?.address || "",
-      capacity: event.capacity || 100,
+      startDate: event.startDate || "",
+      endDate: event.endDate || "",
+      address: event.location?.address || "",
+      city: event.location?.city || "",
+      country: event.location?.country || "",
+      platform: event.location?.platform || "",
+      meetingUrl: event.location?.meetingUrl || "",
     });
   }, [event]);
 
@@ -234,14 +232,16 @@ export function EditTab({ event, eventId }: EditTabProps) {
         category: formData.category,
         type: formData.type,
         tags: formData.tags,
-        start_date: formData.startDate ? new Date(formData.startDate).toISOString() : null,
-        end_date: formData.endDate ? new Date(formData.endDate).toISOString() : null,
+        start_date: formData.startDate || null,
+        end_date: formData.endDate || null,
         location: {
           type: formData.type,
-          city: formData.location || undefined,
-          address: formData.location || undefined,
+          address: formData.address || undefined,
+          city: formData.city || undefined,
+          country: formData.country || undefined,
+          platform: formData.platform || undefined,
+          meetingUrl: formData.meetingUrl || undefined,
         },
-        capacity: formData.capacity,
       });
       toast.success("Event updated successfully!");
     } catch {
@@ -300,47 +300,25 @@ export function EditTab({ event, eventId }: EditTabProps) {
                 />
               </div>
 
-              {/* Category & Type row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Category
-                  </label>
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleChange}
-                    className={selectClasses}
-                  >
-                    {eventCategories.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat
-                          .replace("-", " / ")
-                          .replace(/\b\w/g, (c) => c.toUpperCase())}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Event Type
-                  </label>
-                  <select
-                    name="type"
-                    value={formData.type}
-                    onChange={handleChange}
-                    className={selectClasses}
-                  >
-                    {eventTypes.map((type) => (
-                      <option key={type} value={type}>
-                        {type
-                          .replace("-", " ")
-                          .replace(/\b\w/g, (c) => c.toUpperCase())}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* Category */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Category
+                </label>
+                <select
+                  name="category"
+                  value={formData.category}
+                  onChange={handleChange}
+                  className={selectClasses}
+                >
+                  {eventCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat
+                        .replace("-", " / ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Tags */}
@@ -360,11 +338,11 @@ export function EditTab({ event, eventId }: EditTabProps) {
                   <label className="block text-sm font-medium mb-2">
                     Start Date & Time
                   </label>
-                  <Input
-                    type="datetime-local"
-                    name="startDate"
+                  <DateTimePicker
                     value={formData.startDate}
-                    onChange={handleChange}
+                    onChange={(val) =>
+                      setFormData((prev) => ({ ...prev, startDate: val }))
+                    }
                   />
                 </div>
 
@@ -372,41 +350,41 @@ export function EditTab({ event, eventId }: EditTabProps) {
                   <label className="block text-sm font-medium mb-2">
                     End Date & Time
                   </label>
-                  <Input
-                    type="datetime-local"
-                    name="endDate"
+                  <DateTimePicker
                     value={formData.endDate}
-                    onChange={handleChange}
+                    onChange={(val) =>
+                      setFormData((prev) => ({ ...prev, endDate: val }))
+                    }
                   />
                 </div>
               </div>
 
-              {/* Location & Capacity row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Location
-                  </label>
-                  <Input
-                    name="location"
-                    value={formData.location}
-                    onChange={handleChange}
-                    placeholder="City or venue name"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Capacity
-                  </label>
-                  <Input
-                    type="number"
-                    name="capacity"
-                    value={formData.capacity}
-                    onChange={handleChange}
-                    placeholder="100"
-                  />
-                </div>
+              {/* Location */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Location
+                </label>
+                <LocationPicker
+                  value={{
+                    type: formData.type,
+                    address: formData.address,
+                    city: formData.city,
+                    country: formData.country,
+                    platform: formData.platform,
+                    meetingUrl: formData.meetingUrl,
+                  }}
+                  onChange={(data) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      type: data.type,
+                      address: data.address || "",
+                      city: data.city || "",
+                      country: data.country || "",
+                      platform: data.platform || "",
+                      meetingUrl: data.meetingUrl || "",
+                    }));
+                  }}
+                />
               </div>
 
               {/* Actions */}

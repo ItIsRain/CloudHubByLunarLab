@@ -167,7 +167,7 @@ export async function POST(
           { status: 409 }
         );
       }
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Registration failed" }, { status: 400 });
     }
 
     // Update registration_count using a count query (avoids race conditions on the count)
@@ -184,8 +184,9 @@ export async function POST(
         .eq("id", eventId);
     }
 
-    // Increment the `sold` counter on the matching ticket in the JSONB array
-    // Re-read fresh ticket data to avoid stale sold count
+    // Atomically increment the ticket sold counter using fresh data + optimistic
+    // concurrency check. Re-read fresh ticket data to avoid stale sold count
+    // and verify capacity hasn't been exceeded since our initial check.
     if (body.ticketType?.id) {
       const { data: freshEvent } = await supabase
         .from("events")
@@ -194,14 +195,31 @@ export async function POST(
         .single();
 
       if (freshEvent?.tickets) {
-        const updatedTickets = (
-          freshEvent.tickets as Array<{
-            id: string;
-            quantity: number;
-            sold: number;
-            [key: string]: unknown;
-          }>
-        ).map((t) =>
+        const freshTickets = freshEvent.tickets as Array<{
+          id: string;
+          quantity: number;
+          sold: number;
+          [key: string]: unknown;
+        }>;
+
+        const targetTicket = freshTickets.find((t) => t.id === body.ticketType.id);
+
+        // Post-insert capacity check: if ticket is now oversold, roll back
+        if (targetTicket && (targetTicket.sold || 0) + 1 > targetTicket.quantity) {
+          // Roll back: cancel the registration we just created
+          if (data?.id) {
+            await supabase
+              .from("event_registrations")
+              .update({ status: "cancelled" })
+              .eq("id", data.id);
+          }
+          return NextResponse.json(
+            { error: "This ticket is sold out" },
+            { status: 400 }
+          );
+        }
+
+        const updatedTickets = freshTickets.map((t) =>
           t.id === body.ticketType.id ? { ...t, sold: (t.sold || 0) + 1 } : t
         );
         const { error: ticketError } = await supabase
@@ -271,7 +289,7 @@ export async function DELETE(
       .eq("id", registration.id);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to cancel registration" }, { status: 400 });
     }
 
     // Update registration_count

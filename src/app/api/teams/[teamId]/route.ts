@@ -129,7 +129,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to update team" }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -182,7 +182,7 @@ export async function DELETE(
       .eq("id", teamId);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to delete team" }, { status: 400 });
     }
 
     // Update team_count on the hackathon (fire-and-forget — denormalized counter)

@@ -47,18 +47,24 @@ export function SubmissionsTab({
 
   const submissions = submissionsData?.data ?? [];
 
-  const tracks = Array.from(
-    new Set(submissions.map((s) => s.track?.name).filter(Boolean))
+  const tracks = React.useMemo(
+    () => Array.from(new Set(submissions.map((s) => s.track?.name).filter(Boolean))),
+    [submissions]
   );
 
-  const filteredSubmissions = submissions.filter((s) => {
-    const matchesSearch =
-      s.projectName.toLowerCase().includes(search.toLowerCase()) ||
-      s.team.name.toLowerCase().includes(search.toLowerCase());
-    const matchesTrack =
-      trackFilter === "all" || s.track?.name === trackFilter;
-    return matchesSearch && matchesTrack;
-  });
+  const filteredSubmissions = React.useMemo(
+    () =>
+      submissions.filter((s) => {
+        const q = search.toLowerCase();
+        const matchesSearch =
+          s.projectName.toLowerCase().includes(q) ||
+          s.team.name.toLowerCase().includes(q);
+        const matchesTrack =
+          trackFilter === "all" || s.track?.name === trackFilter;
+        return matchesSearch && matchesTrack;
+      }),
+    [submissions, search, trackFilter]
+  );
 
   const handleExport = () => {
     const csv = [

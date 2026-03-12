@@ -80,7 +80,7 @@ export function slugify(str: string): string {
 }
 
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 15);
+  return crypto.randomUUID();
 }
 
 export function truncate(str: string, length: number): string {
@@ -89,8 +89,10 @@ export function truncate(str: string, length: number): string {
 }
 
 export function getInitials(name: string): string {
+  if (!name.trim()) return "?";
   return name
     .split(" ")
+    .filter(Boolean)
     .map((n) => n[0])
     .join("")
     .toUpperCase()

@@ -76,7 +76,23 @@ export async function POST(
           { status: 409 }
         );
       }
-      return NextResponse.json({ error: insertError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to join team" }, { status: 400 });
+    }
+
+    // Post-insert capacity check: verify we didn't exceed max_size due to race condition
+    const { count: memberCount } = await supabase
+      .from("team_members")
+      .select("id", { count: "exact", head: true })
+      .eq("team_id", teamId);
+
+    if (memberCount !== null && memberCount > team.max_size) {
+      // Roll back: remove the member we just added
+      await supabase
+        .from("team_members")
+        .delete()
+        .eq("team_id", teamId)
+        .eq("user_id", userId);
+      return NextResponse.json({ error: "Team is full" }, { status: 400 });
     }
 
     // Return full updated team
@@ -89,7 +105,7 @@ export async function POST(
       .single();
 
     if (fetchError) {
-      return NextResponse.json({ error: fetchError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch team" }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -173,7 +189,7 @@ export async function DELETE(
       .eq("user_id", targetUserId);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to remove team member" }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });

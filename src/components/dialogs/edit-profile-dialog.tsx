@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { User, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
+import { useAuthStore } from "@/store/auth-store";
 
 interface EditProfileDialogProps {
   open: boolean;
@@ -36,15 +37,35 @@ export function EditProfileDialog({
 
   const isValid = name.trim().length >= 2;
 
+  const { fetchUser } = useAuthStore();
+
   const handleSave = async () => {
     if (!isValid) return;
     setIsSaving(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setIsSaving(false);
-    toast.success("Profile updated!", {
-      description: "Your changes have been saved.",
-    });
-    onOpenChange(false);
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          headline: headline.trim() || null,
+          bio: bio.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update profile");
+      }
+      await fetchUser();
+      toast.success("Profile updated!", {
+        description: "Your changes have been saved.",
+      });
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Reset form when user prop changes or dialog opens

@@ -1,7 +1,34 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
+// Protected routes — require auth
+const protectedPaths = [
+  "/dashboard",
+  "/admin",
+  "/onboarding",
+  "/settings",
+  "/profile/edit",
+  "/events/create",
+  "/hackathons/create",
+  "/judge",
+  "/mentor",
+];
+
+// Auth routes — redirect to dashboard if already logged in
+const authPaths = ["/login", "/register"];
+
 export async function updateSession(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const normalizedPath = pathname.endsWith("/") && pathname !== "/" ? pathname.slice(0, -1) : pathname;
+
+  const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
+  const isAuthPage = authPaths.some((p) => normalizedPath === p);
+
+  // Skip auth check entirely for public routes — saves ~50-150ms per request
+  if (!isProtected && !isAuthPage) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -29,22 +56,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-
-  // Protected routes — require auth
-  const protectedPaths = [
-    "/dashboard",
-    "/admin",
-    "/onboarding",
-    "/settings",
-    "/profile/edit",
-    "/events/create",
-    "/hackathons/create",
-    "/judge",
-    "/mentor",
-  ];
-  const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
-
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -55,11 +66,6 @@ export async function updateSession(request: NextRequest) {
     }
     return NextResponse.redirect(url);
   }
-
-  // Auth routes — redirect to dashboard if already logged in
-  const authPaths = ["/login", "/register"];
-  const normalizedPath = pathname.endsWith("/") && pathname !== "/" ? pathname.slice(0, -1) : pathname;
-  const isAuthPage = authPaths.some((p) => normalizedPath === p);
 
   if (isAuthPage && user) {
     const url = request.nextUrl.clone();

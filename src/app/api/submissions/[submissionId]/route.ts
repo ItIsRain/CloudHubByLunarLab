@@ -162,7 +162,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to update submission" }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -233,7 +233,7 @@ export async function DELETE(
       .eq("id", submissionId);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to delete submission" }, { status: 400 });
     }
 
     return NextResponse.json({ message: "Submission deleted" });

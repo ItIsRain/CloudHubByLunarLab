@@ -52,10 +52,13 @@ export async function sendEmail({
   subject: string;
   html: string;
 }) {
+  // Strip newlines to prevent email header injection
+  const safeSubject = subject.replace(/[\r\n]/g, " ").trim();
+
   return resend.emails.send({
     from: `${FROM_NAME} <${FROM_EMAIL}>`,
     to,
-    subject,
+    subject: safeSubject,
     html,
   });
 }

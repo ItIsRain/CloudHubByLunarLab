@@ -4,13 +4,14 @@ import { profileToPublicUser } from "@/lib/supabase/mappers";
 import { PROFILE_PUBLIC_COLS } from "@/lib/constants";
 import type { User } from "@/lib/types";
 
-export async function PUT(
+/** GET: Look up invitation details by token (read-only, no side effects) */
+export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ hackathonId: string }> }
 ) {
   try {
     const { hackathonId } = await params;
-    const { token } = await request.json().catch(() => ({ token: null }));
+    const token = request.nextUrl.searchParams.get("token");
 
     if (!token) {
       return NextResponse.json({ error: "Token is required" }, { status: 400 });
@@ -115,16 +116,19 @@ export async function POST(
       );
     }
 
-    // Mark invitation as accepted
-    const { error: updateError } = await supabase
+    // Atomically mark invitation as accepted (only if still pending)
+    const { data: updatedInv, error: updateError } = await supabase
       .from("judge_invitations")
       .update({ status: "accepted", accepted_by: user.id })
-      .eq("id", invitation.id);
+      .eq("id", invitation.id)
+      .eq("status", "pending")
+      .select("id")
+      .single();
 
-    if (updateError) {
+    if (updateError || !updatedInv) {
       return NextResponse.json(
-        { error: "Failed to accept invitation" },
-        { status: 500 }
+        { error: "Invitation has already been accepted" },
+        { status: 409 }
       );
     }
 
@@ -163,9 +167,11 @@ export async function POST(
     const existingJudges: User[] =
       (hackathon?.judges as User[]) || [];
 
-    // Remove any placeholder entry that matches the invitation email
+    // Remove any placeholder entry that matches the invitation email or user id (idempotency)
     const filtered = existingJudges.filter(
-      (j) => j.email?.toLowerCase() !== invitation.email.toLowerCase()
+      (j) =>
+        j.email?.toLowerCase() !== invitation.email.toLowerCase() &&
+        j.id !== user.id
     );
 
     // Add the real profile

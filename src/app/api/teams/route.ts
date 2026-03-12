@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch teams" }, { status: 400 });
     }
 
     const total = count || 0;
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (teamError) {
-      return NextResponse.json({ error: teamError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to create team" }, { status: 400 });
     }
 
     // Auto-add creator as leader
@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
       });
 
     if (memberError) {
-      return NextResponse.json({ error: memberError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to create team" }, { status: 400 });
     }
 
     // Update team_count on the hackathon (fire-and-forget — denormalized counter)
@@ -272,7 +272,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (fetchError) {
-      return NextResponse.json({ error: fetchError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to create team" }, { status: 400 });
     }
 
     return NextResponse.json({

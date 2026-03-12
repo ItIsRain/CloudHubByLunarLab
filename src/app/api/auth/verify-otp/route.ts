@@ -2,9 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { profileToUser } from "@/lib/supabase/mappers";
 import { PROFILE_COLS } from "@/lib/constants";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const rl = checkRateLimit(ip, {
+      namespace: "auth-verify-otp",
+      limit: 5,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+        }
+      );
+    }
+
     const { email, token, type = "email" } = await request.json();
 
     if (!email || !token) {
@@ -31,7 +48,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Verification failed:", error.message);
+      return NextResponse.json(
+        { error: "Verification failed. Please request a new code." },
+        { status: 400 }
+      );
     }
 
     // Fetch profile after successful verification

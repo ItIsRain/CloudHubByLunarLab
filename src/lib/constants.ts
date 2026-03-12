@@ -9,8 +9,8 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 /** All profile columns needed by profileToUser mapper (for authenticated user's own data) */
 export const PROFILE_COLS = "id,email,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,created_at,updated_at";
 
-/** Public-safe profile columns */
-export const PROFILE_PUBLIC_COLS = "id,email,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,created_at,updated_at";
+/** Public-safe profile columns (email intentionally excluded for privacy) */
+export const PROFILE_PUBLIC_COLS = "id,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,created_at,updated_at";
 
 /** Notification columns needed by dbRowToNotification mapper */
 export const NOTIFICATION_COLS = "id,type,title,message,link,is_read,created_at";

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function GET(
   _request: NextRequest,
@@ -41,7 +42,7 @@ export async function GET(
       .limit(100);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch emails" }, { status: 400 });
     }
 
     const emails = (data || []).map((row: Record<string, unknown>) => ({
@@ -69,6 +70,19 @@ export async function POST(
   { params }: { params: Promise<{ eventId: string }> }
 ) {
   try {
+    const ip = getClientIp(request);
+    const rl = checkRateLimit(ip, {
+      namespace: "event-emails",
+      limit: 10,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many emails sent. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
+
     const { eventId } = await params;
     const supabase = await getSupabaseServerClient();
 
@@ -176,7 +190,7 @@ export async function POST(
       });
 
     if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to send email" }, { status: 400 });
     }
 
     return NextResponse.json({ sent: sentCount });

@@ -49,18 +49,60 @@ export function ImportCsvDialog({
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  /** RFC 4180-compliant CSV parser that handles quoted fields. */
   const parseCSV = (text: string): string[][] => {
-    return text
-      .trim()
-      .split("\n")
-      .map((line) =>
-        line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""))
-      );
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      const next = text[i + 1];
+
+      if (inQuotes) {
+        if (ch === '"' && next === '"') {
+          field += '"';
+          i++; // skip escaped quote
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          field += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          row.push(field.trim());
+          field = "";
+        } else if (ch === "\n" || (ch === "\r" && next === "\n")) {
+          row.push(field.trim());
+          if (row.some((c) => c.length > 0)) rows.push(row);
+          row = [];
+          field = "";
+          if (ch === "\r") i++; // skip \n after \r
+        } else {
+          field += ch;
+        }
+      }
+    }
+    // Push last field/row
+    if (field || row.length > 0) {
+      row.push(field.trim());
+      if (row.some((c) => c.length > 0)) rows.push(row);
+    }
+    return rows;
   };
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
   const handleFile = useCallback((f: File) => {
     if (!f.name.endsWith(".csv")) {
       toast.error("Please upload a CSV file");
+      return;
+    }
+    if (f.size > MAX_FILE_SIZE) {
+      toast.error("File too large. Maximum size is 5 MB.");
       return;
     }
     setFile(f);
@@ -68,6 +110,11 @@ export function ImportCsvDialog({
     reader.onload = (e) => {
       const text = e.target?.result as string;
       const parsed = parseCSV(text);
+      if (parsed.length > 10000) {
+        toast.error("CSV has too many rows. Maximum is 10,000.");
+        setFile(null);
+        return;
+      }
       setRows(parsed);
       setColumnMappings(
         new Array(parsed[0]?.length || 0).fill("Skip")
