@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(
   request: NextRequest,
@@ -35,6 +36,15 @@ export async function POST(
     }
     if (hackathon.organizer_id !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Rate limit: max 10 invitations per organizer per 15 minutes
+    const rl = checkRateLimit(user.id, { namespace: "judge-invite", limit: 10, windowMs: 15 * 60 * 1000 });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many invitations sent. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
     }
 
     const { email, name } = await request.json();
@@ -73,7 +83,7 @@ export async function POST(
 
     if (insertError || !invitation) {
       return NextResponse.json(
-        { error: insertError?.message || "Failed to create invitation" },
+        { error: "Failed to create invitation" },
         { status: 500 }
       );
     }

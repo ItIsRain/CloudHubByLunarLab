@@ -26,12 +26,14 @@ export function OverviewTab({ event, eventId }: OverviewTabProps) {
   const { data: guestsData, isLoading } = useEventGuests(eventId);
   const guests = guestsData?.data ?? [];
 
-  const confirmedCount = guests.filter(
-    (g) => g.status === "confirmed" || g.status === "checked-in"
-  ).length;
-  const checkedInCount = guests.filter(
-    (g) => g.status === "checked-in"
-  ).length;
+  const confirmedCount = React.useMemo(
+    () => guests.filter((g) => g.status === "confirmed" || g.status === "checked-in").length,
+    [guests]
+  );
+  const checkedInCount = React.useMemo(
+    () => guests.filter((g) => g.status === "checked-in").length,
+    [guests]
+  );
 
   // Compute real revenue from registration data + multi-currency
   const revenueByCurrency = React.useMemo(() => {

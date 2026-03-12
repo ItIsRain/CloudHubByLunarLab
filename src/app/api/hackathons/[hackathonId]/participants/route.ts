@@ -64,7 +64,7 @@ export async function GET(
     const { data: registrations, error } = regResult;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch participants" }, { status: 400 });
     }
 
     // Build a user_id -> team name lookup
@@ -185,7 +185,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to register" }, { status: 400 });
     }
 
     if (!data) {

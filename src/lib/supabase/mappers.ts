@@ -31,9 +31,10 @@ export function profileToUser(profile: Record<string, unknown>): User {
   };
 }
 
-/** Public-safe variant — identical to profileToUser for now */
+/** Public-safe variant — strips email to prevent exposure in public API responses */
 export function profileToPublicUser(profile: Record<string, unknown>): User {
-  return profileToUser(profile);
+  const user = profileToUser(profile);
+  return { ...user, email: "" };
 }
 
 // =====================================================

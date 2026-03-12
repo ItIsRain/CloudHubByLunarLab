@@ -30,6 +30,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       return () => mediaQuery.removeEventListener("change", handler);
     } else {
       applyTheme(theme);
+      // No system listener needed, but always return cleanup to avoid
+      // stale listeners from a previous "system" render leaking.
+      return undefined;
     }
   }, [theme]);
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function GET(
   _request: NextRequest,
@@ -50,7 +51,7 @@ export async function GET(
       .limit(100);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch announcements" }, { status: 400 });
     }
 
     const announcements = (data || []).map((row: Record<string, unknown>) => {
@@ -81,6 +82,19 @@ export async function POST(
   { params }: { params: Promise<{ hackathonId: string }> }
 ) {
   try {
+    const ip = getClientIp(request);
+    const rl = checkRateLimit(ip, {
+      namespace: "hackathon-announcements",
+      limit: 10,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many announcements sent. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
+
     const { hackathonId } = await params;
     const supabase = await getSupabaseServerClient();
 
@@ -142,7 +156,7 @@ export async function POST(
       .in("status", ["confirmed", "approved"]);
 
     if (regError) {
-      return NextResponse.json({ error: regError.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to send announcement" }, { status: 400 });
     }
 
     const recipients = (registrations || [])
@@ -167,7 +181,7 @@ export async function POST(
 
     if (insertError) {
       return NextResponse.json(
-        { error: insertError.message },
+        { error: "Failed to send announcement" },
         { status: 400 }
       );
     }

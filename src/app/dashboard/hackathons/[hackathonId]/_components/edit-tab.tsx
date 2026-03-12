@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TagSelector } from "@/components/forms/tag-selector";
+import { DateTimePicker } from "@/components/forms/date-time-picker";
 import { useUpdateHackathon } from "@/hooks/use-hackathons";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -58,15 +59,6 @@ const typeOptions = [
   { value: "in-person", label: "In-Person" },
   { value: "hybrid", label: "Hybrid" },
 ];
-
-function toDateTimeInputValue(isoString: string) {
-  if (!isoString) return "";
-  // datetime-local needs "YYYY-MM-DDTHH:MM"
-  const d = new Date(isoString);
-  if (isNaN(d.getTime())) return isoString.slice(0, 16);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 const selectClasses =
   "flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50 appearance-none";
@@ -239,14 +231,14 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
       status: hackathon.status || "draft",
       type: hackathon.type || "online",
       tags: hackathon.tags || [],
-      registrationStart: toDateTimeInputValue(hackathon.registrationStart || ""),
-      registrationEnd: toDateTimeInputValue(hackathon.registrationEnd || ""),
-      hackingStart: toDateTimeInputValue(hackathon.hackingStart || ""),
-      hackingEnd: toDateTimeInputValue(hackathon.hackingEnd || ""),
-      submissionDeadline: toDateTimeInputValue(hackathon.submissionDeadline || ""),
-      judgingStart: toDateTimeInputValue(hackathon.judgingStart || ""),
-      judgingEnd: toDateTimeInputValue(hackathon.judgingEnd || ""),
-      winnersAnnouncement: toDateTimeInputValue(hackathon.winnersAnnouncement || ""),
+      registrationStart: hackathon.registrationStart || "",
+      registrationEnd: hackathon.registrationEnd || "",
+      hackingStart: hackathon.hackingStart || "",
+      hackingEnd: hackathon.hackingEnd || "",
+      submissionDeadline: hackathon.submissionDeadline || "",
+      judgingStart: hackathon.judgingStart || "",
+      judgingEnd: hackathon.judgingEnd || "",
+      winnersAnnouncement: hackathon.winnersAnnouncement || "",
       minTeamSize: hackathon.minTeamSize || 1,
       maxTeamSize: hackathon.maxTeamSize || 4,
       allowSolo: hackathon.allowSolo ?? true,
@@ -405,80 +397,83 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
                 <label className="text-sm font-medium">
                   Registration Opens
                 </label>
-                <Input
-                  type="datetime-local"
-                  name="registrationStart"
+                <DateTimePicker
                   value={formData.registrationStart}
-                  onChange={handleChange}
+                  onChange={(val) =>
+                    setFormData((prev) => ({ ...prev, registrationStart: val }))
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">
                   Registration Closes
                 </label>
-                <Input
-                  type="datetime-local"
-                  name="registrationEnd"
+                <DateTimePicker
                   value={formData.registrationEnd}
-                  onChange={handleChange}
+                  onChange={(val) =>
+                    setFormData((prev) => ({ ...prev, registrationEnd: val }))
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Hacking Starts</label>
-                <Input
-                  type="datetime-local"
-                  name="hackingStart"
+                <DateTimePicker
                   value={formData.hackingStart}
-                  onChange={handleChange}
+                  onChange={(val) =>
+                    setFormData((prev) => ({ ...prev, hackingStart: val }))
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Hacking Ends</label>
-                <Input
-                  type="datetime-local"
-                  name="hackingEnd"
+                <DateTimePicker
                   value={formData.hackingEnd}
-                  onChange={handleChange}
+                  onChange={(val) =>
+                    setFormData((prev) => ({ ...prev, hackingEnd: val }))
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">
                   Submission Deadline
                 </label>
-                <Input
-                  type="datetime-local"
-                  name="submissionDeadline"
+                <DateTimePicker
                   value={formData.submissionDeadline}
-                  onChange={handleChange}
+                  onChange={(val) =>
+                    setFormData((prev) => ({ ...prev, submissionDeadline: val }))
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Judging Starts</label>
-                <Input
-                  type="datetime-local"
-                  name="judgingStart"
+                <DateTimePicker
                   value={formData.judgingStart}
-                  onChange={handleChange}
+                  onChange={(val) =>
+                    setFormData((prev) => ({ ...prev, judgingStart: val }))
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Judging Ends</label>
-                <Input
-                  type="datetime-local"
-                  name="judgingEnd"
+                <DateTimePicker
                   value={formData.judgingEnd}
-                  onChange={handleChange}
+                  onChange={(val) =>
+                    setFormData((prev) => ({ ...prev, judgingEnd: val }))
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">
                   Winners Announced
                 </label>
-                <Input
-                  type="datetime-local"
-                  name="winnersAnnouncement"
+                <DateTimePicker
                   value={formData.winnersAnnouncement}
-                  onChange={handleChange}
+                  onChange={(val) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      winnersAnnouncement: val,
+                    }))
+                  }
                 />
               </div>
             </div>

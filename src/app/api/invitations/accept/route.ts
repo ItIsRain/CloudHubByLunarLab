@@ -112,8 +112,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Verify email matches
-    if (user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
+    // Verify email matches (explicit null check to prevent bypass)
+    if (!user.email || !invitation.email || user.email.toLowerCase() !== invitation.email.toLowerCase()) {
       return NextResponse.json(
         { error: "This invitation was sent to a different email address. Please sign in with the correct account." },
         { status: 403 }
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       return NextResponse.json(
-        { error: updateError.message },
+        { error: "Failed to accept invitation" },
         { status: 500 }
       );
     }

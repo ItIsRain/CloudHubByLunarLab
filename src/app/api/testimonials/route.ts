@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
       .limit(limit);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Failed to fetch testimonials:", error.message);
+      return NextResponse.json({ error: "Failed to fetch testimonials" }, { status: 500 });
     }
 
     return NextResponse.json(
@@ -107,7 +108,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Failed to create testimonial:", error.message);
+      return NextResponse.json({ error: "Failed to create testimonial" }, { status: 500 });
     }
 
     return NextResponse.json({ data: dbRowToTestimonial(data) }, { status: 201 });

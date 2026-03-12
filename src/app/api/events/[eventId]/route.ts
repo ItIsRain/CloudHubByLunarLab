@@ -129,6 +129,26 @@ export async function PATCH(
       }
     }
 
+    // Validate category
+    if (updates.category) {
+      const { categories: cats } = await import("@/lib/constants");
+      if (!cats.map((c) => c.value).includes(updates.category as string)) {
+        return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+      }
+    }
+
+    // Validate type
+    if (updates.type) {
+      if (!["in-person", "virtual", "hybrid"].includes(updates.type as string)) {
+        return NextResponse.json({ error: "Invalid event type" }, { status: 400 });
+      }
+    }
+
+    // Validate tags
+    if (updates.tags && (!Array.isArray(updates.tags) || (updates.tags as string[]).length > 20)) {
+      return NextResponse.json({ error: "Tags must be an array of up to 20 items" }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from("events")
       .update(updates)
@@ -137,7 +157,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to update event" }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -189,7 +209,7 @@ export async function DELETE(
       .or(eventFilter(eventId));
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to delete event" }, { status: 400 });
     }
 
     return NextResponse.json({ message: "Event deleted successfully" });

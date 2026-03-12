@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToEvent } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
-import { UUID_RE } from "@/lib/constants";
+import { UUID_RE, categories } from "@/lib/constants";
 import { canCreateEvent, getEventLimit } from "@/lib/plan-limits";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import type { SubscriptionTier } from "@/lib/types";
@@ -76,9 +76,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Visibility filtering
-    // Session auth: organizer sees own private/unlisted. API key: public only.
-    const userId = auth.type !== "unauthenticated" ? auth.userId : null;
-    const isOwnEvents = organizerId && userId === organizerId && auth.type === "session";
+    // Only call getUser() when we actually need auth context (organizer's own events)
+    let user = null;
+    if (organizerId) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      user = authUser;
+    }
+    const isOwnEvents = organizerId && user?.id === organizerId;
 
     if (!isOwnEvents) {
       const idsParam = searchParams.get("ids");
@@ -124,7 +128,8 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to fetch events:", error.message);
+      return NextResponse.json({ error: "Failed to fetch events" }, { status: 400 });
     }
 
     const events = (data || []).map((row: Record<string, unknown>) =>
@@ -234,6 +239,19 @@ export async function POST(request: NextRequest) {
       if (key in body) insertData[key] = body[key];
     }
 
+    // Validate enum fields
+    const VALID_CATEGORIES = categories.map((c) => c.value);
+    if (insertData.category && !VALID_CATEGORIES.includes(insertData.category as string)) {
+      return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+    }
+    const VALID_TYPES = ["in-person", "virtual", "hybrid"];
+    if (insertData.type && !VALID_TYPES.includes(insertData.type as string)) {
+      return NextResponse.json({ error: "Invalid event type" }, { status: 400 });
+    }
+    if (insertData.tags && (!Array.isArray(insertData.tags) || (insertData.tags as string[]).length > 20)) {
+      return NextResponse.json({ error: "Tags must be an array of up to 20 items" }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from("events")
       .insert(insertData)
@@ -241,7 +259,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to create event:", error.message);
+      return NextResponse.json({ error: "Failed to create event" }, { status: 400 });
     }
 
     return NextResponse.json({

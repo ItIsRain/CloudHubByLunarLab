@@ -16,7 +16,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   rememberMe: z.boolean().optional(),
 });
 
@@ -58,7 +58,9 @@ function LoginForm() {
       const success = await login(data.email, data.password);
       if (success) {
         toast.success("Welcome back!");
-        const redirect = searchParams.get("redirect") || "/dashboard";
+        const raw = searchParams.get("redirect") || "/dashboard";
+        // Prevent open redirect: only allow relative paths
+        const redirect = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
         router.push(redirect);
       }
     } catch (err) {
@@ -80,7 +82,9 @@ function LoginForm() {
     try {
       setOauthLoading(true);
       const supabase = getSupabaseBrowserClient();
-      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectParam || "/dashboard")}`;
+      // Validate redirect before passing to OAuth callback
+      const safeRedirect = redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//") ? redirectParam : "/dashboard";
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeRedirect)}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "github",
         options: { redirectTo },

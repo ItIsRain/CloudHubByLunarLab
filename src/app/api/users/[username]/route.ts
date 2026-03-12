@@ -18,7 +18,8 @@ export async function GET(
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to fetch user:", error.message);
+      return NextResponse.json({ error: "Failed to fetch user" }, { status: 400 });
     }
 
     if (!data) {

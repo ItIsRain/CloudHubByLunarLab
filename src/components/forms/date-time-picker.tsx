@@ -71,6 +71,7 @@ export function DateTimePicker({
   className,
 }: DateTimePickerProps) {
   const [showCalendar, setShowCalendar] = useState(false);
+  const [month, setMonth] = useState<Date>(value ? new Date(value) : new Date());
   const [tzSearch, setTzSearch] = useState("");
   const calendarRef = useRef<HTMLDivElement>(null);
   const dateValue = value ? new Date(value) : undefined;
@@ -109,6 +110,13 @@ export function DateTimePicker({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showCalendar]);
 
+  // Keep displayed month in sync when value changes externally
+  useEffect(() => {
+    if (dateValue) {
+      setMonth(dateValue);
+    }
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleDateSelect = (date: Date | undefined) => {
     if (!date) return;
     const existing = dateValue || new Date();
@@ -118,9 +126,11 @@ export function DateTimePicker({
   };
 
   const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const [hours, minutes] = e.target.value.split(":").map(Number);
+    const parts = e.target.value.split(":").map(Number);
+    const hours = Math.max(0, Math.min(23, isNaN(parts[0]) ? 0 : parts[0]));
+    const minutes = Math.max(0, Math.min(59, isNaN(parts[1]) ? 0 : parts[1]));
     const date = dateValue ? new Date(dateValue) : new Date();
-    date.setHours(hours || 0, minutes || 0);
+    date.setHours(hours, minutes);
     onChange(date.toISOString());
   };
 
@@ -143,20 +153,22 @@ export function DateTimePicker({
             <div className="absolute z-50 mt-1 rounded-xl border border-border bg-popover p-3 shadow-lg">
               <DayPicker
                 mode="single"
+                month={month}
+                onMonthChange={setMonth}
                 selected={dateValue}
                 onSelect={handleDateSelect}
                 showOutsideDays
                 classNames={{
-                  root: "text-sm text-foreground",
-                  months: "relative flex flex-col",
+                  root: "relative text-sm text-foreground",
+                  months: "flex flex-col",
                   month: "w-full",
-                  month_caption: "flex justify-center items-center h-10 relative mb-1",
+                  month_caption: "flex justify-center items-center h-10 mb-1",
                   caption_label: "text-sm font-semibold",
-                  nav: "absolute inset-x-0 flex justify-between items-center",
+                  nav: "absolute top-0 inset-x-0 flex justify-between items-center h-10 z-10",
                   button_previous:
-                    "inline-flex items-center justify-center rounded-lg w-8 h-8 hover:bg-muted transition-colors",
+                    "inline-flex items-center justify-center rounded-lg w-8 h-8 hover:bg-muted transition-colors cursor-pointer",
                   button_next:
-                    "inline-flex items-center justify-center rounded-lg w-8 h-8 hover:bg-muted transition-colors",
+                    "inline-flex items-center justify-center rounded-lg w-8 h-8 hover:bg-muted transition-colors cursor-pointer",
                   chevron: "w-4 h-4 fill-foreground",
                   month_grid: "w-full border-collapse",
                   weekdays: "flex",

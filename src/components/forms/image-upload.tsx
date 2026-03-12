@@ -19,16 +19,23 @@ interface ImageUploadProps {
   className?: string;
 }
 
+const defaultDescriptions: Record<string, string> = {
+  square: "Recommended: 512 × 512px. PNG, JPG or WebP, max 5MB.",
+  video: "Recommended: 1920 × 1080px (16:9). PNG, JPG or WebP, max 5MB.",
+  banner: "Recommended: 1920 × 640px (3:1). PNG, JPG or WebP, max 5MB.",
+};
+
 export function ImageUpload({
   value,
   onChange,
   onRemove,
   label = "Upload Image",
-  description = "Drag and drop or click to upload. PNG, JPG up to 5MB.",
+  description,
   maxSize = 5 * 1024 * 1024,
   aspectRatio = "banner",
   className,
 }: ImageUploadProps) {
+  const resolvedDescription = description || defaultDescriptions[aspectRatio] || defaultDescriptions.banner;
   const [preview, setPreview] = useState<string | null>(value || null);
   const [error, setError] = useState<string | null>(null);
 
@@ -143,7 +150,7 @@ export function ImageUpload({
               <div className="text-center">
                 <p className="text-sm font-medium">{label}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {description}
+                  {resolvedDescription}
                 </p>
               </div>
             </div>

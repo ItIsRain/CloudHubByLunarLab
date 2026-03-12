@@ -15,13 +15,11 @@ export function useJudgeInvitation(
   return useQuery({
     queryKey: ["judge-invitation", hackathonId, token],
     queryFn: async (): Promise<{ data: InvitationData }> => {
+      // Use GET with query params to avoid side effects in a query hook.
+      // The PUT endpoint is kept for backwards compat but queries should
+      // never mutate server state.
       const res = await fetch(
-        `/api/hackathons/${hackathonId}/judges/accept`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-        }
+        `/api/hackathons/${hackathonId}/judges/accept?token=${encodeURIComponent(token!)}`,
       );
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
@@ -31,6 +29,7 @@ export function useJudgeInvitation(
     },
     enabled: !!token && !!hackathonId,
     retry: false,
+    staleTime: Infinity, // Invitation data won't change while viewing
   });
 }
 

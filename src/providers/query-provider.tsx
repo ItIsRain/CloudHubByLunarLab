@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { FetchError } from "@/lib/fetch-json";
 
 function makeQueryClient() {
   return new QueryClient({
@@ -9,6 +10,11 @@ function makeQueryClient() {
       queries: {
         staleTime: 5 * 60 * 1000, // 5 minutes
         refetchOnWindowFocus: false,
+        // Don't retry client errors (4xx) — only retry server errors (5xx)
+        retry: (failureCount, error) => {
+          if (error instanceof FetchError && error.status < 500) return false;
+          return failureCount < 2;
+        },
       },
     },
   });

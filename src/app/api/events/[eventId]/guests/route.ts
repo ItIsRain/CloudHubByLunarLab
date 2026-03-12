@@ -50,7 +50,7 @@ export async function GET(
     const { data: registrations, error } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch guests" }, { status: 400 });
     }
 
     let guests = (registrations || []).map(
@@ -150,7 +150,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to update guest" }, { status: 400 });
     }
 
     if (!data) {

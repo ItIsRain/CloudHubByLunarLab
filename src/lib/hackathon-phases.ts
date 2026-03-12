@@ -33,6 +33,7 @@ export function getCurrentPhase(
   const regStart = safeTime(h.registrationStart);
   const regEnd = safeTime(h.registrationEnd);
   const hackStart = safeTime(h.hackingStart);
+  const hackEnd = safeTime(h.hackingEnd);
   const subDeadline = safeTime(h.submissionDeadline);
   const judgeStart = safeTime(h.judgingStart);
   const judgeEnd = safeTime(h.judgingEnd);
@@ -44,14 +45,15 @@ export function getCurrentPhase(
   if (regStart && t < regStart) return "published";
   if (regEnd && t < regEnd) return "registration-open";
   if (hackStart && t < hackStart) return "registration-closed";
-  if (subDeadline && t < subDeadline) return "hacking";
+  // Use hackEnd if submissionDeadline is not set
+  const effectiveSubDeadline = subDeadline || hackEnd;
+  if (effectiveSubDeadline && t < effectiveSubDeadline) return "hacking";
   // Between submission deadline and judging start = submission phase
   if (judgeStart && t < judgeStart) return "submission";
   if (judgeEnd && t < judgeEnd) return "judging";
+  // Between judging end and winners announcement — judging is done
   if (winnersAt && t >= winnersAt) return "completed";
-
-  // Between judging end and winners announcement
-  if (judgeEnd && t >= judgeEnd) return "judging";
+  if (judgeEnd && t >= judgeEnd) return "completed";
 
   return h.status;
 }

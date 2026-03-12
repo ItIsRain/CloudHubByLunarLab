@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch submissions" }, { status: 400 });
     }
 
     const total = count || 0;
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to create submission" }, { status: 400 });
     }
 
     return NextResponse.json({

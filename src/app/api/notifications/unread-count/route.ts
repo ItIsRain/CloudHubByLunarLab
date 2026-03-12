@@ -20,7 +20,7 @@ export async function GET() {
       .eq("is_read", false);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to fetch unread count" }, { status: 400 });
     }
 
     return NextResponse.json({ count: count || 0 });

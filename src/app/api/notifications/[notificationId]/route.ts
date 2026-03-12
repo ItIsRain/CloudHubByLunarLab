@@ -35,7 +35,8 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to update notification:", error.message);
+      return NextResponse.json({ error: "Failed to update notification" }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -73,7 +74,8 @@ export async function DELETE(
       .eq("user_id", user.id);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to delete notification:", error.message);
+      return NextResponse.json({ error: "Failed to delete notification" }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });

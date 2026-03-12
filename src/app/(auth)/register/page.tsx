@@ -95,8 +95,10 @@ function RegisterForm() {
       });
       if (success) {
         toast.success("Account created! Check your email for a verification code.");
-        const verifyUrl = redirectParam
-          ? `/verify-email?email=${encodeURIComponent(data.email)}&redirect=${encodeURIComponent(redirectParam)}`
+        // Validate redirect before passing forward
+        const safeRedirect = redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//") ? redirectParam : "";
+        const verifyUrl = safeRedirect
+          ? `/verify-email?email=${encodeURIComponent(data.email)}&redirect=${encodeURIComponent(safeRedirect)}`
           : `/verify-email?email=${encodeURIComponent(data.email)}`;
         router.push(verifyUrl);
       }
@@ -119,7 +121,9 @@ function RegisterForm() {
     try {
       setOauthLoading(true);
       const supabase = getSupabaseBrowserClient();
-      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectParam || "/onboarding")}`;
+      // Validate redirect before passing to OAuth callback
+      const safeRedirect = redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//") ? redirectParam : "/onboarding";
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeRedirect)}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "github",
         options: { redirectTo },

@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(ip, {
+      namespace: "subscribe",
+      limit: 5,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+        }
+      );
+    }
+
     const { email, source } = await req.json();
 
     if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -13,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid source" }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdminClient();
+    const supabase = await getSupabaseServerClient();
 
     const { error } = await supabase
       .from("email_subscribers")
@@ -24,6 +41,7 @@ export async function POST(req: NextRequest) {
       if (error.code === "23505") {
         return NextResponse.json({ message: "Already subscribed" });
       }
+      console.error("Subscribe failed:", error.message);
       return NextResponse.json({ error: "Failed to subscribe" }, { status: 500 });
     }
 

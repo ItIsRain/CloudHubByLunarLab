@@ -20,7 +20,7 @@ export async function PATCH() {
       .eq("is_read", false);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Failed to mark as read" }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });

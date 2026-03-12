@@ -40,7 +40,8 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to fetch notifications:", error.message);
+      return NextResponse.json({ error: "Failed to fetch notifications" }, { status: 400 });
     }
 
     const total = count || 0;
@@ -80,14 +81,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { type, title, message, link } = body;
 
-    // Only allow user-initiated notification types from the client.
-    // System-only types (registration-confirmed, payment-received, submission-scored)
-    // are created server-side and must NOT be creatable by users.
-    const allowedTypes = [
-      "event-reminder", "event-update",
-      "hackathon-update", "hackathon-deadline",
-      "team-invite", "team-update", "announcement", "general",
-    ];
+    // Only allow truly user-initiated notification types from the client.
+    // System-only types (registration-confirmed, payment-received, submission-scored,
+    // team-invite, announcement, etc.) are created server-side and must NOT be
+    // creatable by users to prevent spoofing system notifications.
+    const allowedTypes = ["general"];
 
     if (!type || !title || !message) {
       return NextResponse.json(
@@ -130,7 +128,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to create notification:", error.message);
+      return NextResponse.json({ error: "Failed to create notification" }, { status: 400 });
     }
 
     return NextResponse.json({

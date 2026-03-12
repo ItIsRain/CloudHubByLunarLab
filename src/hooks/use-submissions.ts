@@ -168,6 +168,8 @@ export function useSubmitScore() {
       queryClient.invalidateQueries({
         queryKey: ["submissions", variables.submissionId],
       });
+      // Score changes affect analytics/stats
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
   });
 }
@@ -201,6 +203,8 @@ export function useUpdateScore() {
       queryClient.invalidateQueries({
         queryKey: ["submissions", variables.submissionId],
       });
+      // Score changes affect analytics/stats
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
   });
 }

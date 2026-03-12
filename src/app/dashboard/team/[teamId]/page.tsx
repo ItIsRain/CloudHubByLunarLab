@@ -75,7 +75,6 @@ export default function TeamWorkspacePage() {
 
   const handleInvite = (userId: string) => {
     toast.success("Invitation sent!");
-    console.log("Invited:", userId);
   };
 
   return (
