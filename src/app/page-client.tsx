@@ -30,6 +30,9 @@ import { useUpcomingEvents } from "@/hooks/use-events";
 import { useActiveHackathons } from "@/hooks/use-hackathons";
 import { useTestimonials } from "@/hooks/use-testimonials";
 import { usePlatformStats } from "@/hooks/use-stats";
+import { useBlogPosts } from "@/hooks/use-blog";
+import { formatDate, getInitials } from "@/lib/utils";
+import { BookOpen, Clock } from "lucide-react";
 
 const features = [
   {
@@ -173,9 +176,14 @@ export default function HomePage() {
   const { data: hackathonsData, isLoading: hackathonsLoading } = useActiveHackathons();
   const { data: testimonialsData, isLoading: testimonialsLoading } = useTestimonials(6);
   const { data: statsData } = usePlatformStats();
+  const { data: blogData, isLoading: blogLoading } = useBlogPosts({
+    sortBy: "newest",
+    pageSize: 3,
+  });
   const featuredEvents = eventsData?.data || [];
   const activeHackathons = hackathonsData?.data || [];
   const testimonials = testimonialsData?.data || [];
+  const latestPosts = blogData?.data || [];
   const platformStats = statsData?.data;
 
   const stats = [
@@ -576,6 +584,121 @@ export default function HomePage() {
                     <div className="col-span-full text-center py-12">
                       <Star className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
                       <p className="text-muted-foreground">Testimonials coming soon from our organizers.</p>
+                    </div>
+                  )}
+          </div>
+        </div>
+      </section>
+
+      {/* Latest from the Blog */}
+      <section className="py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-12">
+            <div>
+              <Badge variant="outline" className="mb-4">
+                <BookOpen className="h-3.5 w-3.5 mr-1.5" />
+                Blog
+              </Badge>
+              <h2 className="font-display text-3xl sm:text-4xl font-bold mb-2">
+                Latest from our blog
+              </h2>
+              <p className="text-muted-foreground">
+                Insights, guides, and news from the CloudHub team
+              </p>
+            </div>
+            <Button variant="outline" asChild>
+              <Link href="/blog">
+                View All
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {blogLoading
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl overflow-hidden border">
+                    <div className="shimmer h-48 w-full" />
+                    <div className="p-5 space-y-3">
+                      <div className="shimmer h-3 w-20 rounded-full" />
+                      <div className="shimmer h-5 w-full rounded" />
+                      <div className="shimmer h-4 w-3/4 rounded" />
+                      <div className="shimmer h-4 w-full rounded" />
+                      <div className="flex items-center gap-3 pt-2">
+                        <div className="shimmer h-8 w-8 rounded-full" />
+                        <div className="shimmer h-3 w-24 rounded" />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              : latestPosts.length > 0
+                ? latestPosts.map((post, i) => (
+                    <motion.div
+                      key={post.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: i * 0.1 }}
+                    >
+                      <Link href={`/blog/${post.slug}`}>
+                        <Card hover className="group h-full overflow-hidden">
+                          <div className="relative aspect-[16/9] overflow-hidden">
+                            {post.coverImage ? (
+                              <Image
+                                src={post.coverImage}
+                                alt={post.title}
+                                fill
+                                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center bg-muted">
+                                <BookOpen className="h-12 w-12 text-muted-foreground/40" />
+                              </div>
+                            )}
+                          </div>
+                          <CardContent className="p-5">
+                            <Badge variant="muted" className="mb-3 text-xs">
+                              {post.category}
+                            </Badge>
+                            <h3 className="font-display text-lg font-bold leading-tight line-clamp-2 mb-2 group-hover:text-primary transition-colors">
+                              {post.title}
+                            </h3>
+                            <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                              {post.excerpt}
+                            </p>
+                            <div className="flex items-center gap-3 pt-2 border-t border-border">
+                              <Avatar size="xs">
+                                <AvatarImage
+                                  src={post.author?.avatar}
+                                  alt={post.author?.name || "Author"}
+                                />
+                                <AvatarFallback>
+                                  {getInitials(post.author?.name || "A")}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-xs font-medium">
+                                {post.author?.name || "CloudHub Team"}
+                              </span>
+                              <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
+                                {post.publishedAt && (
+                                  <span>{formatDate(post.publishedAt)}</span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {post.readTime}m
+                                </span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    </motion.div>
+                  ))
+                : (
+                    <div className="col-span-full text-center py-16">
+                      <BookOpen className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
+                      <p className="text-lg font-medium mb-1">No posts yet</p>
+                      <p className="text-muted-foreground">Blog posts will appear here once published.</p>
                     </div>
                   )}
           </div>
