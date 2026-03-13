@@ -95,8 +95,20 @@ const tabComponents: Record<TabId, React.ComponentType> = {
   settings: SettingsTab,
 };
 
+function getInitialTab(): TabId {
+  if (typeof window === "undefined") return "overview";
+  const hash = window.location.hash.replace("#", "");
+  const valid = tabs.some((t) => t.id === hash);
+  return valid ? (hash as TabId) : "overview";
+}
+
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = React.useState<TabId>("overview");
+  const [activeTab, setActiveTab] = React.useState<TabId>(getInitialTab);
+
+  const handleTabChange = React.useCallback((tab: TabId) => {
+    setActiveTab(tab);
+    window.history.replaceState(null, "", `#${tab}`);
+  }, []);
 
   const ActiveComponent = tabComponents[activeTab];
 
@@ -128,7 +140,7 @@ export default function AdminDashboardPage() {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => handleTabChange(tab.id)}
                     className={cn(
                       "flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                       "hover:text-foreground",

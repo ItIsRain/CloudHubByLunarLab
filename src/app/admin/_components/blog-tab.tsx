@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
+import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen,
   Plus,
@@ -11,11 +12,16 @@ import {
   Send,
   Archive,
   Undo2,
+  ArrowLeft,
+  Loader2,
+  FileText,
+  BarChart3,
 } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -25,12 +31,15 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { categories } from "@/lib/constants";
 import type { BlogPost, PaginatedResponse } from "@/lib/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchJson } from "@/lib/fetch-json";
 import { toast } from "sonner";
+import { RichTextEditor } from "@/components/forms/rich-text-editor";
+import { ImageUpload } from "@/components/forms/image-upload";
+import { BlogAnalytics } from "./blog-analytics";
 
 // ---------------------------------------------------------------------------
 // Admin-specific hooks (hit /api/admin/blog instead of /api/blog)
@@ -184,10 +193,10 @@ const textareaClass =
   "flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50 resize-y";
 
 // ---------------------------------------------------------------------------
-// Blog Post Dialog (Create / Edit)
+// Blog Post Full-Page Editor (Create / Edit)
 // ---------------------------------------------------------------------------
 
-function BlogPostDialog({
+function BlogPostEditor({
   open,
   onOpenChange,
   editingPost,
@@ -201,11 +210,16 @@ function BlogPostDialog({
   const createMutation = useAdminCreateBlogPost();
   const updateMutation = useAdminUpdateBlogPost();
 
-  const [form, setForm] = React.useState<BlogFormState>(EMPTY_FORM);
+  const [form, setForm] = React.useState<BlogFormState>(() =>
+    editingPost ? blogPostToFormState(editingPost) : EMPTY_FORM
+  );
+  const [isPreview, setIsPreview] = React.useState(false);
 
+  // Re-sync form when the dialog opens or the post changes
   React.useEffect(() => {
     if (open) {
       setForm(editingPost ? blogPostToFormState(editingPost) : EMPTY_FORM);
+      setIsPreview(false);
     }
   }, [open, editingPost]);
 
@@ -219,7 +233,7 @@ function BlogPostDialog({
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleSave = async () => {
+  const handleSave = async (overrideStatus?: "draft" | "published") => {
     if (!form.title.trim()) {
       toast.error("Title is required");
       return;
@@ -229,15 +243,20 @@ function BlogPostDialog({
       return;
     }
 
+    const payload = formStateToPayload({
+      ...form,
+      status: overrideStatus || form.status,
+    });
+
     try {
       if (isEditing) {
         await updateMutation.mutateAsync({
           slug: editingPost.slug,
-          ...formStateToPayload(form),
+          ...payload,
         });
         toast.success("Blog post updated");
       } else {
-        await createMutation.mutateAsync(formStateToPayload(form));
+        await createMutation.mutateAsync(payload);
         toast.success("Blog post created");
       }
       onOpenChange(false);
@@ -249,156 +268,243 @@ function BlogPostDialog({
     }
   };
 
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {isEditing ? "Edit Blog Post" : "Create Blog Post"}
-          </DialogTitle>
-          <DialogDescription>
-            {isEditing
-              ? "Update the blog post details below."
-              : "Fill in the details to create a new blog post."}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-4 py-2">
-          {/* Title */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Title <span className="text-destructive">*</span>
-            </label>
-            <Input
-              placeholder="Enter blog post title"
-              value={form.title}
-              onChange={(e) => updateField("title", e.target.value)}
-              disabled={isSaving}
-            />
-          </div>
-
-          {/* Excerpt */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Excerpt
-            </label>
-            <textarea
-              className={textareaClass}
-              rows={2}
-              placeholder="Brief summary of the post"
-              value={form.excerpt}
-              onChange={(e) => updateField("excerpt", e.target.value)}
-              disabled={isSaving}
-            />
-          </div>
-
-          {/* Content */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Content <span className="text-destructive">*</span>
-            </label>
-            <textarea
-              className={textareaClass}
-              rows={8}
-              placeholder="Write your blog post content here..."
-              value={form.content}
-              onChange={(e) => updateField("content", e.target.value)}
-              disabled={isSaving}
-            />
-          </div>
-
-          {/* Cover Image URL */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Cover Image URL
-            </label>
-            <Input
-              placeholder="https://example.com/image.jpg"
-              value={form.coverImage}
-              onChange={(e) => updateField("coverImage", e.target.value)}
-              disabled={isSaving}
-            />
-          </div>
-
-          {/* Category + Status row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Category */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">
-                Category
-              </label>
-              <select
-                className={inputClass}
-                value={form.category}
-                onChange={(e) => updateField("category", e.target.value)}
-                disabled={isSaving}
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-background overflow-y-auto"
+      >
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6">
+          {/* ---- Header ---- */}
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onOpenChange(false)}
               >
-                <option value="">Select category</option>
-                {categories.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <h2 className="font-display text-xl font-bold">
+                {isEditing ? "Edit Post" : "New Blog Post"}
+              </h2>
             </div>
-
-            {/* Status */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">
-                Status
-              </label>
-              <select
-                className={inputClass}
-                value={form.status}
-                onChange={(e) =>
-                  updateField(
-                    "status",
-                    e.target.value as "draft" | "published"
-                  )
-                }
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsPreview(!isPreview)}
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                {isPreview ? "Edit" : "Preview"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleSave("draft")}
                 disabled={isSaving}
               >
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-              </select>
+                {isSaving && form.status === "draft" ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-1" />
+                )}
+                Save Draft
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleSave("published")}
+                disabled={isSaving}
+              >
+                {isSaving && form.status === "published" ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Send className="h-4 w-4 mr-1" />
+                )}
+                Publish
+              </Button>
             </div>
           </div>
 
-          {/* Tags */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Tags{" "}
-              <span className="text-muted-foreground font-normal">
-                (comma-separated)
-              </span>
-            </label>
-            <Input
-              placeholder="React, TypeScript, Next.js"
-              value={form.tags}
-              onChange={(e) => updateField("tags", e.target.value)}
-              disabled={isSaving}
-            />
-          </div>
+          {isPreview ? (
+            /* ---- Preview Mode ---- */
+            <Card>
+              <CardContent className="p-8">
+                {form.coverImage && (
+                  <div className="relative aspect-[2/1] rounded-xl overflow-hidden mb-6">
+                    <Image
+                      src={form.coverImage}
+                      alt={form.title}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                )}
+                {form.category && (
+                  <Badge variant="secondary" className="mb-3">
+                    {form.category}
+                  </Badge>
+                )}
+                <h1 className="font-display text-3xl font-bold mb-3">
+                  {form.title || "Untitled Post"}
+                </h1>
+                {form.excerpt && (
+                  <p className="text-lg text-muted-foreground mb-6">
+                    {form.excerpt}
+                  </p>
+                )}
+                {form.tags && (
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {form.tags
+                      .split(",")
+                      .map((t) => t.trim())
+                      .filter(Boolean)
+                      .map((tag) => (
+                        <Badge key={tag} variant="outline" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                  </div>
+                )}
+                <div
+                  className="prose prose-sm dark:prose-invert max-w-none [&_img]:rounded-lg [&_img]:mx-auto [&_img]:my-4 [&_iframe]:rounded-lg [&_iframe]:mx-auto [&_iframe]:my-4"
+                  dangerouslySetInnerHTML={{
+                    __html: form.content || "<p>No content yet...</p>",
+                  }}
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            /* ---- Editor Mode ---- */
+            <div className="space-y-6">
+              {/* Cover Image */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Cover Image
+                </label>
+                <ImageUpload
+                  value={form.coverImage}
+                  onChange={(url) => updateField("coverImage", url)}
+                  onRemove={() => updateField("coverImage", "")}
+                  aspectRatio="video"
+                  label="Cover Image"
+                />
+              </div>
+
+              {/* Title */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Title <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.title}
+                  onChange={(e) => updateField("title", e.target.value)}
+                  placeholder="Write an engaging title..."
+                  disabled={isSaving}
+                  className="w-full rounded-xl border border-input bg-background px-4 py-3 text-lg font-display font-bold placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all duration-200"
+                />
+              </div>
+
+              {/* Excerpt */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Excerpt{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (brief summary shown in cards and SEO)
+                  </span>
+                </label>
+                <textarea
+                  value={form.excerpt}
+                  onChange={(e) => updateField("excerpt", e.target.value)}
+                  placeholder="A brief summary of your post..."
+                  rows={2}
+                  disabled={isSaving}
+                  className={textareaClass}
+                />
+              </div>
+
+              {/* Category + Tags + Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Category
+                  </label>
+                  <select
+                    className={inputClass}
+                    value={form.category}
+                    onChange={(e) => updateField("category", e.target.value)}
+                    disabled={isSaving}
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Tags{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (comma-separated)
+                    </span>
+                  </label>
+                  <Input
+                    placeholder="React, TypeScript, Next.js"
+                    value={form.tags}
+                    onChange={(e) => updateField("tags", e.target.value)}
+                    disabled={isSaving}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Status
+                  </label>
+                  <select
+                    className={inputClass}
+                    value={form.status}
+                    onChange={(e) =>
+                      updateField(
+                        "status",
+                        e.target.value as "draft" | "published"
+                      )
+                    }
+                    disabled={isSaving}
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Content — Rich Text Editor */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Content <span className="text-destructive">*</span>
+                </label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Use the toolbar to format text, add headings, images, videos,
+                  links, and more. Select text for quick formatting options.
+                </p>
+                <RichTextEditor
+                  value={form.content}
+                  onChange={(val) => updateField("content", val)}
+                  placeholder="Start writing your blog post... Use headings to create sections, add images and videos to enrich your content."
+                  minHeight="400px"
+                />
+              </div>
+            </div>
+          )}
         </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isSaving}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving
-              ? "Saving..."
-              : isEditing
-                ? "Update Post"
-                : "Create Post"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
@@ -451,6 +557,52 @@ const columnHelper = createColumnHelper<BlogPost>();
 // ---------------------------------------------------------------------------
 
 export function BlogTab() {
+  const [subTab, setSubTab] = React.useState<"posts" | "analytics">("posts");
+
+  return (
+    <div>
+      {/* Sub-tab navigation */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex gap-2 mb-6"
+      >
+        <button
+          onClick={() => setSubTab("posts")}
+          className={cn(
+            "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200",
+            subTab === "posts"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          )}
+        >
+          <BookOpen className="h-4 w-4" />
+          Posts
+        </button>
+        <button
+          onClick={() => setSubTab("analytics")}
+          className={cn(
+            "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200",
+            subTab === "analytics"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          )}
+        >
+          <BarChart3 className="h-4 w-4" />
+          Analytics
+        </button>
+      </motion.div>
+
+      {subTab === "posts" ? <BlogPostsView /> : <BlogAnalytics />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Blog Posts View (extracted from old BlogTab)
+// ---------------------------------------------------------------------------
+
+function BlogPostsView() {
   const { data: postsData, isLoading } = useAdminBlogPosts();
   const posts = postsData?.data || [];
 
@@ -704,8 +856,8 @@ export function BlogTab() {
         }
       />
 
-      {/* Create / Edit Dialog */}
-      <BlogPostDialog
+      {/* Create / Edit Full-Page Editor */}
+      <BlogPostEditor
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editingPost={editingPost}

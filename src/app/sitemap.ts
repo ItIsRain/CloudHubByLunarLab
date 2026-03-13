@@ -129,5 +129,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticRoutes, ...eventRoutes, ...hackathonRoutes, ...profileRoutes];
+  // ── Dynamic blog post routes ─────────────────────────────────
+  const { data: blogPosts } = await supabase
+    .from("blog_posts")
+    .select("slug, updated_at, published_at")
+    .eq("status", "published")
+    .order("published_at", { ascending: false });
+
+  const blogRoutes: MetadataRoute.Sitemap = (blogPosts ?? []).map((p) => ({
+    url: `${SITE_URL}/blog/${p.slug}`,
+    lastModified: new Date(p.updated_at || p.published_at),
+    changeFrequency: "weekly" as const,
+    priority: 0.7,
+  }));
+
+  return [
+    ...staticRoutes,
+    ...eventRoutes,
+    ...hackathonRoutes,
+    ...profileRoutes,
+    ...blogRoutes,
+  ];
 }

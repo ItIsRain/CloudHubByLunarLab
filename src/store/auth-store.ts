@@ -162,7 +162,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   fetchUser: async () => {
-    set({ isLoading: true });
+    // Only show loading spinner on initial load, not on background refreshes
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) {
+      set({ isLoading: true });
+    }
     try {
       const res = await fetch("/api/auth/me");
 

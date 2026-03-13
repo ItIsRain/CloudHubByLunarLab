@@ -86,6 +86,21 @@ export function buildMetadata(overrides: {
 
 // ── JSON-LD Builders ───────────────────────────────────────────
 
+export function buildBreadcrumbJsonLd(
+  items: { name: string; path?: string }[]
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: item.name,
+      item: item.path ? `${SITE_URL}${item.path}` : undefined,
+    })),
+  };
+}
+
 export function buildWebsiteJsonLd() {
   return {
     "@context": "https://schema.org",
@@ -184,6 +199,71 @@ export function buildHackathonJsonLd(hackathon: {
       ? { "@type": "Organization", name: hackathon.organizer.name }
       : undefined,
     url: `${SITE_URL}/hackathons/${hackathon.slug}`,
+  };
+}
+
+export function buildBlogPostJsonLd(post: {
+  title: string;
+  excerpt?: string;
+  slug: string;
+  coverImage?: string;
+  publishedAt?: string;
+  updatedAt?: string;
+  author?: { name: string; avatar?: string };
+  category?: string;
+  tags?: string[];
+  readTime?: number;
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.excerpt,
+    image: post.coverImage,
+    url: `${SITE_URL}/blog/${post.slug}`,
+    datePublished: post.publishedAt,
+    dateModified: post.updatedAt || post.publishedAt,
+    author: post.author
+      ? {
+          "@type": "Person",
+          name: post.author.name,
+          image: post.author.avatar,
+        }
+      : undefined,
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: SITE_URL,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE_URL}/CloudHub-Favicon.svg`,
+      },
+    },
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": `${SITE_URL}/blog/${post.slug}`,
+    },
+    articleSection: post.category,
+    keywords: post.tags?.join(", "),
+    wordCount: post.readTime ? post.readTime * 200 : undefined,
+    timeRequired: post.readTime ? `PT${post.readTime}M` : undefined,
+    inLanguage: "en",
+  };
+}
+
+export function buildBlogListJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    name: `${SITE_NAME} Blog`,
+    description: "Insights, guides, and news from the CloudHub team.",
+    url: `${SITE_URL}/blog`,
+    inLanguage: "en",
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: SITE_URL,
+    },
   };
 }
 

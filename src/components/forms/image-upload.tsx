@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, ImageIcon } from "lucide-react";
@@ -38,6 +38,11 @@ export function ImageUpload({
   const resolvedDescription = description || defaultDescriptions[aspectRatio] || defaultDescriptions.banner;
   const [preview, setPreview] = useState<string | null>(value || null);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync preview when value changes externally (e.g. switching to edit mode)
+  useEffect(() => {
+    setPreview(value || null);
+  }, [value]);
 
   const aspectClasses = {
     square: "aspect-square",
