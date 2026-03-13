@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Menu,
@@ -19,6 +19,7 @@ import {
   UserPlus,
   Sun,
   Moon,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ import {
 import { useAuthStore } from "@/store/auth-store";
 import { useUIStore } from "@/store/ui-store";
 import { useTheme } from "@/providers/theme-provider";
+import { SearchSuggestions } from "@/components/layout/search-suggestions";
+import type { SearchSuggestions as SearchSuggestionsData } from "@/hooks/use-search";
 
 interface NavLink {
   label: string;
@@ -79,9 +82,17 @@ export function Navbar() {
   const toggleMobileMenu = useUIStore((s) => s.toggleMobileMenu);
   const mobileMenuOpen = useUIStore((s) => s.mobileMenuOpen);
   const { setTheme, resolvedTheme } = useTheme();
+  const router = useRouter();
   const [scrolled, setScrolled] = React.useState(false);
   const [activeDropdown, setActiveDropdown] = React.useState<string | null>(null);
   const [mounted, setMounted] = React.useState(false);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [activeIndex, setActiveIndex] = React.useState(-1);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const suggestionsDataRef = React.useRef<SearchSuggestionsData | null>(null);
 
   // Prevent hydration mismatch by only rendering theme toggle after mount
   React.useEffect(() => {
@@ -109,6 +120,70 @@ export function Navbar() {
   };
 
   const canCreate = hasRole("organizer") || hasRole("admin");
+
+  // Compute flat items count for keyboard nav
+  const getFlatItems = React.useCallback(() => {
+    const data = suggestionsDataRef.current;
+    if (!data) return [];
+    const keys: (keyof SearchSuggestionsData)[] = ["events", "hackathons", "profiles", "communities"];
+    const items: { url: string }[] = [];
+    for (const key of keys) {
+      const arr = data[key];
+      if (arr?.length) {
+        items.push(...arr.map((item) => ({ url: item.url })));
+      }
+    }
+    return items;
+  }, []);
+
+  const handleSearchKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      const items = getFlatItems();
+      const count = items.length;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev < count - 1 ? prev + 1 : 0));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev > 0 ? prev - 1 : count - 1));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (activeIndex >= 0 && activeIndex < count) {
+          router.push(items[activeIndex].url);
+          setSearchOpen(false);
+          setSearchQuery("");
+          searchInputRef.current?.blur();
+        } else if (searchQuery.trim().length >= 2) {
+          router.push(`/explore/search?q=${encodeURIComponent(searchQuery.trim())}`);
+          setSearchOpen(false);
+          setSearchQuery("");
+          searchInputRef.current?.blur();
+        }
+      } else if (e.key === "Escape") {
+        setSearchOpen(false);
+        searchInputRef.current?.blur();
+      }
+    },
+    [activeIndex, searchQuery, getFlatItems, router]
+  );
+
+  const handleSearchSelect = React.useCallback(
+    (url: string) => {
+      router.push(url);
+      setSearchQuery("");
+      setSearchOpen(false);
+    },
+    [router]
+  );
+
+  const handleSuggestionsDataChange = React.useCallback(
+    (data: SearchSuggestionsData | undefined) => {
+      suggestionsDataRef.current = data ?? null;
+    },
+    []
+  );
+
   const visibleNavLinks = navLinks.filter(
     (link) => !("guestOnly" in link && link.guestOnly && isAuthenticated)
   );
@@ -200,6 +275,50 @@ export function Navbar() {
                   </AnimatePresence>
                 </div>
               ))}
+            </div>
+
+            {/* Desktop Search */}
+            <div className="hidden lg:block relative w-64 xl:w-72">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setActiveIndex(-1);
+                    if (e.target.value.trim().length >= 2) {
+                      setSearchOpen(true);
+                    }
+                  }}
+                  onFocus={() => {
+                    if (searchQuery.trim().length >= 2) {
+                      setSearchOpen(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    // Delay close to allow click events on suggestions
+                    setTimeout(() => setSearchOpen(false), 200);
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                  className="flex h-9 w-full rounded-lg border border-input bg-muted/50 pl-9 pr-3 py-1.5 text-sm ring-offset-background transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary focus-visible:bg-background"
+                  aria-label="Search events, hackathons, people"
+                  aria-expanded={searchOpen}
+                  aria-autocomplete="list"
+                  role="combobox"
+                />
+              </div>
+              <SearchSuggestions
+                query={searchQuery}
+                isOpen={searchOpen}
+                onClose={() => setSearchOpen(false)}
+                onSelect={handleSearchSelect}
+                activeIndex={activeIndex}
+                inputRef={searchInputRef}
+                onDataChange={handleSuggestionsDataChange}
+              />
             </div>
 
             {/* Right Section */}

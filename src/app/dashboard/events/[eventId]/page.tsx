@@ -17,6 +17,7 @@ import {
   BarChart3,
   Settings,
   FileText,
+  CalendarDays,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ import { EmailsTab } from "./_components/emails-tab";
 import dynamic from "next/dynamic";
 const AnalyticsTab = dynamic(() => import("./_components/analytics-tab").then(m => m.AnalyticsTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 import { SettingsTab } from "./_components/settings-tab";
+import { AgendaTab } from "./_components/agenda-tab";
 
 const statusConfig: Record<
   string,
@@ -48,6 +50,7 @@ const statusConfig: Record<
 const tabs = [
   { value: "overview", label: "Overview", icon: LayoutDashboard },
   { value: "edit", label: "Edit", icon: Edit },
+  { value: "agenda", label: "Agenda", icon: CalendarDays },
   { value: "guests", label: "Guests", icon: UserCheck },
   { value: "tickets", label: "Tickets", icon: Ticket },
   { value: "check-in", label: "Check-In", icon: ScanLine },
@@ -212,6 +215,9 @@ function EventDashboardContent() {
             </TabsContent>
             <TabsContent value="edit">
               <EditTab event={event} eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="agenda">
+              <AgendaTab event={event} eventId={eventId} />
             </TabsContent>
             <TabsContent value="guests">
               <GuestsTab event={event} eventId={eventId} />

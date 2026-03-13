@@ -39,7 +39,29 @@ export interface User {
   hackathonsParticipated: number;
   projectsSubmitted: number;
   wins: number;
+  status: "active" | "suspended" | "banned";
   subscriptionTier: SubscriptionTier;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Report Types
+export type ReportType = "event" | "hackathon" | "user" | "comment";
+export type ReportStatus = "pending" | "reviewing" | "resolved" | "dismissed";
+
+export interface Report {
+  id: string;
+  reporterId: string;
+  reporter?: User;
+  type: ReportType;
+  entityId: string;
+  entityTitle: string;
+  reason: string;
+  details?: string;
+  status: ReportStatus;
+  resolutionNote?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

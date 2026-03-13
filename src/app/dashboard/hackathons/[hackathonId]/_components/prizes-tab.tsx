@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, Trophy, DollarSign, Gift } from "lucide-react";
+import { Plus, Trash2, Trophy, DollarSign, Gift, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { SortableList } from "@/components/ui/sortable-list";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Hackathon, Prize } from "@/lib/types";
 import { useUpdateHackathon } from "@/hooks/use-hackathons";
@@ -44,6 +45,130 @@ function getPlaceIconBg(place: number | "special"): string {
   if (place === 3) return "bg-gradient-to-br from-amber-600 to-amber-800";
   return "bg-gradient-to-br from-primary/80 to-primary";
 }
+
+// ── Prize Cards ────────────────────────────────────────────────────
+
+interface MainPrizeCardProps {
+  prize: Prize;
+  dragHandle: React.ReactNode;
+  onRemove: (id: string) => void;
+  isPending: boolean;
+}
+
+function MainPrizeCard({ prize, dragHandle, onRemove, isPending }: MainPrizeCardProps) {
+  return (
+    <Card
+      className={cn(
+        "group hover:shadow-md transition-all duration-200 border-2",
+        getPlaceBorderColor(prize.place)
+      )}
+    >
+      <CardContent className="p-5 text-center">
+        <div className="flex justify-between mb-2">
+          {dragHandle}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={() => onRemove(prize.id)}
+            disabled={isPending}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+        <div
+          className={cn(
+            "w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center",
+            getPlaceIconBg(prize.place)
+          )}
+        >
+          <Trophy className="h-6 w-6 text-white" />
+        </div>
+        <p className="text-xs text-muted-foreground mb-1">
+          {getPlaceLabel(prize.place)}
+        </p>
+        <h3 className="font-display font-bold text-lg mb-1">
+          {prize.name}
+        </h3>
+        <p className="text-2xl font-bold font-display text-primary mb-2">
+          {formatCurrency(prize.value, prize.currency)}
+        </p>
+        <Badge variant="secondary" className="text-xs">
+          {prize.type}
+        </Badge>
+        {prize.description && (
+          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+            {prize.description}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+interface SpecialPrizeCardProps {
+  prize: Prize;
+  dragHandle: React.ReactNode;
+  onRemove: (id: string) => void;
+  isPending: boolean;
+}
+
+function SpecialPrizeCard({ prize, dragHandle, onRemove, isPending }: SpecialPrizeCardProps) {
+  return (
+    <Card className="group hover:shadow-md transition-all duration-200">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-4">
+          {dragHandle}
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <Gift className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-medium truncate">
+              {prize.name}
+            </h3>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-bold text-primary">
+                {formatCurrency(prize.value, prize.currency)}
+              </span>
+              <Badge
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0"
+              >
+                {prize.type}
+              </Badge>
+            </div>
+            {prize.description && (
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                {prize.description}
+              </p>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            onClick={() => onRemove(prize.id)}
+            disabled={isPending}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Static drag handle for overlay ─────────────────────────────────
+
+function OverlayGripHandle() {
+  return (
+    <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground shrink-0">
+      <GripVertical className="h-4 w-4" />
+    </div>
+  );
+}
+
+// ── Main PrizesTab ─────────────────────────────────────────────────
 
 export function PrizesTab({ hackathon, hackathonId }: PrizesTabProps) {
   const updateHackathon = useUpdateHackathon();
@@ -120,6 +245,27 @@ export function PrizesTab({ hackathon, hackathonId }: PrizesTabProps) {
       toast.success("Prize removed.");
     } catch {
       toast.error("Failed to remove prize.");
+    }
+  };
+
+  const handleReorderPrizes = async (
+    reorderedSubset: Prize[],
+    isSpecial: boolean
+  ) => {
+    // Rebuild full prizes array: replace the matching subset in-place
+    const otherPrizes = isSpecial ? mainPrizes : specialPrizes;
+    const updatedPrizes = isSpecial
+      ? [...mainPrizes, ...reorderedSubset]
+      : [...reorderedSubset, ...specialPrizes];
+
+    try {
+      await updateHackathon.mutateAsync({
+        id: hackathonId,
+        prizes: updatedPrizes,
+      });
+      toast.success("Prize order updated.");
+    } catch {
+      toast.error("Failed to reorder prizes.");
     }
   };
 
@@ -295,133 +441,83 @@ export function PrizesTab({ hackathon, hackathonId }: PrizesTabProps) {
         </motion.div>
       )}
 
-      {/* Prizes Grid */}
+      {/* Prizes — sortable within each group */}
       {prizes.length > 0 ? (
         <div className="space-y-8">
           {/* Main Prizes */}
           {mainPrizes.length > 0 && (
             <div className="space-y-4">
-              <h3 className="font-display text-lg font-semibold">
-                Main Prizes
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {mainPrizes
-                  .sort((a, b) => (a.place as number) - (b.place as number))
-                  .map((prize, i) => (
-                    <motion.div
-                      key={prize.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                    >
-                      <Card
-                        className={cn(
-                          "group hover:shadow-md transition-all duration-200 border-2",
-                          getPlaceBorderColor(prize.place)
-                        )}
-                      >
-                        <CardContent className="p-5 text-center">
-                          <div className="flex justify-end mb-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() => handleRemovePrize(prize.id)}
-                              disabled={updateHackathon.isPending}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                          <div
-                            className={cn(
-                              "w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center",
-                              getPlaceIconBg(prize.place)
-                            )}
-                          >
-                            <Trophy className="h-6 w-6 text-white" />
-                          </div>
-                          <p className="text-xs text-muted-foreground mb-1">
-                            {getPlaceLabel(prize.place)}
-                          </p>
-                          <h3 className="font-display font-bold text-lg mb-1">
-                            {prize.name}
-                          </h3>
-                          <p className="text-2xl font-bold font-display text-primary mb-2">
-                            {formatCurrency(prize.value, prize.currency)}
-                          </p>
-                          <Badge variant="secondary" className="text-xs">
-                            {prize.type}
-                          </Badge>
-                          {prize.description && (
-                            <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-                              {prize.description}
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
+              <div className="flex items-center gap-3">
+                <h3 className="font-display text-lg font-semibold">
+                  Main Prizes
+                </h3>
+                {mainPrizes.length > 1 && (
+                  <span className="text-xs text-muted-foreground/60">
+                    — drag to reorder
+                  </span>
+                )}
               </div>
+              <SortableList
+                items={mainPrizes}
+                onReorder={(reordered) => handleReorderPrizes(reordered, false)}
+                disabled={updateHackathon.isPending}
+                gridClassName="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                renderItem={(prize, dragHandle) => (
+                  <MainPrizeCard
+                    prize={prize}
+                    dragHandle={dragHandle}
+                    onRemove={handleRemovePrize}
+                    isPending={updateHackathon.isPending}
+                  />
+                )}
+                renderOverlay={(prize) => (
+                  <MainPrizeCard
+                    prize={prize}
+                    dragHandle={<OverlayGripHandle />}
+                    onRemove={() => {}}
+                    isPending={false}
+                  />
+                )}
+              />
             </div>
           )}
 
           {/* Special Prizes */}
           {specialPrizes.length > 0 && (
             <div className="space-y-4">
-              <h3 className="font-display text-lg font-semibold flex items-center gap-2">
-                <Gift className="h-5 w-5 text-primary" />
-                Special Prizes
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {specialPrizes.map((prize, i) => (
-                  <motion.div
-                    key={prize.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                  >
-                    <Card className="group hover:shadow-md transition-all duration-200">
-                      <CardContent className="p-5">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                            <Gift className="h-5 w-5 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-medium truncate">
-                              {prize.name}
-                            </h3>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-sm font-bold text-primary">
-                                {formatCurrency(prize.value, prize.currency)}
-                              </span>
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px] px-1.5 py-0"
-                              >
-                                {prize.type}
-                              </Badge>
-                            </div>
-                            {prize.description && (
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                {prize.description}
-                              </p>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            onClick={() => handleRemovePrize(prize.id)}
-                            disabled={updateHackathon.isPending}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
+              <div className="flex items-center gap-3">
+                <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+                  <Gift className="h-5 w-5 text-primary" />
+                  Special Prizes
+                </h3>
+                {specialPrizes.length > 1 && (
+                  <span className="text-xs text-muted-foreground/60">
+                    — drag to reorder
+                  </span>
+                )}
               </div>
+              <SortableList
+                items={specialPrizes}
+                onReorder={(reordered) => handleReorderPrizes(reordered, true)}
+                disabled={updateHackathon.isPending}
+                gridClassName="grid grid-cols-1 md:grid-cols-2 gap-4"
+                renderItem={(prize, dragHandle) => (
+                  <SpecialPrizeCard
+                    prize={prize}
+                    dragHandle={dragHandle}
+                    onRemove={handleRemovePrize}
+                    isPending={updateHackathon.isPending}
+                  />
+                )}
+                renderOverlay={(prize) => (
+                  <SpecialPrizeCard
+                    prize={prize}
+                    dragHandle={<OverlayGripHandle />}
+                    onRemove={() => {}}
+                    isPending={false}
+                  />
+                )}
+              />
             </div>
           )}
         </div>

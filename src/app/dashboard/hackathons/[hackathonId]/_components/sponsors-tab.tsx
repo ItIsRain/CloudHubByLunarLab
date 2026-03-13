@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { SortableList } from "@/components/ui/sortable-list";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Hackathon, Sponsor } from "@/lib/types";
 import { useUpdateHackathon } from "@/hooks/use-hackathons";
@@ -39,6 +40,82 @@ const selectClasses =
 
 const textareaClasses =
   "flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50 resize-y min-h-[80px]";
+
+// ── Sponsor Card ───────────────────────────────────────────────────
+
+interface SponsorCardProps {
+  sponsor: Sponsor;
+  dragHandle: React.ReactNode;
+  onRemove: (id: string) => void;
+  isPending: boolean;
+}
+
+function SponsorCard({ sponsor, dragHandle, onRemove, isPending }: SponsorCardProps) {
+  return (
+    <Card className="group hover:shadow-md transition-all duration-200">
+      <CardContent className="p-5">
+        <div className="flex items-start gap-3">
+          {dragHandle}
+          <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 overflow-hidden">
+            {sponsor.logo ? (
+              <Image
+                src={sponsor.logo}
+                alt={sponsor.name}
+                width={48}
+                height={48}
+                className="object-contain"
+              />
+            ) : (
+              <span className="text-lg font-bold text-muted-foreground">
+                {sponsor.name.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-medium truncate">
+                {sponsor.name}
+              </h3>
+              <Badge
+                variant={tierBadgeVariant[sponsor.tier] ?? "muted"}
+                className="text-[10px] px-1.5 py-0 shrink-0"
+              >
+                {sponsor.tier}
+              </Badge>
+            </div>
+            {sponsor.description && (
+              <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                {sponsor.description}
+              </p>
+            )}
+            {sponsor.website && (
+              <a
+                href={sponsor.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Website
+              </a>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            onClick={() => onRemove(sponsor.id)}
+            disabled={isPending}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Main SponsorsTab ───────────────────────────────────────────────
 
 export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
   const updateHackathon = useUpdateHackathon();
@@ -107,6 +184,45 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
       toast.success("Sponsor removed.");
     } catch {
       toast.error("Failed to remove sponsor.");
+    }
+  };
+
+  const handleReorderTier = async (tier: string, reorderedTierSponsors: Sponsor[]) => {
+    // Rebuild the full sponsors array with the reordered tier in place
+    const updatedSponsors = sponsors.map((s) => {
+      if (s.tier !== tier) return s;
+      // Find the corresponding sponsor from the reordered list
+      const idx = sponsors.filter((sp) => sp.tier === tier).indexOf(s);
+      return reorderedTierSponsors[idx] ?? s;
+    });
+
+    // Actually replace all sponsors of this tier with the reordered ones,
+    // keeping other tiers in their original positions
+    const otherSponsors = sponsors.filter((s) => s.tier !== tier);
+    const finalSponsors: Sponsor[] = [];
+    let tierIdx = 0;
+    let otherIdx = 0;
+
+    for (const original of sponsors) {
+      if (original.tier === tier) {
+        if (tierIdx < reorderedTierSponsors.length) {
+          finalSponsors.push(reorderedTierSponsors[tierIdx]);
+          tierIdx++;
+        }
+      } else {
+        finalSponsors.push(otherSponsors[otherIdx]);
+        otherIdx++;
+      }
+    }
+
+    try {
+      await updateHackathon.mutateAsync({
+        id: hackathonId,
+        sponsors: finalSponsors,
+      });
+      toast.success("Sponsor order updated.");
+    } catch {
+      toast.error("Failed to reorder sponsors.");
     }
   };
 
@@ -288,7 +404,7 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
         </motion.div>
       )}
 
-      {/* Sponsors by Tier */}
+      {/* Sponsors by Tier — sortable within each tier */}
       {sponsors.length > 0 ? (
         <div className="space-y-8">
           {Object.entries(groupedSponsors)
@@ -308,77 +424,38 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
                     {tierSponsors.length} sponsor
                     {tierSponsors.length !== 1 ? "s" : ""}
                   </span>
+                  {tierSponsors.length > 1 && (
+                    <span className="text-xs text-muted-foreground/60">
+                      — drag to reorder
+                    </span>
+                  )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {tierSponsors.map((sponsor, i) => (
-                    <motion.div
-                      key={sponsor.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                    >
-                      <Card className="group hover:shadow-md transition-all duration-200">
-                        <CardContent className="p-5">
-                          <div className="flex items-start gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 overflow-hidden">
-                              {sponsor.logo ? (
-                                <Image
-                                  src={sponsor.logo}
-                                  alt={sponsor.name}
-                                  width={48}
-                                  height={48}
-                                  className="object-contain"
-                                />
-                              ) : (
-                                <span className="text-lg font-bold text-muted-foreground">
-                                  {sponsor.name.charAt(0).toUpperCase()}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-medium truncate">
-                                  {sponsor.name}
-                                </h3>
-                                <Badge
-                                  variant={tierBadgeVariant[sponsor.tier] ?? "muted"}
-                                  className="text-[10px] px-1.5 py-0 shrink-0"
-                                >
-                                  {sponsor.tier}
-                                </Badge>
-                              </div>
-                              {sponsor.description && (
-                                <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                                  {sponsor.description}
-                                </p>
-                              )}
-                              {sponsor.website && (
-                                <a
-                                  href={sponsor.website}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                                >
-                                  <ExternalLink className="h-3 w-3" />
-                                  Website
-                                </a>
-                              )}
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                              onClick={() => handleRemoveSponsor(sponsor.id)}
-                              disabled={updateHackathon.isPending}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
-                </div>
+                <SortableList
+                  items={tierSponsors}
+                  onReorder={(reordered) => handleReorderTier(tier, reordered)}
+                  disabled={updateHackathon.isPending}
+                  gridClassName="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                  renderItem={(sponsor, dragHandle) => (
+                    <SponsorCard
+                      sponsor={sponsor}
+                      dragHandle={dragHandle}
+                      onRemove={handleRemoveSponsor}
+                      isPending={updateHackathon.isPending}
+                    />
+                  )}
+                  renderOverlay={(sponsor) => (
+                    <SponsorCard
+                      sponsor={sponsor}
+                      dragHandle={
+                        <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground shrink-0">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                        </div>
+                      }
+                      onRemove={() => {}}
+                      isPending={false}
+                    />
+                  )}
+                />
               </motion.div>
             ))}
         </div>

@@ -56,7 +56,7 @@ function userToProfileUpdate(
 export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: true,
 
   login: async (email: string, password: string) => {
     if (get().isLoading) return false;
@@ -162,11 +162,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   fetchUser: async () => {
+    set({ isLoading: true });
     try {
       const res = await fetch("/api/auth/me");
 
       if (!res.ok) {
-        set({ user: null, isAuthenticated: false });
+        set({ user: null, isAuthenticated: false, isLoading: false });
         return;
       }
 
@@ -176,10 +177,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         set({
           user: json.profile as User,
           isAuthenticated: true,
+          isLoading: false,
         });
+      } else {
+        set({ user: null, isAuthenticated: false, isLoading: false });
       }
     } catch {
-      set({ user: null, isAuthenticated: false });
+      set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
 

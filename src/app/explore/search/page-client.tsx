@@ -9,16 +9,15 @@ import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
-import { cn } from "@/lib/utils";
-import { mockCommunities, mockUsers } from "@/lib/mock-data";
 import { useEvents } from "@/hooks/use-events";
 import { useHackathons } from "@/hooks/use-hackathons";
+import { useCommunities } from "@/hooks/use-communities";
+import { useSearchSuggestions, type SuggestionItem } from "@/hooks/use-search";
 
 function SearchResultsContent() {
   const searchParams = useSearchParams();
@@ -43,36 +42,21 @@ function SearchResultsContent() {
     pageSize: 20,
   });
 
+  const { data: communitiesData, isLoading: communitiesLoading } = useCommunities({
+    search: query || undefined,
+    pageSize: 20,
+  });
+
+  // Use search suggestions API for profiles (no dedicated profiles list API)
+  const { data: suggestionsData, isLoading: suggestionsLoading } = useSearchSuggestions(
+    queryParam
+  );
+
   const filteredEvents = query ? (eventsData?.data || []) : [];
   const filteredHackathons = query ? (hackathonsData?.data || []) : [];
-  const isLoading = eventsLoading || hackathonsLoading;
-
-  const filteredCommunities = React.useMemo(
-    () =>
-      query
-        ? mockCommunities.filter(
-            (c) =>
-              c.name.toLowerCase().includes(query) ||
-              (c.description || "").toLowerCase().includes(query)
-          )
-        : [],
-    [query]
-  );
-
-  const filteredUsers = React.useMemo(
-    () =>
-      query
-        ? mockUsers
-            .filter(
-              (u) =>
-                u.name.toLowerCase().includes(query) ||
-                u.username.toLowerCase().includes(query) ||
-                u.skills.some((s) => s.toLowerCase().includes(query))
-            )
-            .slice(0, 20)
-        : [],
-    [query]
-  );
+  const filteredCommunities = query ? (communitiesData?.data || []) : [];
+  const filteredUsers: SuggestionItem[] = query ? (suggestionsData?.profiles || []) : [];
+  const isLoading = eventsLoading || hackathonsLoading || communitiesLoading || suggestionsLoading;
 
   const totalResults =
     filteredEvents.length +
@@ -206,7 +190,7 @@ function SearchResultsContent() {
                     Communities ({filteredCommunities.length})
                   </TabsTrigger>
                   <TabsTrigger value="users" className="rounded-lg">
-                    Users ({filteredUsers.length})
+                    People ({filteredUsers.length})
                   </TabsTrigger>
                 </TabsList>
 
@@ -340,73 +324,56 @@ function SearchResultsContent() {
                     <section>
                       <div className="flex items-center justify-between mb-4">
                         <h2 className="font-display text-xl font-bold">
-                          Users
+                          People
                         </h2>
                         {filteredUsers.length > 6 && (
                           <TabsTrigger
                             value="users"
                             className="text-sm text-primary hover:underline cursor-pointer bg-transparent shadow-none"
                           >
-                            View all {filteredUsers.length} users
+                            View all {filteredUsers.length} people
                             <ArrowRight className="h-4 w-4 ml-1" />
                           </TabsTrigger>
                         )}
                       </div>
                       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                        {filteredUsers.slice(0, 6).map((user, i) => (
+                        {filteredUsers.slice(0, 6).map((person, i) => (
                           <motion.div
-                            key={user.id}
+                            key={person.id}
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.4, delay: i * 0.05 }}
                           >
-                            <Card hover className="p-4">
-                              <div className="flex items-center gap-3">
-                                <Avatar size="md">
-                                  <AvatarImage
-                                    src={user.avatar}
-                                    alt={user.name}
-                                  />
-                                  <AvatarFallback>
-                                    {user.name
-                                      .split(" ")
-                                      .map((w) => w[0])
-                                      .join("")
-                                      .slice(0, 2)
-                                      .toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1 min-w-0">
-                                  <h4 className="font-semibold truncate">
-                                    {user.name}
-                                  </h4>
-                                  <p className="text-sm text-muted-foreground truncate">
-                                    {user.headline || `@${user.username}`}
-                                  </p>
+                            <Link href={person.url}>
+                              <Card hover className="p-4">
+                                <div className="flex items-center gap-3">
+                                  <Avatar size="md">
+                                    <AvatarImage
+                                      src={person.image || undefined}
+                                      alt={person.title}
+                                    />
+                                    <AvatarFallback>
+                                      {person.title
+                                        .split(" ")
+                                        .map((w) => w[0])
+                                        .join("")
+                                        .slice(0, 2)
+                                        .toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-semibold truncate">
+                                      {person.title}
+                                    </h4>
+                                    {person.subtitle && (
+                                      <p className="text-sm text-muted-foreground truncate">
+                                        {person.subtitle}
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                              {user.skills.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-3">
-                                  {user.skills.slice(0, 3).map((skill) => (
-                                    <Badge
-                                      key={skill}
-                                      variant="muted"
-                                      className="text-xs"
-                                    >
-                                      {skill}
-                                    </Badge>
-                                  ))}
-                                  {user.skills.length > 3 && (
-                                    <Badge
-                                      variant="muted"
-                                      className="text-xs"
-                                    >
-                                      +{user.skills.length - 3}
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
-                            </Card>
+                              </Card>
+                            </Link>
                           </motion.div>
                         ))}
                       </div>
@@ -514,73 +481,48 @@ function SearchResultsContent() {
                 <TabsContent value="users">
                   {filteredUsers.length > 0 ? (
                     <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {filteredUsers.map((user, i) => (
+                      {filteredUsers.map((person, i) => (
                         <motion.div
-                          key={user.id}
+                          key={person.id}
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.4, delay: i * 0.05 }}
                         >
-                          <Card hover className="p-4">
-                            <div className="flex items-center gap-3">
-                              <Avatar size="md">
-                                <AvatarImage
-                                  src={user.avatar}
-                                  alt={user.name}
-                                />
-                                <AvatarFallback>
-                                  {user.name
-                                    .split(" ")
-                                    .map((w) => w[0])
-                                    .join("")
-                                    .slice(0, 2)
-                                    .toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-semibold truncate">
-                                  {user.name}
-                                </h4>
-                                <p className="text-sm text-muted-foreground truncate">
-                                  {user.headline || `@${user.username}`}
-                                </p>
+                          <Link href={person.url}>
+                            <Card hover className="p-4">
+                              <div className="flex items-center gap-3">
+                                <Avatar size="md">
+                                  <AvatarImage
+                                    src={person.image || undefined}
+                                    alt={person.title}
+                                  />
+                                  <AvatarFallback>
+                                    {person.title
+                                      .split(" ")
+                                      .map((w) => w[0])
+                                      .join("")
+                                      .slice(0, 2)
+                                      .toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-semibold truncate">
+                                    {person.title}
+                                  </h4>
+                                  {person.subtitle && (
+                                    <p className="text-sm text-muted-foreground truncate">
+                                      {person.subtitle}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                            {user.skills.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-3">
-                                {user.skills.slice(0, 4).map((skill) => (
-                                  <Badge
-                                    key={skill}
-                                    variant="muted"
-                                    className="text-xs"
-                                  >
-                                    {skill}
-                                  </Badge>
-                                ))}
-                                {user.skills.length > 4 && (
-                                  <Badge
-                                    variant="muted"
-                                    className="text-xs"
-                                  >
-                                    +{user.skills.length - 4}
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
-                            <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                              <span>
-                                {user.eventsAttended} events attended
-                              </span>
-                              <span>
-                                {user.hackathonsParticipated} hackathons
-                              </span>
-                            </div>
-                          </Card>
+                            </Card>
+                          </Link>
                         </motion.div>
                       ))}
                     </div>
                   ) : (
-                    <EmptyTabState label="users" query={queryParam} />
+                    <EmptyTabState label="people" query={queryParam} />
                   )}
                 </TabsContent>
               </Tabs>

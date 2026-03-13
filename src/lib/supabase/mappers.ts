@@ -1,4 +1,4 @@
-import type { User, UserRole, SubscriptionTier, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility, Conversation, ConversationParticipant, Message, MessageReaction, Community, CommunityMember, BlogPost, MentorAvailability, MentorSession, MentorSessionStatus, MentorSessionPlatform } from "@/lib/types";
+import type { User, UserRole, SubscriptionTier, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility, Conversation, ConversationParticipant, Message, MessageReaction, Community, CommunityMember, BlogPost, MentorAvailability, MentorSession, MentorSessionStatus, MentorSessionPlatform, Report, ReportType, ReportStatus } from "@/lib/types";
 
 // =====================================================
 // Profile ↔ User mappers
@@ -25,6 +25,7 @@ export function profileToUser(profile: Record<string, unknown>): User {
     hackathonsParticipated: (profile.hackathons_participated as number) || 0,
     projectsSubmitted: (profile.projects_submitted as number) || 0,
     wins: (profile.wins as number) || 0,
+    status: (profile.status as "active" | "suspended" | "banned") || "active",
     subscriptionTier: (profile.subscription_tier as SubscriptionTier) || "free",
     createdAt: (profile.created_at as string) || new Date().toISOString(),
     updatedAt: (profile.updated_at as string) || new Date().toISOString(),
@@ -740,5 +741,32 @@ export function dbRowToMentorSession(row: Record<string, unknown>): MentorSessio
     updatedAt: row.updated_at as string,
     mentor: mentorProfile ? profileToPublicUser(mentorProfile) : undefined,
     mentee: menteeProfile ? profileToPublicUser(menteeProfile) : undefined,
+  };
+}
+
+// =====================================================
+// DB row → Report
+// =====================================================
+
+export function dbRowToReport(
+  row: Record<string, unknown>,
+  reporter?: Record<string, unknown>
+): Report {
+  const rep = reporter ?? (row.reporter as Record<string, unknown>);
+  return {
+    id: row.id as string,
+    reporterId: row.reporter_id as string,
+    reporter: rep ? profileToPublicUser(rep) : undefined,
+    type: row.type as ReportType,
+    entityId: row.entity_id as string,
+    entityTitle: row.entity_title as string,
+    reason: row.reason as string,
+    details: (row.details as string) || undefined,
+    status: row.status as ReportStatus,
+    resolutionNote: (row.resolution_note as string) || undefined,
+    resolvedBy: (row.resolved_by as string) || undefined,
+    resolvedAt: (row.resolved_at as string) || undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
   };
 }

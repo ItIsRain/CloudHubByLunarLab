@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { SortableList } from "@/components/ui/sortable-list";
 import { cn, generateId, formatDate, formatCurrency, getInitials } from "@/lib/utils";
 import { categories, currencies } from "@/lib/constants";
 import { useCreateEvent } from "@/hooks/use-events";
@@ -509,20 +510,25 @@ export default function CreateEventPage() {
                       <p className="text-sm text-muted-foreground">No sessions added yet</p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {store.agenda.map((session) => (
-                        <Card key={session.id}>
+                    <SortableList
+                      items={store.agenda}
+                      onReorder={(reordered) => store.updateField("agenda", reordered)}
+                      renderItem={(session, dragHandle) => (
+                        <Card>
                           <CardContent className="flex items-center justify-between p-4">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium">{session.title}</p>
-                                <Badge variant="muted" className="text-xs">{session.type}</Badge>
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              {dragHandle}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium">{session.title}</p>
+                                  <Badge variant="muted" className="text-xs">{session.type}</Badge>
+                                </div>
+                                {session.room && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Room: {session.room}
+                                  </p>
+                                )}
                               </div>
-                              {session.room && (
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  Room: {session.room}
-                                </p>
-                              )}
                             </div>
                             <Button
                               type="button"
@@ -534,8 +540,8 @@ export default function CreateEventPage() {
                             </Button>
                           </CardContent>
                         </Card>
-                      ))}
-                    </div>
+                      )}
+                    />
                   )}
                 </div>
 
