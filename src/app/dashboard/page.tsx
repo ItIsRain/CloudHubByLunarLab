@@ -167,7 +167,7 @@ function PlanUsageCard() {
               />
               {tier === "free" && (
                 <Button variant="outline" size="sm" className="w-full" asChild>
-                  <Link href="/dashboard/billing">
+                  <Link href="/pricing">
                     <Zap className="h-3.5 w-3.5 mr-1.5" />
                     Upgrade for more
                   </Link>

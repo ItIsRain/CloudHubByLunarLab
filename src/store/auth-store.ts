@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { User, UserRole } from "@/lib/types";
-import { profileToUser } from "@/lib/supabase/mappers";
 
 interface AuthState {
   user: User | null;
@@ -78,7 +77,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
       if (json.profile) {
         set({
-          user: profileToUser(json.profile),
+          user: json.profile as User,
           isAuthenticated: true,
           isLoading: false,
         });
@@ -158,7 +157,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     }
 
     if (json.profile) {
-      set({ user: profileToUser(json.profile) });
+      set({ user: json.profile as User });
     }
   },
 
@@ -175,7 +174,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
       if (json.profile) {
         set({
-          user: profileToUser(json.profile),
+          user: json.profile as User,
           isAuthenticated: true,
         });
       }
