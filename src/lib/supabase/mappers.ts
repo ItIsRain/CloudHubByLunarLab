@@ -1,4 +1,4 @@
-import type { User, UserRole, SubscriptionTier, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility } from "@/lib/types";
+import type { User, UserRole, SubscriptionTier, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility, Conversation, ConversationParticipant, Message, MessageReaction, Community, CommunityMember, BlogPost, MentorAvailability, MentorSession, MentorSessionStatus, MentorSessionPlatform } from "@/lib/types";
 
 // =====================================================
 // Profile ↔ User mappers
@@ -457,6 +457,46 @@ export function hackathonFormToDbRow(
 }
 
 // =====================================================
+// DB row → Certificate
+// =====================================================
+
+export interface CertificateWithMeta {
+  id: string;
+  userId: string;
+  eventId?: string;
+  hackathonId?: string;
+  type: "participation" | "winner" | "mentor" | "judge" | "organizer";
+  title: string;
+  description: string;
+  issuedAt: string;
+  verificationCode: string;
+  userName?: string;
+  eventTitle?: string;
+  hackathonName?: string;
+}
+
+export function dbRowToCertificate(row: Record<string, unknown>): CertificateWithMeta {
+  const userProfile = row.user as Record<string, unknown> | undefined;
+  const eventRow = row.event as Record<string, unknown> | undefined;
+  const hackathonRow = row.hackathon as Record<string, unknown> | undefined;
+
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    eventId: (row.event_id as string) || undefined,
+    hackathonId: (row.hackathon_id as string) || undefined,
+    type: row.type as CertificateWithMeta["type"],
+    title: row.title as string,
+    description: (row.description as string) || "",
+    issuedAt: row.issued_at as string,
+    verificationCode: row.verification_code as string,
+    userName: userProfile ? (userProfile.name as string) : undefined,
+    eventTitle: eventRow ? (eventRow.title as string) : undefined,
+    hackathonName: hackathonRow ? (hackathonRow.name as string) : undefined,
+  };
+}
+
+// =====================================================
 // DB row → EntityInvitation
 // =====================================================
 
@@ -472,5 +512,233 @@ export function dbRowToEntityInvitation(row: Record<string, unknown>): EntityInv
     invitedBy: row.invited_by as string,
     acceptedBy: (row.accepted_by as string) || undefined,
     createdAt: row.created_at as string,
+  };
+}
+
+// =====================================================
+// DB row → MessageReaction
+// =====================================================
+
+export function dbRowToMessageReaction(row: Record<string, unknown>): MessageReaction {
+  return {
+    id: row.id as string,
+    messageId: row.message_id as string,
+    userId: row.user_id as string,
+    emoji: row.emoji as string,
+    createdAt: row.created_at as string,
+  };
+}
+
+// =====================================================
+// DB row → Message
+// =====================================================
+
+export function dbRowToMessage(row: Record<string, unknown>): Message {
+  const senderProfile = row.sender as Record<string, unknown> | undefined;
+  const rawReactions = (row.message_reactions as Record<string, unknown>[]) || [];
+
+  return {
+    id: row.id as string,
+    conversationId: row.conversation_id as string,
+    senderId: row.sender_id as string,
+    content: (row.content as string) || "",
+    type: (row.type as Message["type"]) || "text",
+    attachments: (row.attachments as Record<string, unknown>[]) || undefined,
+    editedAt: (row.edited_at as string) || undefined,
+    deletedAt: (row.deleted_at as string) || undefined,
+    createdAt: row.created_at as string,
+    sender: senderProfile ? profileToPublicUser(senderProfile) : undefined,
+    reactions: rawReactions.length > 0 ? rawReactions.map(dbRowToMessageReaction) : undefined,
+  };
+}
+
+// =====================================================
+// DB row → ConversationParticipant
+// =====================================================
+
+export function dbRowToConversationParticipant(row: Record<string, unknown>): ConversationParticipant {
+  const userProfile = row.user as Record<string, unknown> | undefined;
+
+  return {
+    id: row.id as string,
+    conversationId: row.conversation_id as string,
+    userId: row.user_id as string,
+    role: (row.role as ConversationParticipant["role"]) || "member",
+    isMuted: (row.is_muted as boolean) || false,
+    unreadCount: (row.unread_count as number) || 0,
+    lastReadAt: (row.last_read_at as string) || undefined,
+    joinedAt: row.joined_at as string,
+    user: userProfile ? profileToPublicUser(userProfile) : undefined,
+  };
+}
+
+// =====================================================
+// DB row → Conversation
+// =====================================================
+
+export function dbRowToConversation(
+  row: Record<string, unknown>,
+  currentUserId?: string
+): Conversation {
+  const rawParticipants = (row.conversation_participants as Record<string, unknown>[]) || [];
+  const participants = rawParticipants.map(dbRowToConversationParticipant);
+
+  // Find the "other" participant for direct conversations
+  let otherParticipant: User | undefined;
+  let unreadCount: number | undefined;
+
+  if (currentUserId) {
+    const otherPart = participants.find((p) => p.userId !== currentUserId);
+    otherParticipant = otherPart?.user;
+
+    const myParticipant = participants.find((p) => p.userId === currentUserId);
+    unreadCount = myParticipant?.unreadCount ?? 0;
+  }
+
+  return {
+    id: row.id as string,
+    type: (row.type as Conversation["type"]) || "direct",
+    name: (row.name as string) || undefined,
+    hackathonId: (row.hackathon_id as string) || undefined,
+    teamId: (row.team_id as string) || undefined,
+    createdBy: row.created_by as string,
+    lastMessageAt: (row.last_message_at as string) || undefined,
+    lastMessagePreview: (row.last_message_preview as string) || undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    participants,
+    otherParticipant,
+    unreadCount,
+  };
+}
+
+// =====================================================
+// DB row → Community
+// =====================================================
+
+export function dbRowToCommunity(
+  row: Record<string, unknown>,
+  organizer?: Record<string, unknown>
+): Community {
+  const org = organizer ?? (row.organizer as Record<string, unknown>);
+
+  return {
+    id: row.id as string,
+    slug: row.slug as string,
+    name: row.name as string,
+    description: (row.description as string) || undefined,
+    logo: (row.logo as string) || undefined,
+    coverImage: (row.cover_image as string) || undefined,
+    website: (row.website as string) || undefined,
+    organizerId: row.organizer_id as string,
+    organizer: org ? profileToPublicUser(org) : undefined,
+    status: (row.status as Community["status"]) || "active",
+    memberCount: (row.member_count as number) || 0,
+    eventCount: (row.event_count as number) || 0,
+    visibility: (row.visibility as Community["visibility"]) || "public",
+    tags: (row.tags as string[]) || [],
+    socials: (row.socials as Record<string, string>) || {},
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+// =====================================================
+// DB row → CommunityMember
+// =====================================================
+
+export function dbRowToCommunityMember(row: Record<string, unknown>): CommunityMember {
+  const userProfile = row.user as Record<string, unknown> | undefined;
+
+  return {
+    id: row.id as string,
+    communityId: row.community_id as string,
+    userId: row.user_id as string,
+    role: (row.role as CommunityMember["role"]) || "member",
+    joinedAt: row.joined_at as string,
+    user: userProfile ? profileToPublicUser(userProfile) : undefined,
+  };
+}
+
+// =====================================================
+// DB row → BlogPost
+// =====================================================
+
+export function dbRowToBlogPost(
+  row: Record<string, unknown>,
+  author?: Record<string, unknown>
+): BlogPost {
+  const auth = author ?? (row.author as Record<string, unknown>);
+
+  return {
+    id: row.id as string,
+    slug: row.slug as string,
+    authorId: row.author_id as string,
+    author: auth ? profileToPublicUser(auth) : undefined,
+    title: row.title as string,
+    excerpt: (row.excerpt as string) || "",
+    content: (row.content as string) || "",
+    coverImage: (row.cover_image as string) || undefined,
+    category: (row.category as string) || "",
+    tags: (row.tags as string[]) || [],
+    readTime: (row.read_time as number) || 1,
+    status: (row.status as BlogPost["status"]) || "draft",
+    viewCount: (row.view_count as number) || 0,
+    publishedAt: (row.published_at as string) || undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+// =====================================================
+// DB row → MentorAvailability
+// =====================================================
+
+export function dbRowToMentorAvailability(row: Record<string, unknown>): MentorAvailability {
+  return {
+    id: row.id as string,
+    mentorId: row.mentor_id as string,
+    hackathonId: (row.hackathon_id as string) || undefined,
+    dayOfWeek: row.day_of_week as number,
+    startTime: row.start_time as string,
+    endTime: row.end_time as string,
+    timezone: (row.timezone as string) || "UTC",
+    isActive: (row.is_active as boolean) ?? true,
+    createdAt: row.created_at as string,
+  };
+}
+
+// =====================================================
+// DB row → MentorSession
+// =====================================================
+
+export function dbRowToMentorSession(row: Record<string, unknown>): MentorSession {
+  const mentorProfile = row.mentor as Record<string, unknown> | undefined;
+  const menteeProfile = row.mentee as Record<string, unknown> | undefined;
+
+  return {
+    id: row.id as string,
+    mentorId: row.mentor_id as string,
+    menteeId: row.mentee_id as string,
+    hackathonId: (row.hackathon_id as string) || undefined,
+    teamId: (row.team_id as string) || undefined,
+    title: (row.title as string) || "",
+    description: (row.description as string) || undefined,
+    status: (row.status as MentorSessionStatus) || "pending",
+    sessionDate: row.session_date as string,
+    durationMinutes: (row.duration_minutes as number) || 30,
+    meetingUrl: (row.meeting_url as string) || undefined,
+    platform: (row.platform as MentorSessionPlatform) || undefined,
+    notes: (row.notes as string) || undefined,
+    mentorFeedbackRating: (row.mentor_feedback_rating as number) || undefined,
+    mentorFeedbackComment: (row.mentor_feedback_comment as string) || undefined,
+    menteeFeedbackRating: (row.mentee_feedback_rating as number) || undefined,
+    menteeFeedbackComment: (row.mentee_feedback_comment as string) || undefined,
+    cancelledBy: (row.cancelled_by as string) || undefined,
+    cancellationReason: (row.cancellation_reason as string) || undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    mentor: mentorProfile ? profileToPublicUser(mentorProfile) : undefined,
+    mentee: menteeProfile ? profileToPublicUser(menteeProfile) : undefined,
   };
 }

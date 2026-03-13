@@ -6,6 +6,7 @@ import { slugify } from "@/lib/utils";
 import { UUID_RE, categories } from "@/lib/constants";
 import { canCreateEvent, getEventLimit } from "@/lib/plan-limits";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { writeAuditLog } from "@/lib/audit";
 import type { SubscriptionTier } from "@/lib/types";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
@@ -334,6 +335,14 @@ export async function POST(request: NextRequest) {
       console.error("Failed to create event:", error.message);
       return NextResponse.json({ error: "Failed to create event" }, { status: 400 });
     }
+
+    await writeAuditLog({
+      actorId: auth.userId,
+      action: "create",
+      entityType: "event",
+      entityId: data.id as string,
+      newValues: { title: body.title, status: insertData.status || "draft" },
+    }, request);
 
     return NextResponse.json({
       data: dbRowToEvent(data as Record<string, unknown>),

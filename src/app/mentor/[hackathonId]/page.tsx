@@ -13,6 +13,7 @@ import {
   Star,
   CheckCircle2,
   Clock,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/layout/navbar";
@@ -23,16 +24,40 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useTeams } from "@/hooks/use-teams";
+import { useMyMentorSessions, useBookSession } from "@/hooks/use-mentor-sessions";
+import { useAuthStore } from "@/store/auth-store";
+import type { MentorSession } from "@/lib/types";
+
+const statusColors: Record<string, string> = {
+  pending: "bg-yellow-500/10 text-yellow-600",
+  confirmed: "bg-blue-500/10 text-blue-600",
+  completed: "bg-green-500/10 text-green-600",
+  cancelled: "bg-red-500/10 text-red-600",
+  no_show: "bg-muted text-muted-foreground",
+};
 
 export default function HackathonMentoringPage() {
   const params = useParams();
   const hackathonId = params.hackathonId as string;
+  const user = useAuthStore((s) => s.user);
   const { data: hackathonData, isLoading } = useHackathon(hackathonId);
   const hackathon = hackathonData?.data;
   const { data: teamsData, isLoading: teamsLoading } = useTeams(
     hackathon ? { hackathonId: hackathon.id } : undefined
   );
   const teams = teamsData?.data || [];
+  const { data: sessionsData, isLoading: sessionsLoading } = useMyMentorSessions({
+    hackathon_id: hackathonId,
+    role: "mentor",
+  });
+  const sessions = sessionsData?.data || [];
+  const bookSession = useBookSession();
+
+  const upcomingSessions = sessions.filter(
+    (s) =>
+      new Date(s.sessionDate) >= new Date() &&
+      (s.status === "pending" || s.status === "confirmed")
+  );
 
   if (isLoading || teamsLoading)
     return (
@@ -74,16 +99,53 @@ export default function HackathonMentoringPage() {
     );
   }
 
-  const handleSchedule = (teamName: string) => {
-    toast.success("Session scheduled!", {
-      description: `A mentoring session has been scheduled with ${teamName}.`,
-    });
+  const handleSchedule = async (teamName: string, teamId: string) => {
+    // Get the first team member as the mentee (team leader)
+    const team = teams.find((t) => t.id === teamId);
+    const leader = team?.members.find((m) => m.isLeader);
+    const menteeId = leader?.user?.id;
+
+    if (!menteeId || !user?.id) {
+      toast.error("Could not determine team leader for session booking.");
+      return;
+    }
+
+    try {
+      // Schedule a session for tomorrow at 10:00 AM as a default
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(10, 0, 0, 0);
+
+      await bookSession.mutateAsync({
+        mentor_id: user.id,
+        hackathon_id: hackathonId,
+        team_id: teamId,
+        title: `Mentoring session with ${teamName}`,
+        session_date: tomorrow.toISOString(),
+        duration_minutes: 30,
+      });
+      toast.success("Session scheduled!", {
+        description: `A mentoring session has been scheduled with ${teamName}.`,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to schedule session"
+      );
+    }
   };
 
   const quickStats = [
     { label: "Teams", value: teams.length, icon: Users },
-    { label: "Total Members", value: teams.reduce((sum, t) => sum + (t.members?.length || 0), 0), icon: Video },
-    { label: "Tracks", value: [...new Set(teams.map((t) => typeof t.track === "string" ? t.track : t.track?.name).filter(Boolean))].length || "—", icon: Star },
+    {
+      label: "Total Members",
+      value: teams.reduce((sum, t) => sum + (t.members?.length || 0), 0),
+      icon: Video,
+    },
+    {
+      label: "Upcoming Sessions",
+      value: upcomingSessions.length,
+      icon: Calendar,
+    },
   ];
 
   return (
@@ -151,6 +213,49 @@ export default function HackathonMentoringPage() {
             ))}
           </div>
 
+          {/* Upcoming Sessions for this hackathon */}
+          {upcomingSessions.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="mb-8"
+            >
+              <h2 className="font-display text-xl font-bold mb-4">
+                Upcoming Sessions
+              </h2>
+              <div className="space-y-3">
+                {upcomingSessions.map((session) => (
+                  <Card key={session.id}>
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar size="sm" className="border-2 border-background">
+                          <AvatarImage
+                            src={session.mentee?.avatar}
+                            alt={session.mentee?.name || "Mentee"}
+                          />
+                          <AvatarFallback>
+                            {getInitials(session.mentee?.name || "?")}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium text-sm">{session.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(session.sessionDate)} &middot;{" "}
+                            {session.durationMinutes} min
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className={cn(statusColors[session.status], "text-[10px]")}>
+                        {session.status}
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
           {/* Teams */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -158,9 +263,7 @@ export default function HackathonMentoringPage() {
             transition={{ delay: 0.2 }}
             className="mb-8"
           >
-            <h2 className="font-display text-xl font-bold mb-4">
-              Teams
-            </h2>
+            <h2 className="font-display text-xl font-bold mb-4">Teams</h2>
             {teams.length === 0 ? (
               <Card>
                 <CardContent className="p-8 text-center">
@@ -209,7 +312,9 @@ export default function HackathonMentoringPage() {
                                 variant="outline"
                                 className="text-[10px] mt-1"
                               >
-                                {typeof team.track === "string" ? team.track : team.track.name}
+                                {typeof team.track === "string"
+                                  ? team.track
+                                  : team.track.name}
                               </Badge>
                             )}
                             <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
@@ -223,9 +328,14 @@ export default function HackathonMentoringPage() {
                         <Button
                           size="sm"
                           className="w-full mt-4"
-                          onClick={() => handleSchedule(team.name)}
+                          onClick={() => handleSchedule(team.name, team.id)}
+                          disabled={bookSession.isPending}
                         >
-                          <Calendar className="mr-1.5 h-4 w-4" />
+                          {bookSession.isPending ? (
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Calendar className="mr-1.5 h-4 w-4" />
+                          )}
                           Schedule Session
                         </Button>
                       </CardContent>

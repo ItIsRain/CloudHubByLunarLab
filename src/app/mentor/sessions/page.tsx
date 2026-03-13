@@ -11,6 +11,9 @@ import {
   XCircle,
   FileText,
   Inbox,
+  CheckCircle2,
+  Star,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/layout/navbar";
@@ -20,99 +23,112 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn, formatDate, getInitials } from "@/lib/utils";
-import { mockUsers } from "@/lib/mock-data";
+import { useMyMentorSessions, useUpdateSession } from "@/hooks/use-mentor-sessions";
+import { useAuthStore } from "@/store/auth-store";
+import type { MentorSession } from "@/lib/types";
 
-const upcomingSessions = [
-  {
-    id: "us-1",
-    teamName: "AI Pioneers",
-    teamAvatar: "https://api.dicebear.com/7.x/shapes/svg?seed=aipioneers",
-    members: [mockUsers[0], mockUsers[1], mockUsers[4]],
-    dateTime: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "ML Model Architecture Review",
-    platform: "Zoom",
-  },
-  {
-    id: "us-2",
-    teamName: "Web3 Wizards",
-    teamAvatar: "https://api.dicebear.com/7.x/shapes/svg?seed=web3wizards",
-    members: [mockUsers[3], mockUsers[2]],
-    dateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "Smart Contract Security Best Practices",
-    platform: "Google Meet",
-  },
-  {
-    id: "us-3",
-    teamName: "Code Crusaders",
-    teamAvatar: "https://api.dicebear.com/7.x/shapes/svg?seed=team3",
-    members: [mockUsers[0], mockUsers[4]],
-    dateTime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "API Design Patterns",
-    platform: "Discord",
-  },
-];
+const statusColors: Record<string, string> = {
+  pending: "bg-yellow-500/10 text-yellow-600",
+  confirmed: "bg-blue-500/10 text-blue-600",
+  completed: "bg-green-500/10 text-green-600",
+  cancelled: "bg-red-500/10 text-red-600",
+  no_show: "bg-muted text-muted-foreground",
+};
 
-const pastSessions = [
-  {
-    id: "ps-1",
-    teamName: "Byte Builders",
-    members: [mockUsers[1], mockUsers[3]],
-    date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "Database Schema Optimization",
-    duration: "45 min",
-  },
-  {
-    id: "ps-2",
-    teamName: "Debug Squad",
-    members: [mockUsers[2], mockUsers[4]],
-    date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "React Performance Tuning",
-    duration: "30 min",
-  },
-  {
-    id: "ps-3",
-    teamName: "AI Pioneers",
-    members: [mockUsers[0], mockUsers[1]],
-    date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "Data Pipeline Architecture",
-    duration: "60 min",
-  },
-  {
-    id: "ps-4",
-    teamName: "Stack Overflow",
-    members: [mockUsers[3]],
-    date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "GraphQL Schema Design",
-    duration: "30 min",
-  },
-  {
-    id: "ps-5",
-    teamName: "Tech Titans",
-    members: [mockUsers[0], mockUsers[2], mockUsers[4]],
-    date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-    topic: "CI/CD Pipeline Setup",
-    duration: "45 min",
-  },
-];
+const platformLabels: Record<string, string> = {
+  zoom: "Zoom",
+  google_meet: "Google Meet",
+  teams: "Teams",
+  discord: "Discord",
+  in_person: "In Person",
+  other: "Other",
+};
 
 export default function MentorSessionsPage() {
-  const handleJoin = (sessionId: string) => {
-    toast.success("Joining session...", {
-      description: "Opening video conference in a new tab.",
-    });
+  const user = useAuthStore((s) => s.user);
+  const { data: sessionsData, isLoading } = useMyMentorSessions();
+  const updateSession = useUpdateSession();
+  const allSessions = sessionsData?.data || [];
+
+  const now = new Date();
+  const upcomingSessions = allSessions.filter(
+    (s) =>
+      new Date(s.sessionDate) >= now &&
+      (s.status === "pending" || s.status === "confirmed")
+  );
+  const pastSessions = allSessions.filter(
+    (s) =>
+      new Date(s.sessionDate) < now ||
+      s.status === "completed" ||
+      s.status === "cancelled" ||
+      s.status === "no_show"
+  );
+
+  const handleConfirm = async (session: MentorSession) => {
+    try {
+      await updateSession.mutateAsync({
+        sessionId: session.id,
+        status: "confirmed",
+      });
+      toast.success("Session confirmed!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to confirm session");
+    }
   };
 
-  const handleCancel = (sessionId: string) => {
-    toast.success("Session cancelled", {
-      description: "The team has been notified of the cancellation.",
-    });
+  const handleComplete = async (session: MentorSession) => {
+    try {
+      await updateSession.mutateAsync({
+        sessionId: session.id,
+        status: "completed",
+      });
+      toast.success("Session marked as completed!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to complete session");
+    }
   };
 
-  const handleViewNotes = (sessionId: string) => {
-    toast.info("Session notes", {
-      description: "Session notes feature coming soon.",
-    });
+  const handleCancel = async (session: MentorSession) => {
+    try {
+      await updateSession.mutateAsync({
+        sessionId: session.id,
+        status: "cancelled",
+        cancellation_reason: "Cancelled by user",
+      });
+      toast.success("Session cancelled", {
+        description: "The other participant has been notified.",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to cancel session");
+    }
   };
+
+  const handleJoin = (session: MentorSession) => {
+    if (session.meetingUrl) {
+      window.open(session.meetingUrl, "_blank");
+    } else {
+      toast.info("No meeting URL set for this session.");
+    }
+  };
+
+  const isMentor = (session: MentorSession) => user?.id === session.mentorId;
+
+  const getOtherUser = (session: MentorSession) => {
+    return isMentor(session) ? session.mentee : session.mentor;
+  };
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-background pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="shimmer rounded-xl h-96 w-full" />
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
@@ -190,84 +206,106 @@ export default function MentorSessionsPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {upcomingSessions.map((session, i) => (
-                      <motion.div
-                        key={session.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                      >
-                        <Card className="hover:shadow-md transition-all duration-200">
-                          <CardContent className="p-5">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                              <div className="flex items-start gap-4">
-                                {/* Avatar Group */}
-                                <div className="flex -space-x-2 shrink-0">
-                                  {session.members.slice(0, 3).map((member) => (
-                                    <Avatar
-                                      key={member.id}
-                                      size="sm"
-                                      className="border-2 border-background"
-                                    >
-                                      <AvatarImage
-                                        src={member.avatar}
-                                        alt={member.name}
-                                      />
-                                      <AvatarFallback>
-                                        {getInitials(member.name)}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                  ))}
-                                  {session.members.length > 3 && (
-                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted border-2 border-background text-xs font-medium">
-                                      +{session.members.length - 3}
+                    {upcomingSessions.map((session, i) => {
+                      const other = getOtherUser(session);
+                      return (
+                        <motion.div
+                          key={session.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <Card className="hover:shadow-md transition-all duration-200">
+                            <CardContent className="p-5">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="flex items-start gap-4">
+                                  <Avatar size="sm" className="border-2 border-background shrink-0">
+                                    <AvatarImage
+                                      src={other?.avatar}
+                                      alt={other?.name || "User"}
+                                    />
+                                    <AvatarFallback>
+                                      {getInitials(other?.name || "?")}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <h3 className="font-semibold">
+                                      {session.title}
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground mt-0.5">
+                                      with {other?.name || "Unknown"}{" "}
+                                      <span className="text-xs">
+                                        ({isMentor(session) ? "mentee" : "mentor"})
+                                      </span>
+                                    </p>
+                                    <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="h-3.5 w-3.5" />
+                                        {formatDate(session.sessionDate)}
+                                      </span>
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="h-3.5 w-3.5" />
+                                        {session.durationMinutes} min
+                                      </span>
+                                      {session.platform && (
+                                        <Badge variant="outline" className="text-[10px]">
+                                          {platformLabels[session.platform] || session.platform}
+                                        </Badge>
+                                      )}
+                                      <Badge className={cn(statusColors[session.status], "text-[10px]")}>
+                                        {session.status}
+                                      </Badge>
                                     </div>
-                                  )}
-                                </div>
-                                <div>
-                                  <h3 className="font-semibold">
-                                    {session.teamName}
-                                  </h3>
-                                  <p className="text-sm font-medium mt-0.5">
-                                    {session.topic}
-                                  </p>
-                                  <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                                    <span className="flex items-center gap-1">
-                                      <Calendar className="h-3.5 w-3.5" />
-                                      {formatDate(session.dateTime)}
-                                    </span>
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px]"
-                                    >
-                                      {session.platform}
-                                    </Badge>
                                   </div>
                                 </div>
+                                <div className="flex gap-2 shrink-0">
+                                  {session.status === "confirmed" && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleJoin(session)}
+                                    >
+                                      <Video className="mr-1.5 h-4 w-4" />
+                                      Join
+                                    </Button>
+                                  )}
+                                  {session.status === "pending" && isMentor(session) && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleConfirm(session)}
+                                      disabled={updateSession.isPending}
+                                    >
+                                      <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                                      Confirm
+                                    </Button>
+                                  )}
+                                  {session.status === "confirmed" && isMentor(session) && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleComplete(session)}
+                                      disabled={updateSession.isPending}
+                                    >
+                                      <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                                      Complete
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleCancel(session)}
+                                    disabled={updateSession.isPending}
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <XCircle className="mr-1.5 h-4 w-4" />
+                                    Cancel
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="flex gap-2 shrink-0">
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleJoin(session.id)}
-                                >
-                                  <Video className="mr-1.5 h-4 w-4" />
-                                  Join Meeting
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleCancel(session.id)}
-                                  className="text-destructive hover:text-destructive"
-                                >
-                                  <XCircle className="mr-1.5 h-4 w-4" />
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>
@@ -286,65 +324,69 @@ export default function MentorSessionsPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {pastSessions.map((session, i) => (
-                      <motion.div
-                        key={session.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                      >
-                        <Card>
-                          <CardContent className="p-4 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="flex -space-x-2 shrink-0">
-                                {session.members.slice(0, 2).map((member) => (
-                                  <Avatar
-                                    key={member.id}
-                                    size="sm"
-                                    className="border-2 border-background"
-                                  >
-                                    <AvatarImage
-                                      src={member.avatar}
-                                      alt={member.name}
-                                    />
-                                    <AvatarFallback>
-                                      {getInitials(member.name)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                ))}
+                    {pastSessions.map((session, i) => {
+                      const other = getOtherUser(session);
+                      return (
+                        <motion.div
+                          key={session.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <Card>
+                            <CardContent className="p-4 flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <Avatar size="sm" className="border-2 border-background shrink-0">
+                                  <AvatarImage
+                                    src={other?.avatar}
+                                    alt={other?.name || "User"}
+                                  />
+                                  <AvatarFallback>
+                                    {getInitials(other?.name || "?")}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium text-sm">
+                                    {session.title}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    with {other?.name || "Unknown"}
+                                  </p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="font-medium text-sm">
-                                  {session.teamName}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {session.topic}
-                                </p>
+                              <div className="flex items-center gap-4">
+                                <div className="text-right hidden sm:block">
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatDate(session.sessionDate)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
+                                    <Clock className="h-3 w-3" />
+                                    {session.durationMinutes} min
+                                  </p>
+                                </div>
+                                <Badge className={cn(statusColors[session.status], "text-[10px]")}>
+                                  {session.status}
+                                </Badge>
+                                {session.status === "completed" &&
+                                  ((isMentor(session) && !session.mentorFeedbackRating) ||
+                                    (!isMentor(session) && !session.menteeFeedbackRating)) && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        toast.info("Feedback feature coming soon.")
+                                      }
+                                    >
+                                      <Star className="mr-1.5 h-4 w-4" />
+                                      Rate
+                                    </Button>
+                                  )}
                               </div>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <div className="text-right hidden sm:block">
-                                <p className="text-xs text-muted-foreground">
-                                  {formatDate(session.date)}
-                                </p>
-                                <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
-                                  <Clock className="h-3 w-3" />
-                                  {session.duration}
-                                </p>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleViewNotes(session.id)}
-                              >
-                                <FileText className="mr-1.5 h-4 w-4" />
-                                View Notes
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>

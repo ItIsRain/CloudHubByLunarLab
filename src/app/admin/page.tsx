@@ -66,6 +66,7 @@ const sidebarLinks = [
   { label: "Events", href: "/admin/events", icon: Calendar },
   { label: "Hackathons", href: "/admin/hackathons", icon: Trophy },
   { label: "Reports", href: "/admin/reports", icon: ShieldAlert },
+  { label: "Audit Logs", href: "/admin/audit-logs", icon: Eye },
   { label: "Analytics", href: "/admin/analytics", icon: TrendingUp },
   { label: "Featured", href: "/admin/featured", icon: Star },
   { label: "Settings", href: "/admin/settings", icon: Settings },

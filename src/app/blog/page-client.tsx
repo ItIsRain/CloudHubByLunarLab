@@ -4,28 +4,41 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { Clock, ArrowRight, BookOpen } from "lucide-react";
+import { Clock, ArrowRight, BookOpen, Search, Loader2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
-import { formatDate, getInitials } from "@/lib/utils";
-import { mockBlogPosts } from "@/lib/mock-data";
+import { cn, formatDate, getInitials } from "@/lib/utils";
+import { useBlogPosts } from "@/hooks/use-blog";
+import type { BlogPost } from "@/lib/types";
 
-const categories = ["All", "Tips", "Trends", "Teams", "Stories", "Guides"];
+const categories = ["All", "Tips", "Trends", "Teams", "Stories", "Guides", "Engineering", "Product"];
 
 export default function BlogPage() {
   const [activeCategory, setActiveCategory] = React.useState("All");
+  const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [page, setPage] = React.useState(1);
 
-  const filteredPosts =
-    activeCategory === "All"
-      ? mockBlogPosts
-      : mockBlogPosts.filter((post) => post.category === activeCategory);
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  const featuredPost = filteredPosts[0];
-  const remainingPosts = filteredPosts.slice(1);
+  const { data, isLoading } = useBlogPosts({
+    category: activeCategory === "All" ? undefined : activeCategory,
+    search: debouncedSearch || undefined,
+    page,
+    pageSize: 13, // 1 featured + 12 grid
+  });
+
+  const posts = data?.data || [];
+  const totalPages = data?.totalPages || 0;
+  const featuredPost = posts[0];
+  const remainingPosts = posts.slice(1);
 
   return (
     <>
@@ -57,6 +70,28 @@ export default function BlogPage() {
         </section>
 
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-16">
+          {/* Search */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.05 }}
+            className="mb-6"
+          >
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search articles..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full rounded-xl border border-input bg-background px-10 py-2.5 text-sm transition-colors placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </motion.div>
+
           {/* Category Filter Tabs */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -67,7 +102,10 @@ export default function BlogPage() {
             {categories.map((category) => (
               <button
                 key={category}
-                onClick={() => setActiveCategory(category)}
+                onClick={() => {
+                  setActiveCategory(category);
+                  setPage(1);
+                }}
                 className={cn(
                   "rounded-full px-4 py-2 text-sm font-medium transition-all duration-200",
                   activeCategory === category
@@ -80,8 +118,15 @@ export default function BlogPage() {
             ))}
           </motion.div>
 
+          {/* Loading state */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          )}
+
           {/* Featured Post Hero */}
-          {featuredPost && (
+          {!isLoading && featuredPost && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -97,7 +142,6 @@ export default function BlogPage() {
                           src={featuredPost.coverImage}
                           alt={featuredPost.title}
                           fill
-
                           className="object-cover"
                         />
                       )}
@@ -117,20 +161,22 @@ export default function BlogPage() {
                         <div className="flex items-center gap-2">
                           <Avatar size="sm">
                             <AvatarImage
-                              src={featuredPost.author.avatar}
-                              alt={featuredPost.author.name}
+                              src={featuredPost.author?.avatar}
+                              alt={featuredPost.author?.name || "Author"}
                             />
                             <AvatarFallback>
-                              {getInitials(featuredPost.author.name)}
+                              {getInitials(featuredPost.author?.name || "A")}
                             </AvatarFallback>
                           </Avatar>
                           <span className="text-sm font-medium">
-                            {featuredPost.author.name}
+                            {featuredPost.author?.name || "Unknown Author"}
                           </span>
                         </div>
-                        <span className="text-sm text-muted-foreground">
-                          {formatDate(featuredPost.publishedAt)}
-                        </span>
+                        {featuredPost.publishedAt && (
+                          <span className="text-sm text-muted-foreground">
+                            {formatDate(featuredPost.publishedAt)}
+                          </span>
+                        )}
                         <Badge variant="muted" className="gap-1">
                           <Clock className="h-3 w-3" />
                           {featuredPost.readTime} min read
@@ -147,77 +193,16 @@ export default function BlogPage() {
           )}
 
           {/* Posts Grid */}
-          {remainingPosts.length > 0 ? (
+          {!isLoading && remainingPosts.length > 0 && (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {remainingPosts.map((post, i) => (
-                <motion.div
-                  key={post.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: i * 0.05 }}
-                >
-                  <Link href={`/blog/${post.slug}`}>
-                    <Card hover className="group h-full overflow-hidden">
-                      <div className="relative aspect-[2/1] overflow-hidden">
-                        {post.coverImage ? (
-                          <Image
-                            src={post.coverImage}
-                            alt={post.title}
-                            width={400}
-                            height={200}
-  
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-muted">
-                            <BookOpen className="h-10 w-10 text-muted-foreground" />
-                          </div>
-                        )}
-                        <div className="absolute top-3 left-3">
-                          <Badge variant="secondary" className="backdrop-blur-sm">
-                            {post.category}
-                          </Badge>
-                        </div>
-                      </div>
-                      <CardContent className="p-5">
-                        <h3 className="font-display text-lg font-bold leading-tight line-clamp-2">
-                          {post.title}
-                        </h3>
-                        <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
-                          {post.excerpt}
-                        </p>
-                        <div className="mt-4 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Avatar size="xs">
-                              <AvatarImage
-                                src={post.author.avatar}
-                                alt={post.author.name}
-                              />
-                              <AvatarFallback>
-                                {getInitials(post.author.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="text-xs font-medium">
-                              {post.author.name}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              {formatDate(post.publishedAt)}
-                            </span>
-                            <Badge variant="muted" className="gap-1 text-[10px] px-1.5 py-0">
-                              <Clock className="h-2.5 w-2.5" />
-                              {post.readTime}m
-                            </Badge>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                </motion.div>
+                <BlogPostCard key={post.id} post={post} index={i} />
               ))}
             </div>
-          ) : (
+          )}
+
+          {/* Empty state */}
+          {!isLoading && posts.length === 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -226,13 +211,117 @@ export default function BlogPage() {
               <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="font-display text-xl font-bold">No posts found</h3>
               <p className="mt-2 text-muted-foreground">
-                No blog posts in this category yet. Check back soon!
+                {search
+                  ? "Try adjusting your search terms."
+                  : "No blog posts in this category yet. Check back soon!"}
               </p>
+            </motion.div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center justify-center gap-2 mt-10"
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground px-3">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+              >
+                Next
+              </Button>
             </motion.div>
           )}
         </div>
       </main>
       <Footer />
     </>
+  );
+}
+
+function BlogPostCard({ post, index }: { post: BlogPost; index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: index * 0.05 }}
+    >
+      <Link href={`/blog/${post.slug}`}>
+        <Card hover className="group h-full overflow-hidden">
+          <div className="relative aspect-[2/1] overflow-hidden">
+            {post.coverImage ? (
+              <Image
+                src={post.coverImage}
+                alt={post.title}
+                width={400}
+                height={200}
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-muted">
+                <BookOpen className="h-10 w-10 text-muted-foreground" />
+              </div>
+            )}
+            <div className="absolute top-3 left-3">
+              <Badge variant="secondary" className="backdrop-blur-sm">
+                {post.category}
+              </Badge>
+            </div>
+          </div>
+          <CardContent className="p-5">
+            <h3 className="font-display text-lg font-bold leading-tight line-clamp-2">
+              {post.title}
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
+              {post.excerpt}
+            </p>
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Avatar size="xs">
+                  <AvatarImage
+                    src={post.author?.avatar}
+                    alt={post.author?.name || "Author"}
+                  />
+                  <AvatarFallback>
+                    {getInitials(post.author?.name || "A")}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs font-medium">
+                  {post.author?.name || "Unknown Author"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {post.publishedAt && (
+                  <span className="text-xs text-muted-foreground">
+                    {formatDate(post.publishedAt)}
+                  </span>
+                )}
+                <Badge
+                  variant="muted"
+                  className="gap-1 text-[10px] px-1.5 py-0"
+                >
+                  <Clock className="h-2.5 w-2.5" />
+                  {post.readTime}m
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+    </motion.div>
   );
 }

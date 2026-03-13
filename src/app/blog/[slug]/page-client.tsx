@@ -5,28 +5,47 @@ import Link from "next/link";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowLeft, Clock, Calendar, BookOpen } from "lucide-react";
+import { ArrowLeft, Clock, Calendar, BookOpen, Eye, Loader2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
-import { formatDate, getInitials } from "@/lib/utils";
-import { mockBlogPosts } from "@/lib/mock-data";
+import { cn, formatDate, getInitials } from "@/lib/utils";
+import { useBlogPost, useBlogPosts } from "@/hooks/use-blog";
 
 export default function BlogPostPage() {
   const params = useParams();
   const slug = params.slug as string;
 
-  const post = mockBlogPosts.find((p) => p.slug === slug);
+  const { data: postData, isLoading, error } = useBlogPost(slug);
+  const post = postData?.data;
 
-  const relatedPosts = mockBlogPosts
+  // Fetch related posts (same category, exclude current)
+  const { data: relatedData } = useBlogPosts({
+    category: post?.category,
+    pageSize: 4,
+  });
+  const relatedPosts = (relatedData?.data || [])
     .filter((p) => p.slug !== slug)
     .slice(0, 3);
 
-  if (!post) {
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-background">
+          <div className="flex items-center justify-center pt-40 pb-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
+  if (!post || error) {
     return (
       <>
         <Navbar />
@@ -74,7 +93,6 @@ export default function BlogPostPage() {
               fill
               className="object-cover"
               priority
-
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
           </motion.div>
@@ -125,16 +143,18 @@ export default function BlogPostPage() {
               <div className="flex items-center gap-3">
                 <Avatar size="md">
                   <AvatarImage
-                    src={post.author.avatar}
-                    alt={post.author.name}
+                    src={post.author?.avatar}
+                    alt={post.author?.name || "Author"}
                   />
                   <AvatarFallback>
-                    {getInitials(post.author.name)}
+                    {getInitials(post.author?.name || "A")}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="text-sm font-semibold">{post.author.name}</p>
-                  {post.author.headline && (
+                  <p className="text-sm font-semibold">
+                    {post.author?.name || "Unknown Author"}
+                  </p>
+                  {post.author?.headline && (
                     <p className="text-xs text-muted-foreground">
                       {post.author.headline}
                     </p>
@@ -142,20 +162,31 @@ export default function BlogPostPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Calendar className="h-3.5 w-3.5" />
-                  {formatDate(post.publishedAt)}
-                </span>
+                {post.publishedAt && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5" />
+                    {formatDate(post.publishedAt)}
+                  </span>
+                )}
                 <span className="flex items-center gap-1">
                   <Clock className="h-3.5 w-3.5" />
                   {post.readTime} min read
                 </span>
+                {post.viewCount > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Eye className="h-3.5 w-3.5" />
+                    {post.viewCount} views
+                  </span>
+                )}
               </div>
             </div>
 
             {/* Post Content */}
             <div className="mt-8 max-w-none text-foreground/90 leading-relaxed text-[16px]">
-              <div className="whitespace-pre-wrap font-body">{post.content}</div>
+              <div
+                className="prose prose-sm dark:prose-invert max-w-none font-body"
+                dangerouslySetInnerHTML={{ __html: post.content }}
+              />
             </div>
 
             {/* Tags Footer */}
@@ -201,7 +232,6 @@ export default function BlogPostPage() {
                               alt={related.title}
                               width={400}
                               height={200}
-                
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
                           ) : (
@@ -220,15 +250,15 @@ export default function BlogPostPage() {
                           <div className="mt-3 flex items-center gap-2">
                             <Avatar size="xs">
                               <AvatarImage
-                                src={related.author.avatar}
-                                alt={related.author.name}
+                                src={related.author?.avatar}
+                                alt={related.author?.name || "Author"}
                               />
                               <AvatarFallback>
-                                {getInitials(related.author.name)}
+                                {getInitials(related.author?.name || "A")}
                               </AvatarFallback>
                             </Avatar>
                             <span className="text-xs text-muted-foreground">
-                              {related.author.name}
+                              {related.author?.name || "Unknown Author"}
                             </span>
                             <span className="text-xs text-muted-foreground ml-auto">
                               {related.readTime}m read

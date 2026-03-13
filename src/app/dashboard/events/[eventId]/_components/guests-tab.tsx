@@ -3,7 +3,6 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import {
-  Search,
   Download,
   MoreHorizontal,
   CheckCircle2,
@@ -13,14 +12,14 @@ import {
   Eye,
   RotateCcw,
   FileText,
-  Users,
   UserCheck,
 } from "lucide-react";
+import { createColumnHelper } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DataTable } from "@/components/ui/data-table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,9 +49,6 @@ const statusBadgeConfig: Record<
   pending: { variant: "warning" },
   cancelled: { variant: "muted" },
 };
-
-const selectClasses =
-  "flex h-11 rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary appearance-none";
 
 function getStatusActions(status: string) {
   const actions: {
@@ -104,11 +100,12 @@ function getStatusActions(status: string) {
   return actions;
 }
 
+const columnHelper = createColumnHelper<EventGuest>();
+
 export function GuestsTab({ event, eventId }: GuestsTabProps) {
   const { data: guestsData, isLoading } = useEventGuests(eventId);
   const updateStatus = useUpdateGuestStatus();
 
-  const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
 
   const guests = guestsData?.data ?? [];
@@ -121,16 +118,13 @@ export function GuestsTab({ event, eventId }: GuestsTabProps) {
     (g) => g.status === "cancelled"
   ).length;
 
-  const filteredGuests = guests.filter((g) => {
-    const matchesSearch =
-      !search ||
-      (g.user &&
-        (g.user.name.toLowerCase().includes(search.toLowerCase()) ||
-          g.user.email.toLowerCase().includes(search.toLowerCase())));
-    const matchesStatus =
-      statusFilter === "all" || g.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredGuests = React.useMemo(
+    () =>
+      statusFilter === "all"
+        ? guests
+        : guests.filter((g) => g.status === statusFilter),
+    [guests, statusFilter]
+  );
 
   const handleStatusChange = async (
     registrationId: string,
@@ -171,6 +165,162 @@ export function GuestsTab({ event, eventId }: GuestsTabProps) {
     URL.revokeObjectURL(url);
     toast.success("Export downloaded!");
   };
+
+  const columns = React.useMemo(
+    () => [
+      columnHelper.accessor((row) => row.user?.name || "Unknown", {
+        id: "name",
+        header: "Name",
+        cell: ({ row }) => {
+          const guest = row.original;
+          return (
+            <div className="flex items-center gap-3">
+              <Avatar size="sm">
+                <AvatarImage
+                  src={guest.user?.avatar}
+                  alt={guest.user?.name}
+                />
+                <AvatarFallback>
+                  {getInitials(guest.user?.name || "?")}
+                </AvatarFallback>
+              </Avatar>
+              <span className="font-medium text-sm">
+                {guest.user?.name || "Unknown"}
+              </span>
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.user?.email || "", {
+        id: "email",
+        header: "Email",
+        cell: ({ getValue }) => (
+          <span className="text-sm text-muted-foreground hidden md:inline">
+            {getValue()}
+          </span>
+        ),
+      }),
+      columnHelper.accessor(
+        (row) =>
+          (row.ticketType as { name?: string } | null)?.name || "General",
+        {
+          id: "ticketType",
+          header: "Ticket Type",
+          cell: ({ getValue }) => {
+            const val = getValue();
+            return (
+              <span className="text-sm hidden lg:inline">
+                {val === "General" ? (
+                  <span className="text-muted-foreground">General</span>
+                ) : (
+                  val
+                )}
+              </span>
+            );
+          },
+        }
+      ),
+      columnHelper.accessor("status", {
+        header: "Status",
+        cell: ({ getValue }) => {
+          const status = getValue();
+          const badgeConf = statusBadgeConfig[status] || {
+            variant: "muted" as const,
+          };
+          return (
+            <Badge variant={badgeConf.variant} className="capitalize">
+              {status}
+            </Badge>
+          );
+        },
+      }),
+      columnHelper.accessor("createdAt", {
+        header: "Date",
+        cell: ({ getValue }) => (
+          <span className="text-sm text-muted-foreground hidden md:inline">
+            {formatDate(getValue())}
+          </span>
+        ),
+      }),
+      columnHelper.display({
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => {
+          const guest = row.original;
+          const statusActions = getStatusActions(guest.status);
+          return (
+            <div className="text-right">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {statusActions.map((action) => (
+                    <DropdownMenuItem
+                      key={action.targetStatus}
+                      onClick={() =>
+                        handleStatusChange(
+                          guest.id,
+                          action.targetStatus,
+                          action.label
+                        )
+                      }
+                      disabled={updateStatus.isPending}
+                      className={action.className}
+                    >
+                      <action.icon className="h-4 w-4 mr-2" />
+                      {action.label}
+                    </DropdownMenuItem>
+                  ))}
+                  {statusActions.length > 0 && (
+                    <DropdownMenuSeparator />
+                  )}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (guest.user?.username) {
+                        window.open(
+                          `/profile/${guest.user.username}`,
+                          "_blank"
+                        );
+                      } else {
+                        toast.info(
+                          "This user has no public profile."
+                        );
+                      }
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (guest.user?.email) {
+                        window.location.href = `mailto:${guest.user.email}`;
+                      }
+                    }}
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Send Email
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        },
+        enableSorting: false,
+      }),
+    ],
+    [updateStatus.isPending]
+  );
+
+  const selectClasses =
+    "flex h-11 rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary appearance-none";
 
   const summaryCards = [
     {
@@ -243,215 +393,35 @@ export function GuestsTab({ event, eventId }: GuestsTabProps) {
         ))}
       </motion.div>
 
-      {/* Filters */}
+      {/* DataTable */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="flex flex-col sm:flex-row gap-4"
       >
-        <div className="flex-1">
-          <Input
-            placeholder="Search guests..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            icon={<Search className="h-4 w-4" />}
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className={selectClasses}
-        >
-          <option value="all">All Statuses</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="checked-in">Checked In</option>
-          <option value="pending">Pending</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-      </motion.div>
-
-      {/* Table */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
-      >
-        <Card>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="p-6 space-y-4">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="shimmer rounded-lg h-12 w-full" />
-                ))}
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left p-4 text-sm font-medium text-muted-foreground">
-                          Name
-                        </th>
-                        <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden md:table-cell">
-                          Email
-                        </th>
-                        <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden lg:table-cell">
-                          Ticket Type
-                        </th>
-                        <th className="text-left p-4 text-sm font-medium text-muted-foreground">
-                          Status
-                        </th>
-                        <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden md:table-cell">
-                          Date
-                        </th>
-                        <th className="text-right p-4 text-sm font-medium text-muted-foreground">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredGuests.map((guest, i) => {
-                        const badgeConf = statusBadgeConfig[guest.status] || {
-                          variant: "muted" as const,
-                        };
-                        const statusActions = getStatusActions(guest.status);
-                        return (
-                          <motion.tr
-                            key={guest.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.2 + i * 0.03 }}
-                            className="border-b last:border-b-0 hover:bg-muted/30 transition-colors"
-                          >
-                            <td className="p-4">
-                              <div className="flex items-center gap-3">
-                                <Avatar size="sm">
-                                  <AvatarImage
-                                    src={guest.user?.avatar}
-                                    alt={guest.user?.name}
-                                  />
-                                  <AvatarFallback>
-                                    {getInitials(guest.user?.name || "?")}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="font-medium text-sm">
-                                  {guest.user?.name || "Unknown"}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="p-4 text-sm text-muted-foreground hidden md:table-cell">
-                              {guest.user?.email}
-                            </td>
-                            <td className="p-4 text-sm hidden lg:table-cell">
-                              {(
-                                guest.ticketType as {
-                                  name?: string;
-                                } | null
-                              )?.name || (
-                                <span className="text-muted-foreground">
-                                  General
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-4">
-                              <Badge
-                                variant={badgeConf.variant}
-                                className="capitalize"
-                              >
-                                {guest.status}
-                              </Badge>
-                            </td>
-                            <td className="p-4 text-sm text-muted-foreground hidden md:table-cell">
-                              {formatDate(guest.createdAt)}
-                            </td>
-                            <td className="p-4 text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  {statusActions.map((action) => (
-                                    <DropdownMenuItem
-                                      key={action.targetStatus}
-                                      onClick={() =>
-                                        handleStatusChange(
-                                          guest.id,
-                                          action.targetStatus,
-                                          action.label
-                                        )
-                                      }
-                                      disabled={updateStatus.isPending}
-                                      className={action.className}
-                                    >
-                                      <action.icon className="h-4 w-4 mr-2" />
-                                      {action.label}
-                                    </DropdownMenuItem>
-                                  ))}
-                                  {statusActions.length > 0 && (
-                                    <DropdownMenuSeparator />
-                                  )}
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      if (guest.user?.username) {
-                                        window.open(
-                                          `/profile/${guest.user.username}`,
-                                          "_blank"
-                                        );
-                                      } else {
-                                        toast.info(
-                                          "This user has no public profile."
-                                        );
-                                      }
-                                    }}
-                                  >
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    View Profile
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      if (guest.user?.email) {
-                                        window.location.href = `mailto:${guest.user.email}`;
-                                      }
-                                    }}
-                                  >
-                                    <Mail className="h-4 w-4 mr-2" />
-                                    Send Email
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </td>
-                          </motion.tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {filteredGuests.length === 0 && !isLoading && (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mb-4">
-                      <FileText className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                    <h3 className="font-display text-lg font-bold mb-1">
-                      No guests found
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      No guests match your current filters.
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <DataTable
+          columns={columns}
+          data={filteredGuests}
+          isLoading={isLoading}
+          searchable={true}
+          searchPlaceholder="Search guests..."
+          emptyTitle="No guests found"
+          emptyDescription="No guests match your current filters."
+          emptyIcon={<FileText className="h-6 w-6 text-muted-foreground" />}
+          toolbar={
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={selectClasses}
+            >
+              <option value="all">All Statuses</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="checked-in">Checked In</option>
+              <option value="pending">Pending</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          }
+        />
       </motion.div>
     </div>
   );

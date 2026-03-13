@@ -6,6 +6,7 @@ import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
 import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
+import { writeAuditLog } from "@/lib/audit";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
@@ -310,6 +311,14 @@ export async function PATCH(
       return NextResponse.json({ error: "Failed to update hackathon" }, { status: 400 });
     }
 
+    await writeAuditLog({
+      actorId: auth.userId,
+      action: "update",
+      entityType: "hackathon",
+      entityId: hackathonId,
+      newValues: updates,
+    }, request);
+
     return NextResponse.json({
       data: dbRowToHackathon(data as Record<string, unknown>),
     });
@@ -373,6 +382,13 @@ export async function DELETE(
     if (error) {
       return NextResponse.json({ error: "Failed to delete hackathon" }, { status: 400 });
     }
+
+    await writeAuditLog({
+      actorId: auth.userId,
+      action: "delete",
+      entityType: "hackathon",
+      entityId: hackathonId,
+    }, request);
 
     return NextResponse.json({ message: "Hackathon deleted successfully" });
   } catch (err) {

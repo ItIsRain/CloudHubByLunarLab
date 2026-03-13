@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   Users,
@@ -13,16 +14,19 @@ import {
   ArrowRight,
   BarChart3,
   UserPlus,
+  Globe,
+  Lock,
+  Loader2,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn, formatDate, formatNumber } from "@/lib/utils";
-import { mockCommunities } from "@/lib/mock-data";
+import { useAuthStore } from "@/store/auth-store";
+import { useMyCommunities } from "@/hooks/use-communities";
 import { useEvents } from "@/hooks/use-events";
-
-const community = mockCommunities[0];
+import type { Community } from "@/lib/types";
 
 const quickActions = [
   {
@@ -48,18 +52,67 @@ const quickActions = [
   },
 ];
 
-const growthData = [
-  { month: "Aug", members: 3200 },
-  { month: "Sep", members: 3650 },
-  { month: "Oct", members: 4100 },
-  { month: "Nov", members: 4580 },
-  { month: "Dec", members: 4900 },
-  { month: "Jan", members: 5420 },
-];
-
 export default function CommunityDashboardPage() {
-  const { data: eventsData } = useEvents();
-  const recentEvents = (eventsData?.data || []).slice(0, 3);
+  const user = useAuthStore((s) => s.user);
+  const { data: communitiesData, isLoading } = useMyCommunities();
+  const communities = communitiesData?.data || [];
+  const community = communities[0]; // Primary community
+
+  const { data: eventsData } = useEvents(
+    community ? { organizerId: user?.id, pageSize: 3 } : undefined
+  );
+  const recentEvents = eventsData?.data || [];
+
+  if (isLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // Empty state: no communities yet
+  if (!community) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-24 pb-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center py-20 text-center"
+            >
+              <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+                <Users className="h-12 w-12 text-primary" />
+              </div>
+              <h1 className="font-display text-3xl font-bold mb-3">
+                Create Your Community
+              </h1>
+              <p className="text-muted-foreground text-lg max-w-md mb-8">
+                Build and grow a community of like-minded people. Create events,
+                manage members, and share knowledge together.
+              </p>
+              <div className="flex gap-3">
+                <Button asChild>
+                  <Link href="/explore/communities">
+                    Browse Communities
+                  </Link>
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
@@ -94,21 +147,54 @@ export default function CommunityDashboardPage() {
             className="mb-8"
           >
             <Card className="overflow-hidden">
-              <div className="h-32 bg-gradient-to-r from-primary to-accent" />
+              <div className="h-32 relative">
+                {community.coverImage ? (
+                  <Image
+                    src={community.coverImage}
+                    alt={community.name}
+                    fill
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="h-full bg-gradient-to-r from-primary to-accent" />
+                )}
+              </div>
               <CardContent className="p-6 -mt-10 relative">
                 <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-                  <div className="h-20 w-20 rounded-2xl bg-card border-4 border-card shadow-lg flex items-center justify-center">
-                    <span className="font-display text-2xl font-bold text-primary">
-                      {community.name.charAt(0)}
-                    </span>
+                  <div className="h-20 w-20 rounded-2xl bg-card border-4 border-card shadow-lg flex items-center justify-center overflow-hidden">
+                    {community.logo ? (
+                      <Image
+                        src={community.logo}
+                        alt={community.name}
+                        width={80}
+                        height={80}
+                        className="object-cover"
+                      />
+                    ) : (
+                      <span className="font-display text-2xl font-bold text-primary">
+                        {community.name.charAt(0)}
+                      </span>
+                    )}
                   </div>
                   <div className="flex-1">
-                    <h2 className="font-display text-2xl font-bold">
-                      {community.name}
-                    </h2>
-                    <p className="text-muted-foreground text-sm mt-1">
-                      {community.description}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-display text-2xl font-bold">
+                        {community.name}
+                      </h2>
+                      <Badge variant="secondary" className="text-xs">
+                        {community.visibility === "public" ? (
+                          <Globe className="h-3 w-3 mr-1" />
+                        ) : (
+                          <Lock className="h-3 w-3 mr-1" />
+                        )}
+                        {community.visibility}
+                      </Badge>
+                    </div>
+                    {community.description && (
+                      <p className="text-muted-foreground text-sm mt-1">
+                        {community.description}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t">
@@ -125,17 +211,16 @@ export default function CommunityDashboardPage() {
                     <p className="text-sm text-muted-foreground">Events</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold font-display">23</p>
-                    <p className="text-sm text-muted-foreground">This Month</p>
+                    <p className="text-2xl font-bold font-display">
+                      {community.tags.length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Tags</p>
                   </div>
                   <div>
-                    <div className="flex items-center gap-1">
-                      <p className="text-2xl font-bold font-display text-green-600">
-                        +12%
-                      </p>
-                      <TrendingUp className="h-4 w-4 text-green-600" />
-                    </div>
-                    <p className="text-sm text-muted-foreground">Growth</p>
+                    <p className="text-2xl font-bold font-display capitalize">
+                      {community.status}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Status</p>
                   </div>
                 </div>
               </CardContent>
@@ -149,7 +234,9 @@ export default function CommunityDashboardPage() {
             transition={{ delay: 0.1 }}
             className="mb-8"
           >
-            <h2 className="font-display text-xl font-bold mb-4">Quick Actions</h2>
+            <h2 className="font-display text-xl font-bold mb-4">
+              Quick Actions
+            </h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {quickActions.map((action, i) => {
                 const Icon = action.icon;
@@ -194,90 +281,142 @@ export default function CommunityDashboardPage() {
               transition={{ delay: 0.2 }}
             >
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-display text-xl font-bold">Recent Events</h2>
+                <h2 className="font-display text-xl font-bold">
+                  Recent Events
+                </h2>
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href="/events">
+                  <Link href="/dashboard/events">
                     View All <ArrowRight className="h-3 w-3 ml-1" />
                   </Link>
                 </Button>
               </div>
               <div className="space-y-3">
-                {recentEvents.map((event, i) => (
-                  <motion.div
-                    key={event.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 + i * 0.05 }}
-                  >
-                    <Card hover>
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                            <Calendar className="h-5 w-5 text-primary" />
+                {recentEvents.length > 0 ? (
+                  recentEvents.map((event, i) => (
+                    <motion.div
+                      key={event.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2 + i * 0.05 }}
+                    >
+                      <Card hover>
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-4">
+                            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                              <Calendar className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-sm truncate">
+                                {event.title}
+                              </h3>
+                              <p className="text-xs text-muted-foreground">
+                                {formatDate(event.startDate)}
+                              </p>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className="text-xs shrink-0"
+                            >
+                              {event.registrationCount} registered
+                            </Badge>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-medium text-sm truncate">
-                              {event.title}
-                            </h3>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDate(event.startDate)}
-                            </p>
-                          </div>
-                          <Badge variant="secondary" className="text-xs shrink-0">
-                            {event.registrationCount} registered
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))
+                ) : (
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <Calendar className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        No events yet.{" "}
+                        <Link
+                          href="/events/create"
+                          className="text-primary hover:underline"
+                        >
+                          Create one
+                        </Link>
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </motion.div>
 
-            {/* Member Growth Chart Placeholder */}
+            {/* Community Info */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25 }}
             >
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-display text-xl font-bold">Member Growth</h2>
-                <Badge variant="secondary">
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                  Last 6 months
-                </Badge>
+                <h2 className="font-display text-xl font-bold">
+                  Community Info
+                </h2>
               </div>
               <Card className="p-6">
-                <div className="flex items-end gap-2 h-48">
-                  {growthData.map((d, i) => {
-                    const maxVal = Math.max(...growthData.map((g) => g.members));
-                    const height = (d.members / maxVal) * 100;
-                    return (
-                      <motion.div
-                        key={d.month}
-                        initial={{ height: 0 }}
-                        animate={{ height: `${height}%` }}
-                        transition={{ delay: 0.3 + i * 0.05, duration: 0.5 }}
-                        className="flex-1 flex flex-col items-center gap-1"
+                <div className="space-y-4">
+                  {community.website && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">
+                        Website
+                      </p>
+                      <a
+                        href={community.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
                       >
-                        <div
-                          className="w-full rounded-t-lg bg-gradient-to-t from-primary to-accent/80 min-h-[4px]"
-                          style={{ height: "100%" }}
-                        />
-                        <span className="text-xs text-muted-foreground mt-1">
-                          {d.month}
-                        </span>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 pt-4 border-t text-center">
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-medium text-foreground">
-                      {formatNumber(community.memberCount)}
-                    </span>{" "}
-                    total members
-                  </p>
+                        {community.website}
+                      </a>
+                    </div>
+                  )}
+                  {community.tags.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-2">
+                        Tags
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {community.tags.map((tag) => (
+                          <Badge key={tag} variant="muted" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {Object.keys(community.socials).length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-2">
+                        Social Links
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(community.socials).map(
+                          ([platform, url]) => (
+                            <a
+                              key={platform}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Badge
+                                variant="outline"
+                                className="text-xs capitalize hover:bg-muted"
+                              >
+                                {platform}
+                              </Badge>
+                            </a>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                      Created
+                    </p>
+                    <p className="text-sm">{formatDate(community.createdAt)}</p>
+                  </div>
                 </div>
               </Card>
             </motion.div>
@@ -291,7 +430,11 @@ export default function CommunityDashboardPage() {
             className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3"
           >
             {[
-              { label: "Members", href: "/dashboard/community/members", icon: Users },
+              {
+                label: "Members",
+                href: "/dashboard/community/members",
+                icon: Users,
+              },
               {
                 label: "Newsletter",
                 href: "/dashboard/community/newsletter",
@@ -319,6 +462,43 @@ export default function CommunityDashboardPage() {
               );
             })}
           </motion.div>
+
+          {/* Other Communities */}
+          {communities.length > 1 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="mt-10"
+            >
+              <h2 className="font-display text-xl font-bold mb-4">
+                My Other Communities
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {communities.slice(1).map((c) => (
+                  <Card key={c.id} hover>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                          <span className="font-display font-bold text-primary">
+                            {c.name.charAt(0)}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-sm truncate">
+                            {c.name}
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            {formatNumber(c.memberCount)} members
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </motion.div>
+          )}
         </div>
       </main>
     </>

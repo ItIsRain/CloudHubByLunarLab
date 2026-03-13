@@ -53,7 +53,7 @@ function SearchResultsContent() {
         ? mockCommunities.filter(
             (c) =>
               c.name.toLowerCase().includes(query) ||
-              c.description.toLowerCase().includes(query)
+              (c.description || "").toLowerCase().includes(query)
           )
         : [],
     [query]

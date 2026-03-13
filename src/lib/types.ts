@@ -391,14 +391,31 @@ export interface Community {
   id: string;
   slug: string;
   name: string;
-  description: string;
+  description?: string;
   logo?: string;
   coverImage?: string;
   website?: string;
+  organizerId: string;
+  organizer?: User;
+  status: "active" | "archived";
   memberCount: number;
   eventCount: number;
-  organizer: User;
+  visibility: "public" | "private";
+  tags: string[];
+  socials: Record<string, string>;
   createdAt: string;
+  updatedAt: string;
+  isMember?: boolean;
+  memberRole?: "admin" | "moderator" | "member";
+}
+
+export interface CommunityMember {
+  id: string;
+  communityId: string;
+  userId: string;
+  role: "admin" | "moderator" | "member";
+  joinedAt: string;
+  user?: User;
 }
 
 // Notification Types
@@ -425,36 +442,72 @@ export interface Notification {
 export interface BlogPost {
   id: string;
   slug: string;
+  authorId: string;
+  author?: User;
   title: string;
   excerpt: string;
   content: string;
   coverImage?: string;
-  author: User;
   category: string;
   tags: string[];
   readTime: number;
-  publishedAt: string;
+  status: "draft" | "published" | "archived";
+  viewCount: number;
+  publishedAt?: string;
   createdAt: string;
+  updatedAt: string;
 }
 
-// Message Types
+// Messaging Types
+export interface Conversation {
+  id: string;
+  type: "direct" | "group" | "team";
+  name?: string;
+  hackathonId?: string;
+  teamId?: string;
+  createdBy: string;
+  lastMessageAt?: string;
+  lastMessagePreview?: string;
+  createdAt: string;
+  updatedAt: string;
+  // Joined fields
+  participants?: ConversationParticipant[];
+  otherParticipant?: User;
+  unreadCount?: number;
+}
+
+export interface ConversationParticipant {
+  id: string;
+  conversationId: string;
+  userId: string;
+  role: "admin" | "member";
+  isMuted: boolean;
+  unreadCount: number;
+  lastReadAt?: string;
+  joinedAt: string;
+  user?: User;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
   senderId: string;
-  sender: User;
   content: string;
-  attachments?: string[];
-  isRead: boolean;
+  type: "text" | "image" | "file" | "system";
+  attachments?: Record<string, unknown>[];
+  editedAt?: string;
+  deletedAt?: string;
   createdAt: string;
+  sender?: User;
+  reactions?: MessageReaction[];
 }
 
-export interface Conversation {
+export interface MessageReaction {
   id: string;
-  participants: User[];
-  lastMessage?: Message;
-  unreadCount: number;
-  updatedAt: string;
+  messageId: string;
+  userId: string;
+  emoji: string;
+  createdAt: string;
 }
 
 // Certificate Types
@@ -561,4 +614,56 @@ export interface HackathonFilters {
   status?: HackathonStatus[];
   prizeRange?: { min: number; max: number };
   sortBy?: "date" | "prize" | "participants" | "newest";
+}
+
+// Mentor Availability Types
+export interface MentorAvailability {
+  id: string;
+  mentorId: string;
+  hackathonId?: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+// Mentor Session Types
+export type MentorSessionStatus = "pending" | "confirmed" | "completed" | "cancelled" | "no_show";
+export type MentorSessionPlatform = "zoom" | "google_meet" | "teams" | "discord" | "in_person" | "other";
+
+export interface MentorSession {
+  id: string;
+  mentorId: string;
+  menteeId: string;
+  hackathonId?: string;
+  teamId?: string;
+  title: string;
+  description?: string;
+  status: MentorSessionStatus;
+  sessionDate: string;
+  durationMinutes: number;
+  meetingUrl?: string;
+  platform?: MentorSessionPlatform;
+  notes?: string;
+  mentorFeedbackRating?: number;
+  mentorFeedbackComment?: string;
+  menteeFeedbackRating?: number;
+  menteeFeedbackComment?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  createdAt: string;
+  updatedAt: string;
+  mentor?: User;
+  mentee?: User;
+}
+
+// Team Suggestion Types
+export interface TeamSuggestion {
+  user: User;
+  compatibilityScore: number;
+  sharedSkills: string[];
+  complementarySkills: string[];
+  sharedInterests: string[];
 }

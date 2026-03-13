@@ -8,6 +8,7 @@ import { canCreateHackathon, getHackathonLimit } from "@/lib/plan-limits";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import type { SubscriptionTier } from "@/lib/types";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
+import { writeAuditLog } from "@/lib/audit";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
@@ -376,6 +377,14 @@ export async function POST(request: NextRequest) {
       console.error("Failed to create hackathon:", error.message);
       return NextResponse.json({ error: "Failed to create hackathon" }, { status: 400 });
     }
+
+    await writeAuditLog({
+      actorId: auth.userId,
+      action: "create",
+      entityType: "hackathon",
+      entityId: data.id as string,
+      newValues: { title: body.title, status: insertData.status || "draft" },
+    }, request);
 
     return NextResponse.json({
       data: dbRowToHackathon(data as Record<string, unknown>),

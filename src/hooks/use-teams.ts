@@ -1,6 +1,6 @@
 import { fetchJson } from "@/lib/fetch-json";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Team, PaginatedResponse } from "@/lib/types";
+import type { Team, PaginatedResponse, TeamSuggestion } from "@/lib/types";
 import { useAuthStore } from "@/store/auth-store";
 
 
@@ -205,5 +205,48 @@ export function useLeaveTeam() {
         queryKey: ["teams", variables.teamId],
       });
     },
+  });
+}
+
+// =====================================================
+// Team Auto-Matching hooks
+// =====================================================
+
+export function useAutoMatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { hackathon_id: string }) => {
+      const res = await fetch("/api/teams/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Failed to auto-match teams");
+      }
+      return res.json() as Promise<{
+        data: Team[];
+        matched: number;
+        teamsCreated: number;
+      }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+  });
+}
+
+export function useTeamSuggestions(hackathonId: string | undefined) {
+  const user = useAuthStore((s) => s.user);
+
+  return useQuery<{ data: TeamSuggestion[] }>({
+    queryKey: ["team-suggestions", hackathonId, user?.id],
+    queryFn: () =>
+      fetchJson<{ data: TeamSuggestion[] }>(
+        `/api/teams/suggestions?hackathon_id=${hackathonId}`
+      ),
+    enabled: !!hackathonId && !!user?.id,
   });
 }

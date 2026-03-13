@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -14,6 +14,10 @@ import {
   Filter,
   Lock,
   Pencil,
+  Sparkles,
+  Loader2,
+  X,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,11 +30,11 @@ const JoinTeamDialog = dynamic(() => import("@/components/dialogs/join-team-dial
 const EditTeamDialog = dynamic(() => import("@/components/dialogs/edit-team-dialog").then(m => m.EditTeamDialog), { ssr: false });
 import { cn, getInitials } from "@/lib/utils";
 import { useHackathon } from "@/hooks/use-hackathons";
-import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
+import { useHackathonTeams, useCreateTeam, useAutoMatch, useTeamSuggestions } from "@/hooks/use-teams";
 import { useHackathonRegistration } from "@/hooks/use-registrations";
 import { useHackathonPhase } from "@/hooks/use-hackathon-phase";
 import { useAuthStore } from "@/store/auth-store";
-import type { Team, TeamStatus } from "@/lib/types";
+import type { Team, TeamStatus, TeamSuggestion } from "@/lib/types";
 
 const statusColors: Record<TeamStatus, string> = {
   forming: "bg-blue-500/10 text-blue-600",
@@ -46,6 +50,7 @@ export default function TeamsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const user = useAuthStore((s) => s.user);
 
@@ -57,6 +62,12 @@ export default function TeamsPage() {
   const isRegistered = regData?.registered ?? false;
   const isOrganizer = user?.id && hackathon?.organizerId === user.id;
   const phase = useHackathonPhase(hackathon);
+
+  const { data: suggestionsData, isLoading: suggestionsLoading } = useTeamSuggestions(
+    showSuggestions ? hackathonId : undefined
+  );
+  const suggestions = suggestionsData?.data || [];
+  const autoMatch = useAutoMatch();
 
   const filteredTeams = useMemo(() => {
     return allTeams.filter((team) => {
@@ -86,6 +97,16 @@ export default function TeamsPage() {
     }
   };
 
+  const handleAutoMatch = async () => {
+    try {
+      const result = await autoMatch.mutateAsync({ hackathon_id: hackathonId });
+      toast.success(`Auto-matching complete!`, {
+        description: `${result.teamsCreated} teams created from ${result.matched} participants.`,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to auto-match teams");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -126,12 +147,39 @@ export default function TeamsPage() {
                   </p>
                 )}
               </div>
-              {phase.canFormTeams && (
-                <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Create Team
-                </Button>
-              )}
+              <div className="flex gap-2 flex-wrap">
+                {isRegistered && phase.canFormTeams && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowSuggestions((v) => !v)}
+                    className="gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {showSuggestions ? "Hide Suggestions" : "Find Teammates"}
+                  </Button>
+                )}
+                {isOrganizer && (
+                  <Button
+                    variant="outline"
+                    onClick={handleAutoMatch}
+                    disabled={autoMatch.isPending}
+                    className="gap-2"
+                  >
+                    {autoMatch.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Zap className="h-4 w-4" />
+                    )}
+                    Auto-Match Teams
+                  </Button>
+                )}
+                {phase.canFormTeams && (
+                  <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Create Team
+                  </Button>
+                )}
+              </div>
             </div>
             {!phase.canFormTeams && (
               <div className="mt-4 rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
@@ -139,6 +187,63 @@ export default function TeamsPage() {
               </div>
             )}
           </div>
+
+          {/* Teammate Suggestions Panel */}
+          <AnimatePresence>
+            {showSuggestions && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-primary" />
+                        <h3 className="font-display font-semibold text-lg">
+                          Suggested Teammates
+                        </h3>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowSuggestions(false)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Based on your skills and interests, here are participants who would complement your team.
+                    </p>
+
+                    {suggestionsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        <span className="ml-2 text-sm text-muted-foreground">
+                          Finding compatible teammates...
+                        </span>
+                      </div>
+                    ) : suggestions.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Users className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          No suggestions available. All participants may already be on teams.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {suggestions.map((suggestion, i) => (
+                          <SuggestionCard key={suggestion.user.id} suggestion={suggestion} index={i} />
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-4">
@@ -338,5 +443,115 @@ export default function TeamsPage() {
         />
       )}
     </div>
+  );
+}
+
+// =====================================================
+// Suggestion Card Component
+// =====================================================
+
+function SuggestionCard({ suggestion, index }: { suggestion: TeamSuggestion; index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05 }}
+    >
+      <Card className="hover:shadow-md transition-all duration-200">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <Avatar size="sm" className="border-2 border-background">
+              <AvatarImage src={suggestion.user.avatar} alt={suggestion.user.name} />
+              <AvatarFallback>{getInitials(suggestion.user.name)}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm truncate">{suggestion.user.name}</p>
+              {suggestion.user.headline && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {suggestion.user.headline}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <div
+                className={cn(
+                  "text-xs font-bold px-2 py-1 rounded-full",
+                  suggestion.compatibilityScore >= 70
+                    ? "bg-green-500/10 text-green-600"
+                    : suggestion.compatibilityScore >= 40
+                    ? "bg-yellow-500/10 text-yellow-600"
+                    : "bg-muted text-muted-foreground"
+                )}
+              >
+                {suggestion.compatibilityScore}%
+              </div>
+            </div>
+          </div>
+
+          {/* Shared Skills */}
+          {suggestion.sharedSkills.length > 0 && (
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+                Shared Skills
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {suggestion.sharedSkills.slice(0, 4).map((skill) => (
+                  <Badge key={skill} variant="secondary" className="text-[10px]">
+                    {skill}
+                  </Badge>
+                ))}
+                {suggestion.sharedSkills.length > 4 && (
+                  <Badge variant="outline" className="text-[10px]">
+                    +{suggestion.sharedSkills.length - 4}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Complementary Skills */}
+          {suggestion.complementarySkills.length > 0 && (
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+                Brings New Skills
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {suggestion.complementarySkills.slice(0, 4).map((skill) => (
+                  <Badge key={skill} className="text-[10px] bg-primary/10 text-primary">
+                    {skill}
+                  </Badge>
+                ))}
+                {suggestion.complementarySkills.length > 4 && (
+                  <Badge variant="outline" className="text-[10px]">
+                    +{suggestion.complementarySkills.length - 4}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Shared Interests */}
+          {suggestion.sharedInterests.length > 0 && (
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+                Shared Interests
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {suggestion.sharedInterests.slice(0, 3).map((interest) => (
+                  <Badge key={interest} variant="outline" className="text-[10px]">
+                    {interest}
+                  </Badge>
+                ))}
+                {suggestion.sharedInterests.length > 3 && (
+                  <Badge variant="outline" className="text-[10px]">
+                    +{suggestion.sharedInterests.length - 3}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
