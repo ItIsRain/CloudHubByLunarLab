@@ -1,22 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ hackathonId: string }> }
 ) {
   try {
     const { hackathonId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify user is the hackathon organizer
     const { data: hackathon } = await supabase
@@ -28,7 +39,7 @@ export async function GET(
     if (!hackathon) {
       return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
     }
-    if (hackathon.organizer_id !== user.id) {
+    if (hackathon.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

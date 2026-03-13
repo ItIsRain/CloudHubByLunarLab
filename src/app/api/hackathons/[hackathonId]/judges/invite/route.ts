@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
 
 export async function POST(
   request: NextRequest,
@@ -9,17 +11,25 @@ export async function POST(
 ) {
   try {
     const { hackathonId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    // Auth check
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify caller is the hackathon organizer and get hackathon details
     const { data: hackathon } = await supabase
@@ -34,12 +44,12 @@ export async function POST(
         { status: 404 }
       );
     }
-    if (hackathon.organizer_id !== user.id) {
+    if (hackathon.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Rate limit: max 10 invitations per organizer per 15 minutes
-    const rl = checkRateLimit(user.id, { namespace: "judge-invite", limit: 10, windowMs: 15 * 60 * 1000 });
+    const rl = checkRateLimit(auth.userId, { namespace: "judge-invite", limit: 10, windowMs: 15 * 60 * 1000 });
     if (rl.limited) {
       return NextResponse.json(
         { error: "Too many invitations sent. Please try again later." },
@@ -61,6 +71,13 @@ export async function POST(
     if (!emailRegex.test(email)) {
       return NextResponse.json(
         { error: "Invalid email format" },
+        { status: 400 }
+      );
+    }
+
+    if (typeof name !== "string" || name.length > 200) {
+      return NextResponse.json(
+        { error: "Name must be a string under 200 characters" },
         { status: 400 }
       );
     }

@@ -2,6 +2,8 @@ import { type NextRequest } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { hashApiKey, hasRequiredScope } from "@/lib/api-keys";
+import { canUseApi } from "@/lib/plan-limits";
+import type { SubscriptionTier } from "@/lib/types";
 
 // =====================================================
 // Dual Auth: Session Cookies OR API Key (Bearer token)
@@ -67,6 +69,23 @@ async function authenticateApiKey(key: string): Promise<AuthResult> {
 
   if (data.status !== "active") {
     return { type: "unauthenticated", error: "API key has been revoked" };
+  }
+
+  // Verify user still has enterprise tier — handles plan downgrades.
+  // Without this check, a user who downgrades from Enterprise to Free
+  // would retain API access via existing keys.
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("subscription_tier")
+    .eq("id", data.user_id)
+    .single();
+
+  const tier = (profile?.subscription_tier as SubscriptionTier) || "free";
+  if (!canUseApi(tier)) {
+    return {
+      type: "unauthenticated",
+      error: "API access requires an active Enterprise subscription",
+    };
   }
 
   // Fire-and-forget: update last_used timestamp

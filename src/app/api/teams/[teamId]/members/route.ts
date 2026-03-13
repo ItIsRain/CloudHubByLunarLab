@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToTeam } from "@/lib/supabase/mappers";
 import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
@@ -48,9 +49,14 @@ export async function POST(
       );
     }
 
-    // Verify password if team has one
+    // Verify password if team has one (timing-safe comparison to prevent timing attacks)
     if (team.join_password) {
-      if (!body.password || body.password !== team.join_password) {
+      if (!body.password || typeof body.password !== "string") {
+        return NextResponse.json({ error: "Incorrect team password" }, { status: 403 });
+      }
+      const expected = Buffer.from(team.join_password as string);
+      const provided = Buffer.from(body.password as string);
+      if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
         return NextResponse.json({ error: "Incorrect team password" }, { status: 403 });
       }
     }

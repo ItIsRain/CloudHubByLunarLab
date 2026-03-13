@@ -94,6 +94,10 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
+      // Unique constraint violation — most likely a duplicate username
+      if (error.code === "23505") {
+        return NextResponse.json({ error: "Username is already taken" }, { status: 409 });
+      }
       return NextResponse.json({ error: "Failed to update profile" }, { status: 400 });
     }
 

@@ -1,9 +1,29 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
+
+    const hasBearer = request.headers.get("authorization")?.startsWith("Bearer ");
+    if (hasBearer && auth.type === "unauthenticated") {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/stats");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     const [eventsRes, hackathonsRes, attendeesRes, prizesRes] =
       await Promise.all([

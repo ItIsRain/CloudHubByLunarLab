@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { fireWebhooks } from "@/lib/webhook-delivery";
 
 export async function GET(
   request: NextRequest,
@@ -8,16 +11,25 @@ export async function GET(
 ) {
   try {
     const { hackathonId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify user is the hackathon organizer
     const { data: hackathonCheck } = await supabase
@@ -29,23 +41,35 @@ export async function GET(
     if (!hackathonCheck) {
       return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
     }
-    if (hackathonCheck.organizer_id !== user.id) {
+    if (hackathonCheck.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const search = searchParams.get("search");
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1") || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "50") || 50));
+    const offset = (page - 1) * pageSize;
+
+    // When search is active, we must fetch all rows first (search is on joined profile
+    // fields which can't be filtered at the PostgREST level), then paginate in JS.
+    // Without search, use Supabase-level pagination for efficiency.
+    const useServerPagination = !search;
 
     // Fetch registrations, teams, and tracks in parallel
     let regQuery = supabase
       .from("hackathon_registrations")
-      .select("id, user_id, hackathon_id, status, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)")
+      .select("id, user_id, hackathon_id, status, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)", { count: "exact" })
       .eq("hackathon_id", hackathonId)
       .order("created_at", { ascending: false });
 
     if (status) {
       regQuery = regQuery.eq("status", status);
+    }
+
+    if (useServerPagination) {
+      regQuery = regQuery.range(offset, offset + pageSize - 1);
     }
 
     const [regResult, teamsResult, hackathonResult] = await Promise.all([
@@ -61,7 +85,7 @@ export async function GET(
         .single(),
     ]);
 
-    const { data: registrations, error } = regResult;
+    const { data: registrations, error, count } = regResult;
 
     if (error) {
       return NextResponse.json({ error: "Failed to fetch participants" }, { status: 400 });
@@ -114,7 +138,22 @@ export async function GET(
       });
     }
 
-    return NextResponse.json({ data: participants });
+    // When searching, total and pagination are based on filtered results
+    const total = search ? participants.length : (count || 0);
+
+    // Apply JS-level pagination when search is active
+    if (search) {
+      participants = participants.slice(offset, offset + pageSize);
+    }
+
+    return NextResponse.json({
+      data: participants,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+      hasMore: offset + pageSize < total,
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json(
@@ -130,17 +169,25 @@ export async function PATCH(
 ) {
   try {
     const { hackathonId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    // Auth check
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify caller is the hackathon organizer (include name for notifications)
     const { data: hackathon } = await supabase
@@ -155,7 +202,7 @@ export async function PATCH(
         { status: 404 }
       );
     }
-    if (hackathon.organizer_id !== user.id) {
+    if (hackathon.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -224,6 +271,15 @@ export async function PATCH(
         });
       }
     }
+
+    // Fire webhook for the organizer
+    fireWebhooks(auth.userId, "hackathon.participant.status_changed", {
+      hackathonId,
+      hackathonName: hackathon.name,
+      registrationId: data.id,
+      userId: data.user_id,
+      status: data.status,
+    });
 
     const userProfile = (data as Record<string, unknown>)
       .user as Record<string, unknown>;

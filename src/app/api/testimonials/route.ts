@@ -94,6 +94,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate rating (must be integer 1-5)
+    const rating = body.rating !== undefined ? body.rating : 5;
+    if (typeof rating !== "number" || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return NextResponse.json(
+        { error: "Rating must be an integer between 1 and 5" },
+        { status: 400 }
+      );
+    }
+
+    // Validate highlight_stat
+    if (body.highlightStat !== undefined && body.highlightStat !== null) {
+      if (typeof body.highlightStat !== "string" || body.highlightStat.length > 200) {
+        return NextResponse.json(
+          { error: "Highlight stat must be a string under 200 characters" },
+          { status: 400 }
+        );
+      }
+    }
+
     const { data, error } = await supabase
       .from("testimonials")
       .insert({
@@ -101,8 +120,8 @@ export async function POST(request: NextRequest) {
         quote: body.quote.slice(0, 2000),
         role: body.role.slice(0, 100),
         company: body.company ? String(body.company).slice(0, 100) : null,
-        highlight_stat: body.highlightStat || null,
-        rating: body.rating || 5,
+        highlight_stat: body.highlightStat ? String(body.highlightStat).slice(0, 200) : null,
+        rating,
       })
       .select("*, user:profiles!user_id(*)")
       .single();

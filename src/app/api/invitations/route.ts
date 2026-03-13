@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToEntityInvitation } from "@/lib/supabase/mappers";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -69,6 +70,16 @@ export async function POST(request: NextRequest) {
     if (organizerId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // Rate limit: max 15 invitations per organizer per 15 minutes (prevents email relay abuse)
+    const rl = checkRateLimit(user.id, { namespace: "entity-invite", limit: 15, windowMs: 15 * 60 * 1000 });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many invitations sent. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
+
     if (entityVisibility !== "private") {
       return NextResponse.json(
         { error: "Invitations can only be sent for private events/hackathons" },

@@ -1,15 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
 import { PROFILE_PUBLIC_COLS } from "@/lib/constants";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ username: string }> }
 ) {
   try {
     const { username } = await params;
-    const supabase = await getSupabaseServerClient();
+
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
+
+    const hasBearer = request.headers.get("authorization")?.startsWith("Bearer ");
+    if (hasBearer && auth.type === "unauthenticated") {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/users");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     const { data, error } = await supabase
       .from("profiles")

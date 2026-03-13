@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
   try {
+    // Rate limit token lookups to prevent brute-force enumeration
+    const ip = getClientIp(request);
+    const rl = checkRateLimit(ip, { namespace: "invitation-accept", limit: 20, windowMs: 15 * 60 * 1000 });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
+
     const supabase = await getSupabaseServerClient();
     const { searchParams } = new URL(request.url);
     const token = searchParams.get("token");
@@ -120,16 +131,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Accept invitation
-    const { error: updateError } = await supabase
+    // Accept invitation atomically (only if still pending — prevents race condition)
+    const { data: updatedInv, error: updateError } = await supabase
       .from("entity_invitations")
       .update({ status: "accepted", accepted_by: user.id })
-      .eq("id", invitation.id);
+      .eq("id", invitation.id)
+      .eq("status", "pending")
+      .select("id")
+      .single();
 
-    if (updateError) {
+    if (updateError || !updatedInv) {
       return NextResponse.json(
-        { error: "Failed to accept invitation" },
-        { status: 500 }
+        { error: "Invitation has already been accepted" },
+        { status: 409 }
       );
     }
 

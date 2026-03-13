@@ -1,21 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToEvent } from "@/lib/supabase/mappers";
 import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
-
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
 function eventFilter(id: string) {
   return UUID_RE.test(id) ? `id.eq.${id}` : `slug.eq.${id}`;
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> }
 ) {
   try {
     const { eventId } = await params;
-    const supabase = await getSupabaseServerClient();
+
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
+
+    const hasBearer = request.headers.get("authorization")?.startsWith("Bearer ");
+    if (hasBearer && auth.type === "unauthenticated") {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/events");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     const { data, error } = await supabase
       .from("events")
@@ -31,8 +53,22 @@ export async function GET(
 
     // Private events: only organizer or accepted invitees can view
     if (row.visibility === "private") {
-      const { data: { user } } = await supabase.auth.getUser();
-      const canAccess = await hasPrivateEntityAccess(supabase, "event", row.id as string, user?.id, user?.email ?? undefined);
+      const userId = auth.type !== "unauthenticated" ? auth.userId : undefined;
+      let userEmail: string | undefined;
+
+      if (auth.type === "session") {
+        const { data: { user } } = await supabase.auth.getUser();
+        userEmail = user?.email ?? undefined;
+      } else if (auth.type === "api_key") {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("id", auth.userId)
+          .single();
+        userEmail = (profile?.email as string) ?? undefined;
+      }
+
+      const canAccess = await hasPrivateEntityAccess(supabase, "event", row.id as string, userId, userEmail);
       if (!canAccess) {
         return NextResponse.json({ error: "Event not found" }, { status: 404 });
       }
@@ -61,28 +97,37 @@ export async function PATCH(
 ) {
   try {
     const { eventId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Verify ownership
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/events");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
+
+    // Verify ownership (also fetch current dates for chronology validation)
     const { data: existing } = await supabase
       .from("events")
-      .select("organizer_id")
+      .select("organizer_id, start_date, end_date")
       .or(eventFilter(eventId))
       .single();
 
     if (!existing) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
-    if (existing.organizer_id !== user.id) {
+    if (existing.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -149,10 +194,40 @@ export async function PATCH(
       return NextResponse.json({ error: "Tags must be an array of up to 20 items" }, { status: 400 });
     }
 
+    // Validate capacity
+    if (updates.capacity !== undefined) {
+      if (typeof updates.capacity !== "number" || !Number.isInteger(updates.capacity) || (updates.capacity as number) < 1) {
+        return NextResponse.json({ error: "Capacity must be a positive integer" }, { status: 400 });
+      }
+    }
+
+    // Validate date formats
+    if (updates.start_date !== undefined) {
+      if (typeof updates.start_date !== "string" || !ISO_DATE_RE.test(updates.start_date) || isNaN(Date.parse(updates.start_date))) {
+        return NextResponse.json({ error: "Invalid start_date format. Use ISO 8601." }, { status: 400 });
+      }
+    }
+    if (updates.end_date !== undefined) {
+      if (typeof updates.end_date !== "string" || !ISO_DATE_RE.test(updates.end_date) || isNaN(Date.parse(updates.end_date))) {
+        return NextResponse.json({ error: "Invalid end_date format. Use ISO 8601." }, { status: 400 });
+      }
+    }
+
+    // Check date chronology (merge with existing values)
+    const effectiveStart = (updates.start_date ?? existing.start_date) as string | null;
+    const effectiveEnd = (updates.end_date ?? existing.end_date) as string | null;
+    if (effectiveStart && effectiveEnd) {
+      if (new Date(effectiveStart) >= new Date(effectiveEnd)) {
+        return NextResponse.json({ error: "end_date must be after start_date" }, { status: 400 });
+      }
+    }
+
+    // Atomic ownership check + update in a single query
     const { data, error } = await supabase
       .from("events")
       .update(updates)
       .or(eventFilter(eventId))
+      .eq("organizer_id", auth.userId)
       .select("*, organizer:profiles!organizer_id(*)")
       .single();
 
@@ -173,21 +248,30 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> }
 ) {
   try {
     const { eventId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/events");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify ownership
     const { data: existing } = await supabase
@@ -199,14 +283,16 @@ export async function DELETE(
     if (!existing) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
-    if (existing.organizer_id !== user.id) {
+    if (existing.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Atomic ownership check + delete in a single query
     const { error } = await supabase
       .from("events")
       .delete()
-      .or(eventFilter(eventId));
+      .or(eventFilter(eventId))
+      .eq("organizer_id", auth.userId);
 
     if (error) {
       return NextResponse.json({ error: "Failed to delete event" }, { status: 400 });

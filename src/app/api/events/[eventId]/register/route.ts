@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
+import { fireWebhooks } from "@/lib/webhook-delivery";
 
 import { UUID_RE } from "@/lib/constants";
 
@@ -212,6 +213,20 @@ export async function POST(
               .from("event_registrations")
               .update({ status: "cancelled" })
               .eq("id", data.id);
+
+            // Recalculate registration_count after rollback
+            const { count: rollbackCount } = await supabase
+              .from("event_registrations")
+              .select("id", { count: "exact", head: true })
+              .eq("event_id", eventId)
+              .neq("status", "cancelled");
+
+            if (rollbackCount !== null) {
+              await supabase
+                .from("events")
+                .update({ registration_count: rollbackCount })
+                .eq("id", eventId);
+            }
           }
           return NextResponse.json(
             { error: "This ticket is sold out" },
@@ -231,6 +246,23 @@ export async function POST(
           console.error("Failed to update ticket sold counter:", ticketError);
         }
       }
+    }
+
+    // Fire webhook AFTER all validations and rollback checks complete
+    const { data: eventOrgData } = await supabase
+      .from("events")
+      .select("organizer_id, title")
+      .eq("id", eventId)
+      .single();
+
+    if (eventOrgData?.organizer_id) {
+      fireWebhooks(eventOrgData.organizer_id, "event.registration.created", {
+        eventId,
+        eventTitle: eventOrgData.title,
+        registrationId: data?.id,
+        userId: user.id,
+        status: "confirmed",
+      });
     }
 
     return NextResponse.json({ data });
@@ -304,6 +336,22 @@ export async function DELETE(
         .from("events")
         .update({ registration_count: regCount })
         .eq("id", eventId);
+    }
+
+    // Fire webhook for the event organizer
+    const { data: eventCancelOrg } = await supabase
+      .from("events")
+      .select("organizer_id, title")
+      .eq("id", eventId)
+      .single();
+
+    if (eventCancelOrg?.organizer_id) {
+      fireWebhooks(eventCancelOrg.organizer_id, "event.registration.cancelled", {
+        eventId,
+        eventTitle: eventCancelOrg.title,
+        registrationId: registration.id,
+        userId: user.id,
+      });
     }
 
     return NextResponse.json({ message: "Registration cancelled" });

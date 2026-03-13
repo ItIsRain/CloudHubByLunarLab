@@ -4,7 +4,7 @@ import { randomBytes, createHash } from "crypto";
 // API Key Scopes
 // =====================================================
 
-export const API_SCOPES = ["events", "hackathons", "users", "analytics"] as const;
+export const API_SCOPES = ["events", "hackathons", "users", "analytics", "webhooks"] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 
 /** Maps each scope to the API route prefixes it authorizes */
@@ -13,6 +13,7 @@ const SCOPE_ROUTE_MAP: Record<ApiScope, string[]> = {
   hackathons: ["/api/hackathons"],
   users: ["/api/users"],
   analytics: ["/api/stats"],
+  webhooks: ["/api/webhooks"],
 };
 
 // =====================================================

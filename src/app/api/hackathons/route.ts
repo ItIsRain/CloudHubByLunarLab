@@ -9,6 +9,8 @@ import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import type { SubscriptionTier } from "@/lib/types";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -46,6 +48,11 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1") || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "20") || 20));
 
+    // Validate organizerId format if provided
+    if (organizerId && !UUID_RE.test(organizerId)) {
+      return NextResponse.json({ error: "Invalid organizerId format" }, { status: 400 });
+    }
+
     let query = supabase
       .from("hackathons")
       .select("*, organizer:profiles!organizer_id(*), teams(count), submissions(count)", { count: "exact" });
@@ -73,13 +80,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Visibility filtering
-    // Only call getUser() when we actually need auth context (organizer's own hackathons)
-    let user = null;
+    // For API key auth, use auth.userId directly; for session auth, call getUser()
+    let authUserId: string | null = null;
     if (organizerId) {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      user = authUser;
+      if (auth.type === "api_key") {
+        authUserId = auth.userId;
+      } else if (auth.type === "session") {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        authUserId = authUser?.id ?? null;
+      }
     }
-    const isOwnHackathons = organizerId && user?.id === organizerId;
+    const isOwnHackathons = organizerId && authUserId === organizerId;
 
     if (!isOwnHackathons) {
       const idsParam = searchParams.get("ids");
@@ -170,22 +181,30 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Check plan limits and organizer role
     const { data: profile } = await supabase
       .from("profiles")
       .select("subscription_tier, roles")
-      .eq("id", user.id)
+      .eq("id", auth.userId)
       .single();
 
     const roles = (Array.isArray(profile?.roles) ? profile.roles : []) as string[];
@@ -206,7 +225,7 @@ export async function POST(request: NextRequest) {
     const { count: monthlyCount } = await supabase
       .from("hackathons")
       .select("id", { count: "exact", head: true })
-      .eq("organizer_id", user.id)
+      .eq("organizer_id", auth.userId)
       .gte("created_at", startOfMonth.toISOString());
 
     if (!canCreateHackathon(tier, monthlyCount || 0)) {
@@ -244,7 +263,7 @@ export async function POST(request: NextRequest) {
     ];
     const insertData: Record<string, unknown> = {
       slug,
-      organizer_id: user.id,
+      organizer_id: auth.userId,
     };
     for (const key of HACK_FIELDS) {
       if (key in body) insertData[key] = body[key];
@@ -259,8 +278,92 @@ export async function POST(request: NextRequest) {
     if (insertData.type && !VALID_TYPES.includes(insertData.type as string)) {
       return NextResponse.json({ error: "Invalid hackathon type" }, { status: 400 });
     }
+
+    // Validate status (only draft or published on create)
+    if (insertData.status) {
+      if (!["draft", "published"].includes(insertData.status as string)) {
+        return NextResponse.json(
+          { error: 'Hackathons can only be created with status "draft" or "published"' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate visibility
+    if (insertData.visibility) {
+      if (!["public", "unlisted", "private"].includes(insertData.visibility as string)) {
+        return NextResponse.json({ error: "Invalid visibility" }, { status: 400 });
+      }
+    }
+
+    // Validate tags
     if (insertData.tags && (!Array.isArray(insertData.tags) || (insertData.tags as string[]).length > 20)) {
       return NextResponse.json({ error: "Tags must be an array of up to 20 items" }, { status: 400 });
+    }
+
+    // Validate total_prize_pool
+    if (insertData.total_prize_pool !== undefined) {
+      if (typeof insertData.total_prize_pool !== "number" || (insertData.total_prize_pool as number) < 0) {
+        return NextResponse.json({ error: "total_prize_pool must be a non-negative number" }, { status: 400 });
+      }
+    }
+
+    // Validate team sizes
+    if (insertData.min_team_size !== undefined) {
+      if (typeof insertData.min_team_size !== "number" || !Number.isInteger(insertData.min_team_size) || (insertData.min_team_size as number) < 1) {
+        return NextResponse.json({ error: "min_team_size must be a positive integer" }, { status: 400 });
+      }
+    }
+    if (insertData.max_team_size !== undefined) {
+      if (typeof insertData.max_team_size !== "number" || !Number.isInteger(insertData.max_team_size) || (insertData.max_team_size as number) < 1) {
+        return NextResponse.json({ error: "max_team_size must be a positive integer" }, { status: 400 });
+      }
+    }
+    if (insertData.min_team_size !== undefined && insertData.max_team_size !== undefined) {
+      if ((insertData.min_team_size as number) > (insertData.max_team_size as number)) {
+        return NextResponse.json({ error: "min_team_size cannot exceed max_team_size" }, { status: 400 });
+      }
+    }
+
+    // Validate date formats for all timeline fields
+    const DATE_FIELDS = [
+      "registration_start", "registration_end", "hacking_start", "hacking_end",
+      "submission_deadline", "judging_start", "judging_end", "winners_announcement",
+    ];
+    for (const field of DATE_FIELDS) {
+      if (insertData[field] !== undefined) {
+        if (typeof insertData[field] !== "string" || !ISO_DATE_RE.test(insertData[field] as string) || isNaN(Date.parse(insertData[field] as string))) {
+          return NextResponse.json({ error: `Invalid ${field} format. Use ISO 8601.` }, { status: 400 });
+        }
+      }
+    }
+
+    // Validate date chronology across the timeline
+    const dates: Record<string, Date> = {};
+    for (const field of DATE_FIELDS) {
+      if (insertData[field]) dates[field] = new Date(insertData[field] as string);
+    }
+    if (dates.registration_start && dates.registration_end && dates.registration_start >= dates.registration_end) {
+      return NextResponse.json({ error: "registration_end must be after registration_start" }, { status: 400 });
+    }
+    if (dates.hacking_start && dates.hacking_end && dates.hacking_start >= dates.hacking_end) {
+      return NextResponse.json({ error: "hacking_end must be after hacking_start" }, { status: 400 });
+    }
+    if (dates.hacking_end && dates.submission_deadline && dates.submission_deadline < dates.hacking_end) {
+      return NextResponse.json({ error: "submission_deadline must be on or after hacking_end" }, { status: 400 });
+    }
+    if (dates.judging_start && dates.judging_end && dates.judging_start >= dates.judging_end) {
+      return NextResponse.json({ error: "judging_end must be after judging_start" }, { status: 400 });
+    }
+
+    // Prevent publishing without required timeline dates
+    if (insertData.status === "published") {
+      if (!insertData.hacking_start || !insertData.hacking_end || !insertData.submission_deadline) {
+        return NextResponse.json(
+          { error: "hacking_start, hacking_end, and submission_deadline are required before publishing" },
+          { status: 400 }
+        );
+      }
     }
 
     const { data, error } = await supabase

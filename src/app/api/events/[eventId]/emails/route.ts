@@ -1,24 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> }
 ) {
   try {
     const { eventId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/events");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify user is the event organizer
     const { data: event } = await supabase
@@ -30,7 +41,7 @@ export async function GET(
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
-    if (event.organizer_id !== user.id) {
+    if (event.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -70,8 +81,24 @@ export async function POST(
   { params }: { params: Promise<{ eventId: string }> }
 ) {
   try {
-    const ip = getClientIp(request);
-    const rl = checkRateLimit(ip, {
+    const { eventId } = await params;
+
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
+
+    if (auth.type === "unauthenticated") {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/events");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    // Rate limit by authenticated user (not IP) to prevent abuse
+    const rl = checkRateLimit(auth.userId, {
       namespace: "event-emails",
       limit: 10,
       windowMs: 60 * 60 * 1000,
@@ -83,17 +110,10 @@ export async function POST(
       );
     }
 
-    const { eventId } = await params;
-    const supabase = await getSupabaseServerClient();
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     const { data: event } = await supabase
       .from("events")
@@ -104,7 +124,7 @@ export async function POST(
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
-    if (event.organizer_id !== user.id) {
+    if (event.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -182,7 +202,7 @@ export async function POST(
       .from("event_emails")
       .insert({
         event_id: eventId,
-        sent_by: user.id,
+        sent_by: auth.userId,
         subject,
         body,
         recipient_filter: recipientFilter || "all",

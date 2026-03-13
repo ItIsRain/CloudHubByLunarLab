@@ -1,19 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
 import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canSubmit, getPhaseMessage } from "@/lib/hackathon-phases";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { fireWebhooks } from "@/lib/webhook-delivery";
 
 const SUBMISSION_SELECT =
   "*, team:teams(*, team_members(*, user:profiles!team_members_user_id_fkey(*))), scores(*, judge:profiles!scores_judge_id_fkey(*))";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
   try {
     const { submissionId } = await params;
-    const supabase = await getSupabaseServerClient();
+
+    // Dual auth: session cookies OR API key (also allows unauthenticated for public submissions)
+    const auth = await authenticateRequest(request);
+
+    const hasBearer = request.headers.get("authorization")?.startsWith("Bearer ");
+    if (hasBearer && auth.type === "unauthenticated") {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     const { data, error } = await supabase
       .from("submissions")
@@ -31,18 +53,31 @@ export async function GET(
     const submission = dbRowToSubmission(data as Record<string, unknown>);
     const hackathonId = (data as Record<string, unknown>).hackathon_id as string;
 
-    // Auth + visibility check
-    const { data: { user } } = await supabase.auth.getUser();
+    const authUserId = auth.type !== "unauthenticated" ? auth.userId : null;
+
+    // For private entity access, get email
+    let authUserEmail: string | undefined;
+    if (auth.type === "session") {
+      const { data: { user } } = await supabase.auth.getUser();
+      authUserEmail = user?.email ?? undefined;
+    } else if (auth.type === "api_key") {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("id", auth.userId)
+        .single();
+      authUserEmail = (profile?.email as string) ?? undefined;
+    }
 
     if (hackathonId) {
       // Block access to submissions from private hackathons for unauthorized users
-      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user?.id, user?.email ?? undefined);
+      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, authUserId ?? undefined, authUserEmail);
       if (!canAccess) {
         return NextResponse.json({ error: "Submission not found" }, { status: 404 });
       }
 
       // Strip scores for non-judge / non-organizer users
-      if (!user) {
+      if (!authUserId) {
         submission.scores = [];
       } else {
         const { data: hack } = await supabase
@@ -50,13 +85,13 @@ export async function GET(
           .select("organizer_id")
           .eq("id", hackathonId)
           .single();
-        const isOrganizer = user.id === hack?.organizer_id;
-        const isJudge = submission.scores.some((s) => s.judgeId === user.id);
+        const isOrganizer = authUserId === hack?.organizer_id;
+        const isJudge = submission.scores.some((s) => s.judgeId === authUserId);
         if (!isOrganizer && !isJudge) {
           submission.scores = [];
         }
       }
-    } else if (!user) {
+    } else if (!authUserId) {
       submission.scores = [];
     }
 
@@ -76,16 +111,25 @@ export async function PATCH(
 ) {
   try {
     const { submissionId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Check access: team member or hackathon organizer
     const { data: submission } = await supabase
@@ -104,7 +148,7 @@ export async function PATCH(
         .from("team_members")
         .select("id")
         .eq("team_id", submission.team_id)
-        .eq("user_id", user.id)
+        .eq("user_id", auth.userId)
         .maybeSingle(),
       supabase
         .from("hackathons")
@@ -113,7 +157,7 @@ export async function PATCH(
         .single(),
     ]);
 
-    const isOrganizer = hackathonRes.data?.organizer_id === user.id;
+    const isOrganizer = hackathonRes.data?.organizer_id === auth.userId;
 
     if (!membershipRes.data && !isOrganizer) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -165,6 +209,18 @@ export async function PATCH(
       return NextResponse.json({ error: "Failed to update submission" }, { status: 400 });
     }
 
+    // Fire webhook for the hackathon organizer
+    if (hackathonRes.data) {
+      const organizerId = hackathonRes.data.organizer_id as string;
+      const eventType = updates.status === "submitted" ? "submission.submitted" : "submission.updated";
+      fireWebhooks(organizerId, eventType, {
+        submissionId,
+        hackathonId: submission.hackathon_id,
+        teamId: submission.team_id,
+        status: (data as Record<string, unknown>).status,
+      });
+    }
+
     return NextResponse.json({
       data: dbRowToSubmission(data as Record<string, unknown>),
     });
@@ -178,21 +234,30 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
   try {
     const { submissionId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Check: team leader or organizer
     const { data: submission } = await supabase
@@ -211,7 +276,7 @@ export async function DELETE(
         .from("team_members")
         .select("id")
         .eq("team_id", submission.team_id)
-        .eq("user_id", user.id)
+        .eq("user_id", auth.userId)
         .eq("is_leader", true)
         .maybeSingle(),
       supabase
@@ -221,7 +286,7 @@ export async function DELETE(
         .single(),
     ]);
 
-    const isOrganizer = hackathonDelRes.data?.organizer_id === user.id;
+    const isOrganizer = hackathonDelRes.data?.organizer_id === auth.userId;
 
     if (!leaderRes.data && !isOrganizer) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

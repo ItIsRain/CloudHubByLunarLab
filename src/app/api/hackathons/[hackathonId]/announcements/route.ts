@@ -1,21 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ hackathonId: string }> }
 ) {
   try {
     const { hackathonId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
+
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify user is either the organizer or a registered participant
     const { data: hackathon } = await supabase
@@ -28,13 +43,17 @@ export async function GET(
       return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
     }
 
-    const isOrganizer = hackathon.organizer_id === user.id;
+    const isOrganizer = hackathon.organizer_id === auth.userId;
     if (!isOrganizer) {
+      // For API key auth, only the organizer can list announcements
+      if (auth.type === "api_key") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
       const { data: registration } = await supabase
         .from("hackathon_registrations")
         .select("id")
         .eq("hackathon_id", hackathonId)
-        .eq("user_id", user.id)
+        .eq("user_id", auth.userId)
         .in("status", ["confirmed", "approved"])
         .maybeSingle();
 
@@ -96,17 +115,25 @@ export async function POST(
     }
 
     const { hackathonId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    // Auth check
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify caller is the hackathon organizer and get hackathon name
     const { data: hackathon } = await supabase
@@ -121,7 +148,7 @@ export async function POST(
         { status: 404 }
       );
     }
-    if (hackathon.organizer_id !== user.id) {
+    if (hackathon.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -173,7 +200,7 @@ export async function POST(
         hackathon_id: hackathonId,
         title,
         message,
-        sent_by: user.id,
+        sent_by: auth.userId,
         recipient_count: recipients.length,
       })
       .select("*, sender:profiles!hackathon_announcements_sent_by_fkey(*)")
@@ -186,15 +213,15 @@ export async function POST(
       );
     }
 
-    // Send emails to all participants (fire-and-forget, don't block response)
+    // Send emails to all participants in parallel and count actual successes
     const hackathonName = hackathon.name as string;
-    let emailsSent = 0;
 
-    for (const recipient of recipients) {
-      sendEmail({
-        to: recipient.email,
-        subject: `[${hackathonName}] ${title}`,
-        html: emailWrapper(`
+    const emailResults = await Promise.allSettled(
+      recipients.map((recipient) =>
+        sendEmail({
+          to: recipient.email,
+          subject: `[${hackathonName}] ${title}`,
+          html: emailWrapper(`
           <h1 style="margin:0 0 8px;color:#fff;font-size:22px;font-weight:700;">${escapeHtml(title)}</h1>
           <p style="margin:0 0 4px;color:#a1a1aa;font-size:13px;">Announcement from <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong></p>
           <hr style="border:none;border-top:1px solid #27272a;margin:16px 0;" />
@@ -204,11 +231,11 @@ export async function POST(
             You are receiving this because you are registered for ${escapeHtml(hackathonName)}.
           </p>
         `),
-      }).catch(() => {
-        // Silently ignore individual email failures
-      });
-      emailsSent++;
-    }
+        })
+      )
+    );
+
+    const emailsSent = emailResults.filter((r) => r.status === "fulfilled").length;
 
     const senderProfile = (announcement as Record<string, unknown>)
       .sender as Record<string, unknown>;

@@ -8,6 +8,8 @@ import { canCreateEvent, getEventLimit } from "@/lib/plan-limits";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import type { SubscriptionTier } from "@/lib/types";
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -46,6 +48,11 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1") || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "20") || 20));
 
+    // Validate organizerId format if provided
+    if (organizerId && !UUID_RE.test(organizerId)) {
+      return NextResponse.json({ error: "Invalid organizerId format" }, { status: 400 });
+    }
+
     let query = supabase
       .from("events")
       .select("*, organizer:profiles!organizer_id(*)", { count: "exact" });
@@ -76,13 +83,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Visibility filtering
-    // Only call getUser() when we actually need auth context (organizer's own events)
-    let user = null;
+    // For API key auth, use auth.userId directly; for session auth, call getUser()
+    let authUserId: string | null = null;
     if (organizerId) {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      user = authUser;
+      if (auth.type === "api_key") {
+        authUserId = auth.userId;
+      } else if (auth.type === "session") {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        authUserId = authUser?.id ?? null;
+      }
     }
-    const isOwnEvents = organizerId && user?.id === organizerId;
+    const isOwnEvents = organizerId && authUserId === organizerId;
 
     if (!isOwnEvents) {
       const idsParam = searchParams.get("ids");
@@ -163,22 +174,30 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/events");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Check plan limits and organizer role
     const { data: profile } = await supabase
       .from("profiles")
       .select("subscription_tier, roles")
-      .eq("id", user.id)
+      .eq("id", auth.userId)
       .single();
 
     const roles = (Array.isArray(profile?.roles) ? profile.roles : []) as string[];
@@ -199,7 +218,7 @@ export async function POST(request: NextRequest) {
     const { count: monthlyCount } = await supabase
       .from("events")
       .select("id", { count: "exact", head: true })
-      .eq("organizer_id", user.id)
+      .eq("organizer_id", auth.userId)
       .gte("created_at", startOfMonth.toISOString());
 
     if (!canCreateEvent(tier, monthlyCount || 0)) {
@@ -215,8 +234,16 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
+    // Validate required title
+    if (!body.title || typeof body.title !== "string" || body.title.trim().length === 0) {
+      return NextResponse.json({ error: "title is required" }, { status: 400 });
+    }
+    if (body.title.length > 200) {
+      return NextResponse.json({ error: "title must be under 200 characters" }, { status: 400 });
+    }
+
     // Generate unique slug
-    let slug = slugify(body.title || "event");
+    let slug = slugify(body.title);
     const { data: existing } = await supabase
       .from("events")
       .select("slug")
@@ -233,7 +260,7 @@ export async function POST(request: NextRequest) {
     ];
     const insertData: Record<string, unknown> = {
       slug,
-      organizer_id: user.id,
+      organizer_id: auth.userId,
     };
     for (const key of EVENT_FIELDS) {
       if (key in body) insertData[key] = body[key];
@@ -248,8 +275,53 @@ export async function POST(request: NextRequest) {
     if (insertData.type && !VALID_TYPES.includes(insertData.type as string)) {
       return NextResponse.json({ error: "Invalid event type" }, { status: 400 });
     }
+
+    // Validate status (only draft or published on create)
+    if (insertData.status) {
+      if (!["draft", "published"].includes(insertData.status as string)) {
+        return NextResponse.json(
+          { error: 'Events can only be created with status "draft" or "published"' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate visibility
+    if (insertData.visibility) {
+      if (!["public", "unlisted", "private"].includes(insertData.visibility as string)) {
+        return NextResponse.json({ error: "Invalid visibility" }, { status: 400 });
+      }
+    }
+
+    // Validate tags
     if (insertData.tags && (!Array.isArray(insertData.tags) || (insertData.tags as string[]).length > 20)) {
       return NextResponse.json({ error: "Tags must be an array of up to 20 items" }, { status: 400 });
+    }
+
+    // Validate capacity
+    if (insertData.capacity !== undefined) {
+      if (typeof insertData.capacity !== "number" || !Number.isInteger(insertData.capacity) || (insertData.capacity as number) < 1) {
+        return NextResponse.json({ error: "Capacity must be a positive integer" }, { status: 400 });
+      }
+    }
+
+    // Validate date formats
+    if (insertData.start_date !== undefined) {
+      if (typeof insertData.start_date !== "string" || !ISO_DATE_RE.test(insertData.start_date) || isNaN(Date.parse(insertData.start_date))) {
+        return NextResponse.json({ error: "Invalid start_date format. Use ISO 8601." }, { status: 400 });
+      }
+    }
+    if (insertData.end_date !== undefined) {
+      if (typeof insertData.end_date !== "string" || !ISO_DATE_RE.test(insertData.end_date) || isNaN(Date.parse(insertData.end_date))) {
+        return NextResponse.json({ error: "Invalid end_date format. Use ISO 8601." }, { status: 400 });
+      }
+    }
+
+    // Validate date chronology
+    if (insertData.start_date && insertData.end_date) {
+      if (new Date(insertData.start_date as string) >= new Date(insertData.end_date as string)) {
+        return NextResponse.json({ error: "end_date must be after start_date" }, { status: 400 });
+      }
     }
 
     const { data, error } = await supabase

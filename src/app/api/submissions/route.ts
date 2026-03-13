@@ -1,15 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
 import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canSubmit, getPhaseMessage } from "@/lib/hackathon-phases";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { fireWebhooks } from "@/lib/webhook-delivery";
 
 const SUBMISSION_SELECT =
   "*, team:teams(*, team_members(*, user:profiles!team_members_user_id_fkey(*)))";
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
+    // Dual auth: session cookies OR API key (also allows unauthenticated for public submissions)
+    const auth = await authenticateRequest(request);
+
+    const hasBearer = request.headers.get("authorization")?.startsWith("Bearer ");
+    if (hasBearer && auth.type === "unauthenticated") {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
+
     const url = request.nextUrl;
     const hackathonId = url.searchParams.get("hackathonId");
     const teamId = url.searchParams.get("teamId");
@@ -20,15 +42,29 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get("pageSize") || "50", 10) || 50));
     const offset = (page - 1) * pageSize;
 
-    // Check if user is authenticated (optional — unauthenticated users only see submitted)
-    const { data: { user } } = await supabase.auth.getUser();
+    // Determine authenticated user ID (works for both session and API key auth)
+    const authUserId = auth.type !== "unauthenticated" ? auth.userId : null;
+
+    // For session auth, also get email for private entity access check
+    let authUserEmail: string | undefined;
+    if (auth.type === "session") {
+      const { data: { user } } = await supabase.auth.getUser();
+      authUserEmail = user?.email ?? undefined;
+    } else if (auth.type === "api_key") {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("id", auth.userId)
+        .single();
+      authUserEmail = (profile?.email as string) ?? undefined;
+    }
 
     let query = supabase
       .from("submissions")
       .select(SUBMISSION_SELECT, { count: "exact" });
 
     if (hackathonId) {
-      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user?.id, user?.email ?? undefined);
+      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, authUserId ?? undefined, authUserEmail);
       if (!canAccess) {
         return NextResponse.json({ data: [], total: 0, page, pageSize, totalPages: 0, hasMore: false });
       }
@@ -37,7 +73,7 @@ export async function GET(request: NextRequest) {
     if (teamId) query = query.eq("team_id", teamId);
 
     // Unauthenticated users can ONLY see submitted submissions and cannot filter by userId/teamId
-    if (!user) {
+    if (!authUserId) {
       query = query.eq("status", "submitted");
       if (userId || teamId) {
         return NextResponse.json(
@@ -51,7 +87,7 @@ export async function GET(request: NextRequest) {
 
     // If filtering by userId, only allow own ID — prevent IDOR
     if (userId) {
-      const effectiveUserId = user ? userId === user.id ? userId : user.id : null;
+      const effectiveUserId = authUserId ? userId === authUserId ? userId : authUserId : null;
       if (!effectiveUserId) {
         return NextResponse.json({
           data: [],
@@ -122,16 +158,24 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     const body = await request.json();
 
@@ -168,7 +212,7 @@ export async function POST(request: NextRequest) {
       .from("team_members")
       .select("id")
       .eq("team_id", dbPayload.team_id as string)
-      .eq("user_id", user.id)
+      .eq("user_id", auth.userId)
       .single();
 
     if (!membership) {
@@ -195,6 +239,27 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: "Failed to create submission" }, { status: 400 });
+    }
+
+    // Fire webhook for the hackathon organizer
+    if (hackathonId) {
+      const { data: hackOrg } = await supabase
+        .from("hackathons")
+        .select("organizer_id, name")
+        .eq("id", hackathonId)
+        .single();
+
+      if (hackOrg?.organizer_id) {
+        const eventType = dbPayload.status === "submitted" ? "submission.submitted" : "submission.created";
+        fireWebhooks(hackOrg.organizer_id, eventType, {
+          submissionId: (data as Record<string, unknown>).id,
+          hackathonId,
+          hackathonName: hackOrg.name,
+          teamId: dbPayload.team_id,
+          title: dbPayload.title || null,
+          status: dbPayload.status,
+        });
+      }
     }
 
     return NextResponse.json({

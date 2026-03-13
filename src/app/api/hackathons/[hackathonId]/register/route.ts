@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canRegister, getPhaseMessage } from "@/lib/hackathon-phases";
+import { fireWebhooks } from "@/lib/webhook-delivery";
 
 export async function GET(
   _request: NextRequest,
@@ -124,6 +125,23 @@ export async function POST(
       return NextResponse.json({ error: "Failed to register" }, { status: 400 });
     }
 
+    // Fire webhook for the hackathon organizer
+    const { data: hackOrg } = await supabase
+      .from("hackathons")
+      .select("organizer_id, name")
+      .eq("id", hackathonId)
+      .single();
+
+    if (hackOrg?.organizer_id) {
+      fireWebhooks(hackOrg.organizer_id, "hackathon.registration.created", {
+        hackathonId,
+        hackathonName: hackOrg.name,
+        registrationId: data?.id,
+        userId: user.id,
+        status: "confirmed",
+      });
+    }
+
     // Update participant_count on the hackathon
     const { count: participantCount } = await supabase
       .from("hackathon_registrations")
@@ -174,6 +192,21 @@ export async function DELETE(
 
     if (error) {
       return NextResponse.json({ error: "Failed to cancel registration" }, { status: 400 });
+    }
+
+    // Fire webhook for the hackathon organizer
+    const { data: hackCancelOrg } = await supabase
+      .from("hackathons")
+      .select("organizer_id, name")
+      .eq("id", hackathonId)
+      .single();
+
+    if (hackCancelOrg?.organizer_id) {
+      fireWebhooks(hackCancelOrg.organizer_id, "hackathon.registration.cancelled", {
+        hackathonId,
+        hackathonName: hackCancelOrg.name,
+        userId: user.id,
+      });
     }
 
     // Update participant_count

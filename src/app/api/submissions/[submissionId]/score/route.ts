@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyIsJudge, getHackathonTimeline } from "@/lib/supabase/auth-helpers";
 import { canJudge, getPhaseMessage } from "@/lib/hackathon-phases";
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { fireWebhooks } from "@/lib/webhook-delivery";
+
+type SupabaseClient = Awaited<ReturnType<typeof getSupabaseServerClient>>;
 
 async function getHackathonIdForSubmission(
-  supabase: ReturnType<typeof getSupabaseServerClient> extends Promise<infer T> ? T : never,
+  supabase: SupabaseClient,
   submissionId: string
 ): Promise<string | null> {
   const { data } = await supabase
@@ -21,16 +26,25 @@ export async function POST(
 ) {
   try {
     const { submissionId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Get the hackathon for this submission
     const hackathonId = await getHackathonIdForSubmission(supabase, submissionId);
@@ -40,7 +54,7 @@ export async function POST(
 
     // Verify judge status and judging window in parallel
     const [isJudge, timeline] = await Promise.all([
-      verifyIsJudge(supabase, hackathonId, user.id),
+      verifyIsJudge(supabase, hackathonId, auth.userId),
       getHackathonTimeline(supabase, hackathonId),
     ]);
 
@@ -81,7 +95,7 @@ export async function POST(
       .from("scores")
       .insert({
         submission_id: submissionId,
-        judge_id: user.id,
+        judge_id: auth.userId,
         criteria: body.criteria || [],
         total_score: totalScore,
         overall_feedback: body.overallFeedback || null,
@@ -92,11 +106,34 @@ export async function POST(
       .single();
 
     if (error) {
+      if (error.code === "23505") {
+        return NextResponse.json(
+          { error: "You have already scored this submission. Use PATCH to update." },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: "Failed to submit score" }, { status: 400 });
     }
 
     // Recalculate average score
     await recalculateAverageScore(supabase, submissionId);
+
+    // Fire webhook for the hackathon organizer
+    const { data: hackathonData } = await supabase
+      .from("hackathons")
+      .select("organizer_id, name")
+      .eq("id", hackathonId)
+      .single();
+
+    if (hackathonData?.organizer_id) {
+      fireWebhooks(hackathonData.organizer_id, "submission.scored", {
+        submissionId,
+        hackathonId,
+        hackathonName: hackathonData.name,
+        judgeId: auth.userId,
+        totalScore,
+      });
+    }
 
     return NextResponse.json({ data });
   } catch (err) {
@@ -114,16 +151,25 @@ export async function PATCH(
 ) {
   try {
     const { submissionId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Get the hackathon for this submission
     const hackathonId = await getHackathonIdForSubmission(supabase, submissionId);
@@ -133,7 +179,7 @@ export async function PATCH(
 
     // Verify judge status and judging window in parallel
     const [isJudge, timeline] = await Promise.all([
-      verifyIsJudge(supabase, hackathonId, user.id),
+      verifyIsJudge(supabase, hackathonId, auth.userId),
       getHackathonTimeline(supabase, hackathonId),
     ]);
 
@@ -181,7 +227,7 @@ export async function PATCH(
       .from("scores")
       .update(updates)
       .eq("submission_id", submissionId)
-      .eq("judge_id", user.id)
+      .eq("judge_id", auth.userId)
       .select("*, judge:profiles!scores_judge_id_fkey(*)")
       .single();
 
@@ -191,6 +237,23 @@ export async function PATCH(
 
     // Recalculate average score
     await recalculateAverageScore(supabase, submissionId);
+
+    // Fire webhook for the hackathon organizer on score update
+    const { data: hackPatchData } = await supabase
+      .from("hackathons")
+      .select("organizer_id, name")
+      .eq("id", hackathonId)
+      .single();
+
+    if (hackPatchData?.organizer_id) {
+      fireWebhooks(hackPatchData.organizer_id, "submission.scored", {
+        submissionId,
+        hackathonId,
+        hackathonName: hackPatchData.name,
+        judgeId: auth.userId,
+        totalScore: updates.total_score ?? null,
+      });
+    }
 
     return NextResponse.json({ data });
   } catch (err) {
@@ -203,7 +266,7 @@ export async function PATCH(
 }
 
 async function recalculateAverageScore(
-  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  supabase: SupabaseClient,
   submissionId: string
 ) {
   const { data: scores } = await supabase

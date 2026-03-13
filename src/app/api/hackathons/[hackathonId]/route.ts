@@ -1,22 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToHackathon } from "@/lib/supabase/mappers";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
 import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
-
+import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
 function hackathonFilter(id: string) {
   return UUID_RE.test(id) ? `id.eq.${id}` : `slug.eq.${id}`;
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ hackathonId: string }> }
 ) {
   try {
     const { hackathonId } = await params;
-    const supabase = await getSupabaseServerClient();
+
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
+
+    const hasBearer = request.headers.get("authorization")?.startsWith("Bearer ");
+    if (hasBearer && auth.type === "unauthenticated") {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     const { data, error } = await supabase
       .from("hackathons")
@@ -35,8 +57,22 @@ export async function GET(
 
     // Private hackathons: only organizer or accepted invitees can view
     if (row.visibility === "private") {
-      const { data: { user } } = await supabase.auth.getUser();
-      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", row.id as string, user?.id, user?.email ?? undefined);
+      const userId = auth.type !== "unauthenticated" ? auth.userId : undefined;
+      let userEmail: string | undefined;
+
+      if (auth.type === "session") {
+        const { data: { user } } = await supabase.auth.getUser();
+        userEmail = user?.email ?? undefined;
+      } else if (auth.type === "api_key") {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("id", auth.userId)
+          .single();
+        userEmail = (profile?.email as string) ?? undefined;
+      }
+
+      const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", row.id as string, userId, userEmail);
       if (!canAccess) {
         return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
       }
@@ -84,21 +120,30 @@ export async function PATCH(
 ) {
   try {
     const { hackathonId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify ownership
     const { data: existing } = await supabase
       .from("hackathons")
-      .select("organizer_id")
+      .select("organizer_id, hacking_start, hacking_end, submission_deadline, registration_start, registration_end, judging_start, judging_end")
       .or(hackathonFilter(hackathonId))
       .single();
 
@@ -108,7 +153,7 @@ export async function PATCH(
         { status: 404 }
       );
     }
-    if (existing.organizer_id !== user.id) {
+    if (existing.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -136,7 +181,7 @@ export async function PATCH(
       tracks: "tracks", prizes: "prizes", rules: "rules",
       requirements: "requirements", resources: "resources", sponsors: "sponsors",
       faqs: "faqs", schedule: "schedule", judges: "judges", mentors: "mentors",
-      visibility: "visibility",
+      visibility: "visibility", type: "type", eligibility: "eligibility",
     };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
@@ -176,28 +221,79 @@ export async function PATCH(
       }
     }
 
+    // Validate type
+    if (updates.type) {
+      if (!["in-person", "virtual", "hybrid"].includes(updates.type as string)) {
+        return NextResponse.json({ error: "Invalid hackathon type" }, { status: 400 });
+      }
+    }
+
     // Validate tags
     if (updates.tags && (!Array.isArray(updates.tags) || (updates.tags as string[]).length > 20)) {
       return NextResponse.json({ error: "Tags must be an array of up to 20 items" }, { status: 400 });
     }
 
+    // Validate total_prize_pool
+    if (updates.total_prize_pool !== undefined) {
+      if (typeof updates.total_prize_pool !== "number" || (updates.total_prize_pool as number) < 0) {
+        return NextResponse.json({ error: "total_prize_pool must be a non-negative number" }, { status: 400 });
+      }
+    }
+
+    // Validate team sizes
+    if (updates.min_team_size !== undefined) {
+      if (typeof updates.min_team_size !== "number" || !Number.isInteger(updates.min_team_size) || (updates.min_team_size as number) < 1) {
+        return NextResponse.json({ error: "min_team_size must be a positive integer" }, { status: 400 });
+      }
+    }
+    if (updates.max_team_size !== undefined) {
+      if (typeof updates.max_team_size !== "number" || !Number.isInteger(updates.max_team_size) || (updates.max_team_size as number) < 1) {
+        return NextResponse.json({ error: "max_team_size must be a positive integer" }, { status: 400 });
+      }
+    }
+
+    // Validate date formats for all timeline fields
+    const DATE_FIELDS = [
+      "registration_start", "registration_end", "hacking_start", "hacking_end",
+      "submission_deadline", "judging_start", "judging_end", "winners_announcement",
+    ];
+    for (const field of DATE_FIELDS) {
+      if (updates[field] !== undefined) {
+        if (typeof updates[field] !== "string" || !ISO_DATE_RE.test(updates[field] as string) || isNaN(Date.parse(updates[field] as string))) {
+          return NextResponse.json({ error: `Invalid ${field} format. Use ISO 8601.` }, { status: 400 });
+        }
+      }
+    }
+
+    // Validate date chronology (merge with existing values)
+    const mergedDates: Record<string, Date> = {};
+    for (const field of DATE_FIELDS) {
+      const value = updates[field] ?? existing[field as keyof typeof existing];
+      if (value) mergedDates[field] = new Date(value as string);
+    }
+    if (mergedDates.registration_start && mergedDates.registration_end && mergedDates.registration_start >= mergedDates.registration_end) {
+      return NextResponse.json({ error: "registration_end must be after registration_start" }, { status: 400 });
+    }
+    if (mergedDates.hacking_start && mergedDates.hacking_end && mergedDates.hacking_start >= mergedDates.hacking_end) {
+      return NextResponse.json({ error: "hacking_end must be after hacking_start" }, { status: 400 });
+    }
+    if (mergedDates.hacking_end && mergedDates.submission_deadline && mergedDates.submission_deadline < mergedDates.hacking_end) {
+      return NextResponse.json({ error: "submission_deadline must be on or after hacking_end" }, { status: 400 });
+    }
+    if (mergedDates.judging_start && mergedDates.judging_end && mergedDates.judging_start >= mergedDates.judging_end) {
+      return NextResponse.json({ error: "judging_end must be after judging_start" }, { status: 400 });
+    }
+
     // Prevent publishing without required dates
     const targetStatus = updates.status as string | undefined;
     if (targetStatus && targetStatus !== "draft") {
-      // Fetch current hackathon to merge with updates
-      const { data: current } = await supabase
-        .from("hackathons")
-        .select("hacking_start, hacking_end, submission_deadline")
-        .or(hackathonFilter(hackathonId))
-        .single();
-
-      const hackStart = updates.hacking_start ?? current?.hacking_start;
-      const hackEnd = updates.hacking_end ?? current?.hacking_end;
-      const subDeadline = updates.submission_deadline ?? current?.submission_deadline;
+      const hackStart = updates.hacking_start ?? existing.hacking_start;
+      const hackEnd = updates.hacking_end ?? existing.hacking_end;
+      const subDeadline = updates.submission_deadline ?? existing.submission_deadline;
 
       if (!hackStart || !hackEnd || !subDeadline) {
         return NextResponse.json(
-          { error: "Hacking start, hacking end, and submission deadline are required before publishing" },
+          { error: "hacking_start, hacking_end, and submission_deadline are required before publishing" },
           { status: 400 }
         );
       }
@@ -227,21 +323,30 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ hackathonId: string }> }
 ) {
   try {
     const { hackathonId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Dual auth: session cookies OR API key
+    const auth = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     // Verify ownership
     const { data: existing } = await supabase
@@ -256,7 +361,7 @@ export async function DELETE(
         { status: 404 }
       );
     }
-    if (existing.organizer_id !== user.id) {
+    if (existing.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
