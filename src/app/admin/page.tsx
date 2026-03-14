@@ -14,6 +14,7 @@ import {
   Settings,
   BarChart3,
   BookOpen,
+  ClipboardList,
   Loader2,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
@@ -30,6 +31,7 @@ const tabs = [
   { id: "analytics", label: "Analytics", icon: TrendingUp },
   { id: "featured", label: "Featured", icon: Star },
   { id: "blog", label: "Blog", icon: BookOpen },
+  { id: "competitions", label: "Competitions", icon: ClipboardList },
   { id: "settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -77,6 +79,10 @@ const BlogTab = dynamic(
   () => import("./_components/blog-tab").then((m) => ({ default: m.BlogTab })),
   { loading: TabFallback }
 );
+const CompetitionsTab = dynamic(
+  () => import("./_components/competitions-tab").then((m) => ({ default: m.CompetitionsTab })),
+  { loading: TabFallback }
+);
 const SettingsTab = dynamic(
   () => import("./_components/settings-tab").then((m) => ({ default: m.SettingsTab })),
   { loading: TabFallback }
@@ -92,6 +98,7 @@ const tabComponents: Record<TabId, React.ComponentType> = {
   analytics: AnalyticsTab,
   featured: FeaturedTab,
   blog: BlogTab,
+  competitions: CompetitionsTab,
   settings: SettingsTab,
 };
 

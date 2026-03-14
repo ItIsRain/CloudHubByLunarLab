@@ -587,6 +587,229 @@ export interface PlatformStats {
   totalPrizePool: number;
 }
 
+// =====================================================
+// Competition Application Types
+// =====================================================
+
+export type CompetitionFormStatus = "draft" | "published" | "closed" | "archived";
+export type CompetitionType = "startup" | "hackathon" | "pitch" | "innovation" | "other";
+
+export type ApplicationStatus =
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "eligible"
+  | "ineligible"
+  | "accepted"
+  | "waitlisted"
+  | "rejected"
+  | "confirmed"
+  | "declined"
+  | "withdrawn";
+
+export type FormFieldType =
+  | "text"
+  | "textarea"
+  | "email"
+  | "phone"
+  | "url"
+  | "number"
+  | "date"
+  | "select"
+  | "multi_select"
+  | "radio"
+  | "checkbox"
+  | "file"
+  | "heading"
+  | "paragraph";
+
+export interface FormFieldValidation {
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: string;
+  patternMessage?: string;
+  maxFileSize?: number; // bytes
+  allowedFileTypes?: string[];
+}
+
+export interface FormFieldOption {
+  label: string;
+  value: string;
+}
+
+export interface FormField {
+  id: string;
+  type: FormFieldType;
+  label: string;
+  placeholder?: string;
+  description?: string;
+  required: boolean;
+  options?: FormFieldOption[];
+  validation?: FormFieldValidation;
+  sectionId?: string;
+  order: number;
+  conditionalOn?: {
+    fieldId: string;
+    operator: "equals" | "not_equals" | "contains" | "is_not_empty";
+    value?: string;
+  };
+  // Mapping hints for screening
+  mappingKey?: "applicant_name" | "applicant_email" | "applicant_phone" | "startup_name" | "campus" | "sector";
+}
+
+export interface FormSection {
+  id: string;
+  title: string;
+  description?: string;
+  order: number;
+}
+
+export interface CompetitionForm {
+  id: string;
+  organizerId: string;
+  organizer?: User;
+  title: string;
+  slug: string;
+  description?: string;
+  coverImage?: string;
+  logo?: string;
+  competitionName: string;
+  competitionType: CompetitionType;
+  fields: FormField[];
+  sections: FormSection[];
+  status: CompetitionFormStatus;
+  opensAt?: string;
+  closesAt?: string;
+  maxApplications?: number;
+  allowEditAfterSubmit: boolean;
+  confirmationEmailTemplate?: string;
+  primaryColor?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompetitionApplication {
+  id: string;
+  formId: string;
+  form?: CompetitionForm;
+  applicantId?: string;
+  applicant?: User;
+  data: Record<string, unknown>;
+  applicantName: string;
+  applicantEmail: string;
+  applicantPhone?: string;
+  startupName?: string;
+  campus?: string;
+  sector?: string;
+  status: ApplicationStatus;
+  completenessScore: number;
+  eligibilityPassed?: boolean;
+  screeningCompletedAt?: string;
+  screeningNotes?: string;
+  internalNotes?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  submittedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  // Joined data
+  files?: ApplicationFile[];
+  screeningResults?: ScreeningResult[];
+  flags?: ScreeningFlag[];
+}
+
+export interface ApplicationFile {
+  id: string;
+  applicationId: string;
+  fieldId: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  storagePath: string;
+  createdAt: string;
+}
+
+export type ScreeningRuleType = "hard" | "soft";
+export type ScreeningOperator =
+  | "equals" | "not_equals"
+  | "contains" | "not_contains"
+  | "greater_than" | "less_than" | "greater_equal" | "less_equal"
+  | "in" | "not_in"
+  | "is_empty" | "is_not_empty"
+  | "is_true" | "is_false";
+
+export interface ScreeningRule {
+  id: string;
+  formId: string;
+  name: string;
+  description?: string;
+  ruleType: ScreeningRuleType;
+  fieldId: string;
+  operator: ScreeningOperator;
+  value?: unknown;
+  sortOrder: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScreeningResult {
+  id: string;
+  applicationId: string;
+  ruleId: string;
+  rule?: ScreeningRule;
+  passed: boolean;
+  actualValue?: unknown;
+  reason?: string;
+  createdAt: string;
+}
+
+export type ScreeningFlagType =
+  | "duplicate_email"
+  | "duplicate_phone"
+  | "duplicate_linkedin"
+  | "duplicate_startup"
+  | "soft_warning"
+  | "manual";
+
+export interface ScreeningFlag {
+  id: string;
+  applicationId: string;
+  flagType: ScreeningFlagType;
+  severity: "info" | "warning" | "critical";
+  message: string;
+  relatedApplicationId?: string;
+  resolved: boolean;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+  createdAt: string;
+}
+
+export interface CampusQuota {
+  id: string;
+  formId: string;
+  campus: string;
+  quota: number;
+}
+
+export interface CampusSummary {
+  formId: string;
+  campus: string;
+  totalSubmitted: number;
+  pendingReview: number;
+  eligible: number;
+  ineligible: number;
+  accepted: number;
+  waitlisted: number;
+  rejected: number;
+  confirmed: number;
+  declined: number;
+  incomplete: number;
+}
+
 // Entity Invitation Types
 export interface EntityInvitation {
   id: string;

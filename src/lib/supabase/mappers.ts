@@ -1,4 +1,4 @@
-import type { User, UserRole, SubscriptionTier, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility, Conversation, ConversationParticipant, Message, MessageReaction, Community, CommunityMember, BlogPost, MentorAvailability, MentorSession, MentorSessionStatus, MentorSessionPlatform, Report, ReportType, ReportStatus } from "@/lib/types";
+import type { User, UserRole, SubscriptionTier, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility, Conversation, ConversationParticipant, Message, MessageReaction, Community, CommunityMember, BlogPost, MentorAvailability, MentorSession, MentorSessionStatus, MentorSessionPlatform, Report, ReportType, ReportStatus, CompetitionForm, CompetitionFormStatus, CompetitionType, CompetitionApplication, ApplicationStatus, ApplicationFile, ScreeningRule, ScreeningRuleType, ScreeningOperator, ScreeningResult, ScreeningFlag, ScreeningFlagType, CampusQuota, FormField, FormSection } from "@/lib/types";
 
 // =====================================================
 // Profile ↔ User mappers
@@ -454,6 +454,149 @@ export function hackathonFormToDbRow(
     prizes: form.prizes,
     sponsors: form.sponsors,
     judging_criteria: form.judgingCriteria,
+  };
+}
+
+// =====================================================
+// Competition Form & Application mappers
+// =====================================================
+
+export function dbRowToCompetitionForm(row: Record<string, unknown>): CompetitionForm {
+  const organizer = row.organizer ? profileToUser(row.organizer as Record<string, unknown>) : undefined;
+  return {
+    id: row.id as string,
+    organizerId: row.organizer_id as string,
+    organizer,
+    title: row.title as string,
+    slug: row.slug as string,
+    description: (row.description as string) || undefined,
+    coverImage: (row.cover_image as string) || undefined,
+    logo: (row.logo as string) || undefined,
+    competitionName: row.competition_name as string,
+    competitionType: row.competition_type as CompetitionType,
+    fields: (row.fields as FormField[]) || [],
+    sections: (row.sections as FormSection[]) || [],
+    status: row.status as CompetitionFormStatus,
+    opensAt: (row.opens_at as string) || undefined,
+    closesAt: (row.closes_at as string) || undefined,
+    maxApplications: (row.max_applications as number) || undefined,
+    allowEditAfterSubmit: (row.allow_edit_after_submit as boolean) || false,
+    confirmationEmailTemplate: (row.confirmation_email_template as string) || undefined,
+    primaryColor: (row.primary_color as string) || undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export function dbRowToApplication(row: Record<string, unknown>): CompetitionApplication {
+  const applicant = row.applicant ? profileToUser(row.applicant as Record<string, unknown>) : undefined;
+  const form = row.form ? dbRowToCompetitionForm(row.form as Record<string, unknown>) : undefined;
+  const files = Array.isArray(row.application_files)
+    ? (row.application_files as Record<string, unknown>[]).map(dbRowToApplicationFile)
+    : undefined;
+  const screeningResults = Array.isArray(row.screening_results)
+    ? (row.screening_results as Record<string, unknown>[]).map(dbRowToScreeningResult)
+    : undefined;
+  const flags = Array.isArray(row.screening_flags)
+    ? (row.screening_flags as Record<string, unknown>[]).map(dbRowToScreeningFlag)
+    : undefined;
+
+  return {
+    id: row.id as string,
+    formId: row.form_id as string,
+    form,
+    applicantId: (row.applicant_id as string) || undefined,
+    applicant,
+    data: (row.data as Record<string, unknown>) || {},
+    applicantName: row.applicant_name as string,
+    applicantEmail: row.applicant_email as string,
+    applicantPhone: (row.applicant_phone as string) || undefined,
+    startupName: (row.startup_name as string) || undefined,
+    campus: (row.campus as string) || undefined,
+    sector: (row.sector as string) || undefined,
+    status: row.status as ApplicationStatus,
+    completenessScore: Number(row.completeness_score) || 0,
+    eligibilityPassed: row.eligibility_passed as boolean | undefined,
+    screeningCompletedAt: (row.screening_completed_at as string) || undefined,
+    screeningNotes: (row.screening_notes as string) || undefined,
+    internalNotes: (row.internal_notes as string) || undefined,
+    reviewedBy: (row.reviewed_by as string) || undefined,
+    reviewedAt: (row.reviewed_at as string) || undefined,
+    submittedAt: (row.submitted_at as string) || undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    files,
+    screeningResults,
+    flags,
+  };
+}
+
+export function dbRowToApplicationFile(row: Record<string, unknown>): ApplicationFile {
+  return {
+    id: row.id as string,
+    applicationId: row.application_id as string,
+    fieldId: row.field_id as string,
+    fileName: row.file_name as string,
+    fileType: row.file_type as string,
+    fileSize: row.file_size as number,
+    storagePath: row.storage_path as string,
+    createdAt: row.created_at as string,
+  };
+}
+
+export function dbRowToScreeningRule(row: Record<string, unknown>): ScreeningRule {
+  return {
+    id: row.id as string,
+    formId: row.form_id as string,
+    name: row.name as string,
+    description: (row.description as string) || undefined,
+    ruleType: row.rule_type as ScreeningRuleType,
+    fieldId: row.field_id as string,
+    operator: row.operator as ScreeningOperator,
+    value: row.value,
+    sortOrder: row.sort_order as number,
+    enabled: row.enabled as boolean,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export function dbRowToScreeningResult(row: Record<string, unknown>): ScreeningResult {
+  const rule = row.screening_rules ? dbRowToScreeningRule(row.screening_rules as Record<string, unknown>) : (row.rule ? dbRowToScreeningRule(row.rule as Record<string, unknown>) : undefined);
+  return {
+    id: row.id as string,
+    applicationId: row.application_id as string,
+    ruleId: row.rule_id as string,
+    rule,
+    passed: row.passed as boolean,
+    actualValue: row.actual_value,
+    reason: (row.reason as string) || undefined,
+    createdAt: row.created_at as string,
+  };
+}
+
+export function dbRowToScreeningFlag(row: Record<string, unknown>): ScreeningFlag {
+  return {
+    id: row.id as string,
+    applicationId: row.application_id as string,
+    flagType: row.flag_type as ScreeningFlagType,
+    severity: row.severity as "info" | "warning" | "critical",
+    message: row.message as string,
+    relatedApplicationId: (row.related_application_id as string) || undefined,
+    resolved: row.resolved as boolean,
+    resolvedBy: (row.resolved_by as string) || undefined,
+    resolvedAt: (row.resolved_at as string) || undefined,
+    resolutionNote: (row.resolution_note as string) || undefined,
+    createdAt: row.created_at as string,
+  };
+}
+
+export function dbRowToCampusQuota(row: Record<string, unknown>): CampusQuota {
+  return {
+    id: row.id as string,
+    formId: row.form_id as string,
+    campus: row.campus as string,
+    quota: row.quota as number,
   };
 }
 
