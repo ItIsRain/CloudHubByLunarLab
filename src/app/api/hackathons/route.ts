@@ -5,7 +5,7 @@ import { dbRowToHackathon } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
 import { UUID_RE, categories } from "@/lib/constants";
 import { canCreateHackathon, getHackathonLimit } from "@/lib/plan-limits";
-import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { authenticateRequest, assertScope, hasApiKeyHeader } from "@/lib/api-auth";
 import type { SubscriptionTier } from "@/lib/types";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
 
@@ -16,9 +16,8 @@ export async function GET(request: NextRequest) {
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
 
-    // If a Bearer token was provided but invalid, reject immediately
-    const hasBearer = request.headers.get("authorization")?.startsWith("Bearer ");
-    if (hasBearer && auth.type === "unauthenticated") {
+    // If an API key header was provided but invalid, reject immediately
+    if (hasApiKeyHeader(request) && auth.type === "unauthenticated") {
       return NextResponse.json({ error: auth.error }, { status: 401 });
     }
 
@@ -170,6 +169,20 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Reject API key auth for write operations
+    if (hasApiKeyHeader(request)) {
+      const auth = await authenticateRequest(request);
+      if (auth.type === "unauthenticated") {
+        return NextResponse.json({ error: auth.error }, { status: 401 });
+      }
+      if (auth.type === "api_key") {
+        return NextResponse.json(
+          { error: "API keys are read-only. Use session authentication for write operations." },
+          { status: 403 }
+        );
+      }
+    }
+
     const supabase = await getSupabaseServerClient();
 
     const {

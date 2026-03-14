@@ -45,6 +45,17 @@ export async function authenticateRequest(
     if (token.startsWith(API_KEY_PREFIX)) {
       return authenticateApiKey(token);
     }
+
+    // Non-ch_key Bearer token — reject immediately
+    return { type: "unauthenticated", error: "Invalid API key" };
+  }
+
+  // Detect malformed API key header (missing "Bearer " prefix)
+  if (authHeader && authHeader.includes(API_KEY_PREFIX)) {
+    return {
+      type: "unauthenticated",
+      error: "API key must be sent as 'Bearer <key>' in the Authorization header",
+    };
   }
 
   // 2. Fall back to Supabase session cookie auth
@@ -100,6 +111,16 @@ async function authenticateSession(): Promise<AuthResult> {
     userId: user.id,
     scopes: null,
   };
+}
+
+/**
+ * Check whether the request carries an API-key-shaped Authorization header
+ * (valid Bearer or malformed). Useful for route guards that need to distinguish
+ * "no auth attempted" from "API key auth attempted".
+ */
+export function hasApiKeyHeader(request: NextRequest): boolean {
+  const h = request.headers.get("authorization");
+  return !!(h?.startsWith("Bearer ") || h?.includes(API_KEY_PREFIX));
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   Globe,
   LogOut,
   ChevronRight,
+  KeyRound,
   Sun,
   Moon,
   Monitor,
@@ -32,6 +33,7 @@ const themes: { id: "light" | "dark" | "system"; label: string; icon: React.Elem
 
 const settingsNav = [
   { href: "/dashboard/settings/notifications", label: "Notification Preferences", icon: Bell, description: "Configure how and when you receive notifications" },
+  { href: "/dashboard/settings/api-keys", label: "API Keys", icon: KeyRound, description: "Manage API keys for programmatic access" },
 ];
 
 export default function SettingsPage() {

@@ -1,9 +1,31 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { authenticateRequest, assertScope, hasApiKeyHeader } from "@/lib/api-auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
+    // Dual auth: public access allowed, but API key requests must have analytics scope
+    const auth = await authenticateRequest(request);
+
+    // If an API key header was provided but invalid, reject immediately
+    if (hasApiKeyHeader(request) && auth.type === "unauthenticated") {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
+
+    // For API key auth, verify the "analytics" scope
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/stats");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    // API key requests use admin client; otherwise use server client
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
 
     const [eventsRes, hackathonsRes, attendeesRes, prizesRes] =
       await Promise.all([
