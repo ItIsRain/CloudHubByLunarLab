@@ -45,6 +45,7 @@ const BookMentorDialog = dynamic(() => import("@/components/dialogs/book-mentor-
 const CreateTeamDialog = dynamic(() => import("@/components/dialogs/create-team-dialog").then(m => m.CreateTeamDialog), { ssr: false });
 const EditTeamDialog = dynamic(() => import("@/components/dialogs/edit-team-dialog").then(m => m.EditTeamDialog), { ssr: false });
 const JoinTeamDialog = dynamic(() => import("@/components/dialogs/join-team-dialog").then(m => m.JoinTeamDialog), { ssr: false });
+const HackathonRegistrationDialog = dynamic(() => import("@/components/dialogs/hackathon-registration-dialog").then(m => m.HackathonRegistrationDialog), { ssr: false });
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useHackathonSubmissions } from "@/hooks/use-submissions";
 import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
@@ -107,6 +108,8 @@ export default function HackathonDetailPage() {
   const user = useAuthStore((s) => s.user);
   const { data: regData } = useHackathonRegistration(hackathon?.id);
   const isRegistered = regData?.registered ?? false;
+  const isRejected = regData?.rejected ?? false;
+  const registrationStatus = regData?.registration?.status;
   const registerMutation = useRegisterForHackathon();
   const cancelMutation = useCancelHackathonRegistration();
 
@@ -120,6 +123,7 @@ export default function HackathonDetailPage() {
   const [createTeamOpen, setCreateTeamOpen] = React.useState(false);
   const [editTeamOpen, setEditTeamOpen] = React.useState(false);
   const [joinTeamOpen, setJoinTeamOpen] = React.useState(false);
+  const [registrationDialogOpen, setRegistrationDialogOpen] = React.useState(false);
   const [selectedTeam, setSelectedTeam] = React.useState<import("@/lib/types").Team | null>(null);
   const createTeamMutation = useCreateTeam();
 
@@ -274,19 +278,37 @@ export default function HackathonDetailPage() {
                       </Link>
                     </Button>
                   ) : (hackathon.status === "published" || hackathon.status === "registration-open") && (
-                    isRegistered ? (
-                      <Button size="sm" variant="secondary" onClick={async () => {
-                        await cancelMutation.mutateAsync(hackathon.id);
-                        toast.success("Registration cancelled");
-                      }} disabled={cancelMutation.isPending}>
-                        <Check className="h-4 w-4 mr-1" />
-                        Registered
-                      </Button>
+                    isRejected ? (
+                      <Badge variant="destructive" className="px-3 py-1.5 text-sm">
+                        Application {registrationStatus === "ineligible" ? "Ineligible" : "Rejected"}
+                      </Badge>
+                    ) : isRegistered ? (
+                      <div className="flex items-center gap-2">
+                        {registrationStatus === "pending" && (
+                          <Badge variant="warning" className="text-xs">Pending Review</Badge>
+                        )}
+                        {registrationStatus === "waitlisted" && (
+                          <Badge variant="warning" className="text-xs">Waitlisted</Badge>
+                        )}
+                        <Button size="sm" variant="secondary" onClick={async () => {
+                          await cancelMutation.mutateAsync(hackathon.id);
+                          toast.success("Registration cancelled");
+                        }} disabled={cancelMutation.isPending}>
+                          <Check className="h-4 w-4 mr-1" />
+                          {registrationStatus === "pending" ? "Applied" : "Registered"}
+                        </Button>
+                      </div>
                     ) : (
                       <Button size="sm" onClick={async () => {
                         if (!isAuthenticated) { toast.error("Please sign in to register"); return; }
+                        // If hackathon has custom registration fields, open the form dialog
+                        if (hackathon.registrationFields && hackathon.registrationFields.length > 0) {
+                          setRegistrationDialogOpen(true);
+                          return;
+                        }
+                        // Otherwise, register directly (no form needed)
                         try {
-                          await registerMutation.mutateAsync(hackathon.id);
+                          await registerMutation.mutateAsync({ hackathonId: hackathon.id });
                           toast.success("Successfully registered for the hackathon!");
                         } catch (err) {
                           toast.error(err instanceof Error ? err.message : "Registration failed");
@@ -761,6 +783,25 @@ export default function HackathonDetailPage() {
           open={editTeamOpen}
           onOpenChange={setEditTeamOpen}
           team={selectedTeam}
+        />
+      )}
+      {hackathon.registrationFields && hackathon.registrationFields.length > 0 && (
+        <HackathonRegistrationDialog
+          open={registrationDialogOpen}
+          onOpenChange={setRegistrationDialogOpen}
+          hackathonName={hackathon.name}
+          registrationFields={hackathon.registrationFields}
+          registrationSections={hackathon.registrationSections}
+          isSubmitting={registerMutation.isPending}
+          onSubmit={async (formData) => {
+            try {
+              await registerMutation.mutateAsync({ hackathonId: hackathon.id, formData });
+              setRegistrationDialogOpen(false);
+              toast.success("Application submitted! You'll be notified once it's reviewed.");
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Registration failed");
+            }
+          }}
         />
       )}
     </div>

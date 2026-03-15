@@ -22,6 +22,8 @@ import {
   Settings,
   FileText,
   HelpCircle,
+  ClipboardList,
+  Shield,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
@@ -45,6 +47,10 @@ const AnalyticsTab = dynamic(() => import("./_components/analytics-tab").then(m 
 import { SettingsTab } from "./_components/settings-tab";
 import { FAQTab } from "./_components/faq-tab";
 
+const ApplicationsTab = dynamic(() => import("./_components/applications-tab").then(m => m.ApplicationsTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
+const ScreeningTab = dynamic(() => import("./_components/screening-tab").then(m => m.ScreeningTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
+const FormBuilderTab = dynamic(() => import("./_components/form-builder-tab"), { loading: () => <div className="shimmer rounded-xl h-96" /> });
+
 const statusConfig: Record<
   string,
   { label: string; variant: "muted" | "success" | "warning" | "gradient" | "secondary" }
@@ -62,6 +68,9 @@ const statusConfig: Record<
 const tabs = [
   { value: "overview", label: "Overview", icon: LayoutDashboard },
   { value: "edit", label: "Edit", icon: Edit },
+  { value: "form-builder", label: "Form Builder", icon: FileText },
+  { value: "applications", label: "Applications", icon: ClipboardList },
+  { value: "screening", label: "Screening", icon: Shield },
   { value: "participants", label: "Participants", icon: UserCheck },
   { value: "teams", label: "Teams", icon: UsersRound },
   { value: "submissions", label: "Submissions", icon: Inbox },
@@ -231,6 +240,15 @@ function HackathonDashboardContent() {
             </TabsContent>
             <TabsContent value="edit">
               <EditTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="form-builder">
+              <FormBuilderTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="applications">
+              <ApplicationsTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="screening">
+              <ScreeningTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
             <TabsContent value="participants">
               <ParticipantsTab hackathon={hackathon} hackathonId={hackathonId} />

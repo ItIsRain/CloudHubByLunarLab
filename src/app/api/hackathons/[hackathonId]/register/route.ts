@@ -32,8 +32,12 @@ export async function GET(
       return NextResponse.json({ registered: false });
     }
 
+    const rejectedStatuses = ["rejected", "ineligible", "declined"];
+    const activeStatuses = ["confirmed", "approved", "pending", "under_review", "eligible", "accepted", "waitlisted"];
+
     return NextResponse.json({
-      registered: !!data && data.status !== "cancelled",
+      registered: !!data && activeStatuses.includes(data.status),
+      rejected: !!data && rejectedStatuses.includes(data.status),
       registration: data,
     });
   } catch (err) {
@@ -46,7 +50,7 @@ export async function GET(
 }
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ hackathonId: string }> }
 ) {
   try {
@@ -60,6 +64,17 @@ export async function POST(
 
     if (authError || !user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Parse optional form_data from request body
+    let formData: Record<string, unknown> = {};
+    try {
+      const body = await request.json();
+      if (body && typeof body.formData === "object" && body.formData !== null) {
+        formData = body.formData as Record<string, unknown>;
+      }
+    } catch {
+      // No body or invalid JSON — that's fine, form_data is optional
     }
 
     // Check visibility — private hackathons require an invitation
@@ -92,22 +107,43 @@ export async function POST(
       return NextResponse.json({ error: "Failed to check registration status" }, { status: 500 });
     }
 
+    // Determine initial status: if hackathon has registration fields (application form),
+    // new registrations start as "pending" for organizer review. Otherwise auto-confirm.
+    const { data: hackathonInfo } = await supabase
+      .from("hackathons")
+      .select("registration_fields")
+      .eq("id", hackathonId)
+      .single();
+
+    const hasFormFields = Array.isArray(hackathonInfo?.registration_fields) &&
+      hackathonInfo.registration_fields.length > 0;
+    const initialStatus = hasFormFields && Object.keys(formData).length > 0
+      ? "pending"
+      : "confirmed";
+
     let data;
     let error;
 
     if (existing) {
-      if (existing.status !== "cancelled" && existing.status !== "rejected") {
+      // Block re-registration for rejected/ineligible applicants
+      if (existing.status === "rejected" || existing.status === "ineligible") {
+        return NextResponse.json(
+          { error: "Your application has been rejected. You cannot re-register for this hackathon." },
+          { status: 403 }
+        );
+      }
+      if (existing.status !== "cancelled") {
         return NextResponse.json(
           { error: "Already registered for this hackathon" },
           { status: 409 }
         );
       }
-      // Re-register: update the cancelled/rejected row back to confirmed
+      // Re-register from cancelled status only
       ({ data, error } = await supabase
         .from("hackathon_registrations")
-        .update({ status: "confirmed" })
+        .update({ status: initialStatus, form_data: formData })
         .eq("id", existing.id)
-        .select("id, status, created_at")
+        .select("id, status, created_at, form_data")
         .single());
     } else {
       ({ data, error } = await supabase
@@ -115,9 +151,10 @@ export async function POST(
         .insert({
           hackathon_id: hackathonId,
           user_id: user.id,
-          status: "confirmed",
+          status: initialStatus,
+          form_data: formData,
         })
-        .select("id, status, created_at")
+        .select("id, status, created_at, form_data")
         .single());
     }
 

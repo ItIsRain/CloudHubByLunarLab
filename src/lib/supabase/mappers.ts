@@ -129,6 +129,10 @@ export function dbRowToHackathon(
     minTeamSize: (row.min_team_size as number) || 1,
     maxTeamSize: (row.max_team_size as number) || 4,
     allowSolo: (row.allow_solo as boolean) ?? true,
+    registrationFields: (row.registration_fields as Hackathon["registrationFields"]) || [],
+    registrationSections: (row.registration_sections as Hackathon["registrationSections"]) || [],
+    screeningRules: (row.screening_rules as Hackathon["screeningRules"]) || [],
+    screeningConfig: (row.screening_config as Hackathon["screeningConfig"]) || {},
     organizer: org ? (profileToPublicUser(org) as User) : ({} as User),
     organizerId: row.organizer_id as string,
     participantCount: (row.participant_count as number) || 0,
@@ -409,6 +413,7 @@ export function hackathonFormToDbRow(
     maxTeamSize: number;
     allowSolo: boolean;
     visibility?: string;
+    registrationFields?: unknown[];
   },
   organizerId: string,
   slug: string
@@ -454,6 +459,7 @@ export function hackathonFormToDbRow(
     prizes: form.prizes,
     sponsors: form.sponsors,
     judging_criteria: form.judgingCriteria,
+    registration_fields: form.registrationFields || [],
   };
 }
 

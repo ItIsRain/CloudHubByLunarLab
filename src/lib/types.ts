@@ -234,6 +234,11 @@ export interface FAQItem {
   category?: string;
 }
 
+export interface HackathonScreeningConfig {
+  quotas?: { campus: string; quota: number }[];
+  detectDuplicates?: boolean;
+}
+
 export interface Hackathon {
   id: string;
   slug: string;
@@ -268,6 +273,10 @@ export interface Hackathon {
   minTeamSize: number;
   maxTeamSize: number;
   allowSolo: boolean;
+  registrationFields: FormField[];
+  registrationSections: FormSection[];
+  screeningRules: ScreeningRule[];
+  screeningConfig: HackathonScreeningConfig;
   organizer: User;
   organizerId: string;
   participantCount: number;

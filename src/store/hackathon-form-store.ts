@@ -8,6 +8,7 @@ import type {
   Prize,
   Sponsor,
   JudgingCriteria,
+  FormField,
 } from "@/lib/types";
 
 interface HackathonFormState {
@@ -50,6 +51,8 @@ interface HackathonFormState {
   judgingCriteria: JudgingCriteria[];
   // Sponsors
   sponsors: Sponsor[];
+  // Registration Form
+  registrationFields: FormField[];
   // Visibility
   visibility: EntityVisibility;
 
@@ -101,6 +104,7 @@ const initialState = {
   allowSolo: true,
   judgingCriteria: [],
   sponsors: [],
+  registrationFields: [],
   visibility: "public" as EntityVisibility,
 };
 

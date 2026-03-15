@@ -17,16 +17,18 @@ import {
   Redo2,
   Link2,
   Strikethrough,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TagSelector } from "@/components/forms/tag-selector";
 import { DateTimePicker } from "@/components/forms/date-time-picker";
 import { useUpdateHackathon } from "@/hooks/use-hackathons";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import type { Hackathon } from "@/lib/types";
+import { cn, slugify } from "@/lib/utils";
+import type { Hackathon, FormField, FormFieldType } from "@/lib/types";
 
 interface EditTabProps {
   hackathon: Hackathon;
@@ -216,6 +218,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
     allowSolo: true,
     rules: "",
     eligibility: [] as string[],
+    registrationFields: [] as FormField[],
   });
 
   const [newEligibility, setNewEligibility] = React.useState("");
@@ -244,6 +247,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
       allowSolo: hackathon.allowSolo ?? true,
       rules: hackathon.rules || "",
       eligibility: hackathon.eligibility || [],
+      registrationFields: hackathon.registrationFields || [],
     });
   }, [hackathon]);
 
@@ -619,6 +623,27 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
           </CardContent>
         </Card>
 
+        {/* Registration Form — now in the dedicated "Form Builder" tab */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-3">
+              <FileText className="h-5 w-5 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Registration Form</p>
+                <p className="text-xs text-muted-foreground">
+                  {formData.registrationFields.length > 0
+                    ? `${formData.registrationFields.length} fields configured`
+                    : "No custom fields — one-click registration"}
+                </p>
+              </div>
+              <Badge variant="muted">{formData.registrationFields.length} fields</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Use the <strong>Form Builder</strong> tab to create and manage your application form with multi-page support, file uploads, and conditional logic.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Actions */}
         <div className="flex items-center gap-3">
           <Button
@@ -632,5 +657,220 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
         </div>
       </form>
     </motion.div>
+  );
+}
+
+// ── Registration Field Editor ───────────────────────────────────────
+
+const fieldTypeOptions: { value: FormFieldType; label: string }[] = [
+  { value: "text", label: "Short Text" },
+  { value: "textarea", label: "Long Text" },
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Phone" },
+  { value: "url", label: "URL" },
+  { value: "number", label: "Number" },
+  { value: "date", label: "Date" },
+  { value: "select", label: "Dropdown" },
+  { value: "multi_select", label: "Multi Select" },
+  { value: "radio", label: "Radio" },
+  { value: "checkbox", label: "Checkbox" },
+  { value: "heading", label: "Heading" },
+  { value: "paragraph", label: "Info Text" },
+];
+
+function RegistrationFieldEditor({
+  field,
+  onUpdate,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: {
+  field: FormField;
+  onUpdate: (updates: Partial<FormField>) => void;
+  onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
+  const [expanded, setExpanded] = React.useState(!field.label);
+  const hasOptions = field.type === "select" || field.type === "multi_select" || field.type === "radio";
+  const isLayout = field.type === "heading" || field.type === "paragraph";
+
+  return (
+    <div className={cn(
+      "rounded-xl border transition-all",
+      expanded ? "border-primary/30 bg-primary/[0.02]" : "border-border"
+    )}>
+      {/* Header row */}
+      <div
+        className="flex items-center gap-2 px-4 py-3 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="text-[10px] font-mono font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+          {field.type}
+        </span>
+        <span className="text-sm font-medium truncate flex-1">
+          {field.label || "(untitled)"}
+        </span>
+        {field.required && (
+          <span className="text-[10px] font-medium text-primary border border-primary/30 rounded px-1.5 py-0.5">
+            Required
+          </span>
+        )}
+        <div className="flex items-center gap-0.5">
+          <button type="button" onClick={(e) => { e.stopPropagation(); onMoveUp(); }} className="p-1 text-muted-foreground hover:text-foreground">
+            <span className="text-xs">&#9650;</span>
+          </button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); onMoveDown(); }} className="p-1 text-muted-foreground hover:text-foreground">
+            <span className="text-xs">&#9660;</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded editor */}
+      {expanded && (
+        <div className="border-t border-border px-4 py-4 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Field Type</label>
+              <select
+                value={field.type}
+                onChange={(e) => {
+                  const newType = e.target.value as FormFieldType;
+                  const updates: Partial<FormField> = { type: newType };
+                  // Add empty options array for types that need it
+                  if ((newType === "select" || newType === "multi_select" || newType === "radio") && !field.options?.length) {
+                    updates.options = [{ label: "Option 1", value: "option_1" }];
+                  }
+                  onUpdate(updates);
+                }}
+                className={selectClasses}
+              >
+                {fieldTypeOptions.map((ft) => (
+                  <option key={ft.value} value={ft.value}>{ft.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Label *</label>
+              <Input
+                value={field.label}
+                onChange={(e) => onUpdate({ label: e.target.value })}
+                placeholder="e.g. Phone Number"
+              />
+            </div>
+          </div>
+
+          {!isLayout && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Placeholder</label>
+                <Input
+                  value={field.placeholder || ""}
+                  onChange={(e) => onUpdate({ placeholder: e.target.value })}
+                  placeholder="Placeholder text"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Help Text</label>
+                <Input
+                  value={field.description || ""}
+                  onChange={(e) => onUpdate({ description: e.target.value })}
+                  placeholder="Help text shown below the field"
+                />
+              </div>
+            </div>
+          )}
+
+          {isLayout && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                {field.type === "heading" ? "Heading Text" : "Paragraph Text"}
+              </label>
+              <Input
+                value={field.description || field.label}
+                onChange={(e) => onUpdate({ description: e.target.value })}
+                placeholder={field.type === "heading" ? "Section heading" : "Informational text"}
+              />
+            </div>
+          )}
+
+          {/* Options for select/radio/multi_select */}
+          {hasOptions && (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Options</label>
+              {(field.options || []).map((opt, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    value={opt.label}
+                    onChange={(e) => {
+                      const updated = [...(field.options || [])];
+                      updated[i] = {
+                        label: e.target.value,
+                        value: slugify(e.target.value) || `option_${i + 1}`,
+                      };
+                      onUpdate({ options: updated });
+                    }}
+                    placeholder={`Option ${i + 1}`}
+                    className="text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = (field.options || []).filter((_, j) => j !== i);
+                      onUpdate({ options: updated });
+                    }}
+                    className="text-muted-foreground hover:text-destructive shrink-0 p-1"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  onUpdate({
+                    options: [
+                      ...(field.options || []),
+                      { label: `Option ${(field.options?.length || 0) + 1}`, value: `option_${(field.options?.length || 0) + 1}` },
+                    ],
+                  })
+                }
+                className="text-xs"
+              >
+                <Plus className="h-3 w-3 mr-1" /> Add Option
+              </Button>
+            </div>
+          )}
+
+          {/* Required toggle + remove */}
+          <div className="flex items-center justify-between pt-2 border-t border-border">
+            {!isLayout ? (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={field.required}
+                  onChange={(e) => onUpdate({ required: e.target.checked })}
+                  className="h-3.5 w-3.5 rounded border-input"
+                />
+                <span className="text-xs font-medium">Required</span>
+              </label>
+            ) : (
+              <div />
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onRemove}
+              className="text-xs text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-3 w-3 mr-1" /> Remove
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

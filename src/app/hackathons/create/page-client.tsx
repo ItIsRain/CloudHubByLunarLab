@@ -22,6 +22,7 @@ import {
   Globe,
   Lock,
   EyeOff,
+  ListChecks,
 } from "lucide-react";
 import { useHackathonFormStore } from "@/store/hackathon-form-store";
 import { ImageUpload } from "@/components/forms/image-upload";
@@ -59,6 +60,7 @@ const sections = [
   { id: "judging", title: "Judging", icon: <Scale className="h-4 w-4" /> },
   { id: "mentors", title: "Mentors", icon: <GraduationCap className="h-4 w-4" /> },
   { id: "sponsors", title: "Sponsors", icon: <Building2 className="h-4 w-4" /> },
+  { id: "registration", title: "Registration Form", icon: <ListChecks className="h-4 w-4" /> },
   { id: "review", title: "Review", icon: <Eye className="h-4 w-4" /> },
 ];
 
@@ -647,8 +649,115 @@ export default function CreateHackathonPage() {
                     </Card>
                   )}
 
-                  {/* Section 9: Review */}
+                  {/* Section 9: Registration Form */}
                   {store.currentSection === 9 && (
+                    <Card>
+                      <CardHeader className="flex-row items-center justify-between">
+                        <div>
+                          <CardTitle>Registration Form</CardTitle>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Custom fields shown when participants register. Leave empty for simple one-click registration.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newField = {
+                              id: `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+                              type: "text" as const,
+                              label: "",
+                              placeholder: "",
+                              required: false,
+                              order: store.registrationFields.length,
+                            };
+                            store.updateField("registrationFields", [...store.registrationFields, newField]);
+                          }}
+                          className="gap-1.5"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add Field
+                        </Button>
+                      </CardHeader>
+                      <CardContent>
+                        {store.registrationFields.length === 0 ? (
+                          <div className="text-center py-12 border border-dashed border-border rounded-xl">
+                            <ListChecks className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                            <p className="text-sm font-medium">No custom registration fields</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Participants will register with a single click. Add fields to collect more info.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {store.registrationFields.map((field, idx) => (
+                              <div key={field.id} className="flex items-center gap-3 rounded-xl border border-border p-3">
+                                <div className="flex-1 min-w-0 grid gap-2 sm:grid-cols-3">
+                                  <select
+                                    value={field.type}
+                                    onChange={(e) => {
+                                      const updated = [...store.registrationFields];
+                                      updated[idx] = { ...field, type: e.target.value as import("@/lib/types").FormFieldType };
+                                      store.updateField("registrationFields", updated);
+                                    }}
+                                    className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+                                  >
+                                    <option value="text">Short Text</option>
+                                    <option value="textarea">Long Text</option>
+                                    <option value="email">Email</option>
+                                    <option value="phone">Phone</option>
+                                    <option value="url">URL</option>
+                                    <option value="number">Number</option>
+                                    <option value="date">Date</option>
+                                    <option value="select">Dropdown</option>
+                                    <option value="radio">Radio</option>
+                                    <option value="checkbox">Checkbox</option>
+                                  </select>
+                                  <input
+                                    value={field.label}
+                                    onChange={(e) => {
+                                      const updated = [...store.registrationFields];
+                                      updated[idx] = { ...field, label: e.target.value };
+                                      store.updateField("registrationFields", updated);
+                                    }}
+                                    placeholder="Field label"
+                                    className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+                                  />
+                                  <label className="flex items-center gap-2 cursor-pointer text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={field.required}
+                                      onChange={(e) => {
+                                        const updated = [...store.registrationFields];
+                                        updated[idx] = { ...field, required: e.target.checked };
+                                        store.updateField("registrationFields", updated);
+                                      }}
+                                      className="h-3.5 w-3.5 rounded border-input"
+                                    />
+                                    Required
+                                  </label>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    const updated = store.registrationFields.filter((_, i) => i !== idx);
+                                    store.updateField("registrationFields", updated);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Section 10: Review */}
+                  {store.currentSection === 10 && (
                     <Card>
                       <CardHeader><CardTitle>Review & Publish</CardTitle></CardHeader>
                       <CardContent className="space-y-6">
@@ -719,7 +828,7 @@ export default function CreateHackathonPage() {
               </AnimatePresence>
 
               {/* Navigation */}
-              {store.currentSection < 9 && (
+              {store.currentSection < sections.length - 1 && (
                 <div className="flex items-center justify-between mt-8 pt-4 border-t border-border">
                   <Button
                     type="button"
@@ -734,7 +843,7 @@ export default function CreateHackathonPage() {
                   </span>
                   <Button
                     type="button"
-                    onClick={() => store.setSection(Math.min(9, store.currentSection + 1))}
+                    onClick={() => store.setSection(Math.min(sections.length - 1, store.currentSection + 1))}
                   >
                     Next
                   </Button>

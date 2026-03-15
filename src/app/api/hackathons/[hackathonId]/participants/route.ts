@@ -60,7 +60,7 @@ export async function GET(
     // Fetch registrations, teams, and tracks in parallel
     let regQuery = supabase
       .from("hackathon_registrations")
-      .select("id, user_id, hackathon_id, status, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)", { count: "exact" })
+      .select("id, user_id, hackathon_id, status, form_data, completeness_score, eligibility_passed, screening_completed_at, screening_results, screening_flags, internal_notes, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)", { count: "exact" })
       .eq("hackathon_id", hackathonId)
       .order("created_at", { ascending: false });
 
@@ -122,6 +122,13 @@ export async function GET(
           user: userProfile ? profileToPublicUser(userProfile) : null,
           teamName: userTeamMap[userId] || null,
           trackName: firstTrackName,
+          formData: (reg.form_data as Record<string, unknown>) || null,
+          completenessScore: typeof reg.completeness_score === "number" ? reg.completeness_score : 0,
+          eligibilityPassed: reg.eligibility_passed as boolean | null,
+          screeningCompletedAt: reg.screening_completed_at as string | null,
+          screeningResults: (reg.screening_results as unknown[]) || [],
+          screeningFlags: (reg.screening_flags as unknown[]) || [],
+          internalNotes: (reg.internal_notes as string) || null,
         };
       }
     );
@@ -215,7 +222,10 @@ export async function PATCH(
       );
     }
 
-    const validStatuses = ["approved", "rejected", "confirmed", "cancelled"];
+    const validStatuses = [
+      "pending", "confirmed", "under_review", "eligible", "ineligible",
+      "accepted", "waitlisted", "rejected", "cancelled", "approved", "declined",
+    ];
     if (!validStatuses.includes(status)) {
       return NextResponse.json(
         { error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` },
@@ -243,7 +253,8 @@ export async function PATCH(
     }
 
     // Send notification to the participant when their status changes
-    if (status === "cancelled" || status === "rejected" || status === "approved") {
+    const notifiableStatuses = ["cancelled", "rejected", "approved", "accepted", "waitlisted", "ineligible", "eligible"];
+    if (notifiableStatuses.includes(status)) {
       const hackathonName = hackathon.name || "the hackathon";
       const messages: Record<string, { title: string; message: string }> = {
         cancelled: {
@@ -251,12 +262,28 @@ export async function PATCH(
           message: `Your registration for ${hackathonName} has been cancelled by the organizer.`,
         },
         rejected: {
-          title: "Registration Rejected",
-          message: `Your registration for ${hackathonName} has been rejected by the organizer.`,
+          title: "Application Rejected",
+          message: `Your application for ${hackathonName} has been rejected.`,
         },
         approved: {
           title: "Registration Approved",
           message: `Your registration for ${hackathonName} has been approved! You're all set to participate.`,
+        },
+        accepted: {
+          title: "Application Accepted",
+          message: `Congratulations! Your application for ${hackathonName} has been accepted!`,
+        },
+        waitlisted: {
+          title: "Application Waitlisted",
+          message: `Your application for ${hackathonName} has been placed on the waitlist. We'll notify you if a spot opens up.`,
+        },
+        eligible: {
+          title: "Application Eligible",
+          message: `Your application for ${hackathonName} has passed screening and is eligible for selection.`,
+        },
+        ineligible: {
+          title: "Application Ineligible",
+          message: `Your application for ${hackathonName} did not meet the eligibility criteria.`,
         },
       };
 

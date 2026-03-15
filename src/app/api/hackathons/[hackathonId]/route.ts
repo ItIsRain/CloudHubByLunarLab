@@ -183,6 +183,10 @@ export async function PATCH(
       requirements: "requirements", resources: "resources", sponsors: "sponsors",
       faqs: "faqs", schedule: "schedule", judges: "judges", mentors: "mentors",
       visibility: "visibility", type: "type", eligibility: "eligibility",
+      registration_fields: "registration_fields", registrationFields: "registration_fields",
+      registration_sections: "registration_sections", registrationSections: "registration_sections",
+      screening_rules: "screening_rules", screeningRules: "screening_rules",
+      screening_config: "screening_config", screeningConfig: "screening_config",
     };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
@@ -203,7 +207,8 @@ export async function PATCH(
     // Validate status against allowed values
     if (updates.status) {
       const allowedStatuses = [
-        "draft", "registration-open", "hacking", "judging",
+        "draft", "published", "registration-open", "registration-closed",
+        "hacking", "submission", "judging",
         "completed", "cancelled", "upcoming",
       ];
       if (!allowedStatuses.includes(updates.status as string)) {
@@ -224,7 +229,7 @@ export async function PATCH(
 
     // Validate type
     if (updates.type) {
-      if (!["in-person", "virtual", "hybrid"].includes(updates.type as string)) {
+      if (!["in-person", "online", "virtual", "hybrid"].includes(updates.type as string)) {
         return NextResponse.json({ error: "Invalid hackathon type" }, { status: 400 });
       }
     }
@@ -260,6 +265,11 @@ export async function PATCH(
     ];
     for (const field of DATE_FIELDS) {
       if (updates[field] !== undefined) {
+        // Allow empty strings to clear dates, convert to null
+        if (updates[field] === "" || updates[field] === null) {
+          updates[field] = null;
+          continue;
+        }
         if (typeof updates[field] !== "string" || !ISO_DATE_RE.test(updates[field] as string) || isNaN(Date.parse(updates[field] as string))) {
           return NextResponse.json({ error: `Invalid ${field} format. Use ISO 8601.` }, { status: 400 });
         }

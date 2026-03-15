@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface RegistrationStatus {
   registered: boolean;
+  rejected?: boolean;
   registration?: { id: string; status: string; created_at: string } | null;
 }
 
@@ -114,9 +115,17 @@ export function useRegisterForHackathon() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (hackathonId: string) => {
+    mutationFn: async ({
+      hackathonId,
+      formData,
+    }: {
+      hackathonId: string;
+      formData?: Record<string, unknown>;
+    }) => {
       const res = await fetch(`/api/hackathons/${hackathonId}/register`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formData }),
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
@@ -124,9 +133,9 @@ export function useRegisterForHackathon() {
       }
       return res.json();
     },
-    onSuccess: (_data, hackathonId) => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["hackathon-registration", hackathonId],
+        queryKey: ["hackathon-registration", variables.hackathonId],
       });
       queryClient.invalidateQueries({ queryKey: ["hackathons"] });
     },
