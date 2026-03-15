@@ -284,19 +284,35 @@ export default function HackathonDetailPage() {
                       </Badge>
                     ) : isRegistered ? (
                       <div className="flex items-center gap-2">
+                        {(registrationStatus === "accepted" || registrationStatus === "approved") && (
+                          <Badge variant="success" className="text-xs">Accepted</Badge>
+                        )}
+                        {registrationStatus === "eligible" && (
+                          <Badge variant="success" className="text-xs">Eligible</Badge>
+                        )}
                         {registrationStatus === "pending" && (
                           <Badge variant="warning" className="text-xs">Pending Review</Badge>
+                        )}
+                        {registrationStatus === "under_review" && (
+                          <Badge variant="warning" className="text-xs">Under Review</Badge>
                         )}
                         {registrationStatus === "waitlisted" && (
                           <Badge variant="warning" className="text-xs">Waitlisted</Badge>
                         )}
-                        <Button size="sm" variant="secondary" onClick={async () => {
-                          await cancelMutation.mutateAsync(hackathon.id);
-                          toast.success("Registration cancelled");
-                        }} disabled={cancelMutation.isPending}>
-                          <Check className="h-4 w-4 mr-1" />
-                          {registrationStatus === "pending" ? "Applied" : "Registered"}
-                        </Button>
+                        {(registrationStatus === "accepted" || registrationStatus === "approved") ? (
+                          <Badge variant="success" className="px-3 py-1.5 text-sm">
+                            <Check className="h-4 w-4 mr-1" />
+                            Successfully Registered
+                          </Badge>
+                        ) : (
+                          <Button size="sm" variant="secondary" onClick={async () => {
+                            await cancelMutation.mutateAsync(hackathon.id);
+                            toast.success("Registration cancelled");
+                          }} disabled={cancelMutation.isPending}>
+                            <Check className="h-4 w-4 mr-1" />
+                            {registrationStatus === "pending" || registrationStatus === "under_review" ? "Applied" : "Registered"}
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <Button size="sm" onClick={async () => {

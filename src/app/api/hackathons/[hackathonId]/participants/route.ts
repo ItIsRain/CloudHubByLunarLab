@@ -4,6 +4,14 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { fireWebhooks } from "@/lib/webhook-delivery";
+import {
+  sendApplicationAcceptedEmail,
+  sendApplicationRejectedEmail,
+  sendApplicationWaitlistedEmail,
+  sendApplicationUnderReviewEmail,
+  sendApplicationEligibleEmail,
+  sendApplicationIneligibleEmail,
+} from "@/lib/resend";
 
 export async function GET(
   request: NextRequest,
@@ -296,6 +304,37 @@ export async function PATCH(
           message: notif.message,
           link: `/hackathons/${hackathonId}`,
         });
+      }
+
+      // Send email notification (fire-and-forget)
+      const userProfile = (data as Record<string, unknown>).user as Record<string, unknown> | null;
+      const userEmail = userProfile?.email as string | undefined;
+      const userName = (userProfile?.name as string) || "Applicant";
+
+      if (userEmail) {
+        const emailParams = {
+          to: userEmail,
+          applicantName: userName,
+          hackathonName,
+          hackathonId,
+        };
+
+        const emailSenders: Record<string, () => Promise<unknown>> = {
+          accepted: () => sendApplicationAcceptedEmail(emailParams),
+          approved: () => sendApplicationAcceptedEmail(emailParams),
+          rejected: () => sendApplicationRejectedEmail(emailParams),
+          waitlisted: () => sendApplicationWaitlistedEmail(emailParams),
+          under_review: () => sendApplicationUnderReviewEmail(emailParams),
+          eligible: () => sendApplicationEligibleEmail(emailParams),
+          ineligible: () => sendApplicationIneligibleEmail(emailParams),
+        };
+
+        const sender = emailSenders[status];
+        if (sender) {
+          sender().catch((e) =>
+            console.error(`Failed to send ${status} email:`, e)
+          );
+        }
       }
     }
 

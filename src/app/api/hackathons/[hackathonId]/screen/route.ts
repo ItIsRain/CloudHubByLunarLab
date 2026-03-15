@@ -3,6 +3,11 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { evaluateAllRules, calculateCompletenessScore } from "@/lib/screening-engine";
+import {
+  sendApplicationEligibleEmail,
+  sendApplicationIneligibleEmail,
+  sendApplicationUnderReviewEmail,
+} from "@/lib/resend";
 import type { ScreeningRule, FormField } from "@/lib/types";
 
 export async function POST(
@@ -34,7 +39,7 @@ export async function POST(
     // Verify caller is the hackathon organizer
     const { data: hackathon } = await supabase
       .from("hackathons")
-      .select("organizer_id, registration_fields, screening_rules, screening_config")
+      .select("organizer_id, name, registration_fields, screening_rules, screening_config")
       .eq("id", hackathonId)
       .single();
 
@@ -59,7 +64,7 @@ export async function POST(
     // Fetch all registrations with form_data that are in a screenable status
     const { data: registrations, error: regError } = await supabase
       .from("hackathon_registrations")
-      .select("id, user_id, form_data, status")
+      .select("id, user_id, form_data, status, user:profiles!hackathon_registrations_user_id_fkey(email, name)")
       .eq("hackathon_id", hackathonId)
       .not("form_data", "is", null)
       .in("status", ["pending", "confirmed", "under_review"]);
@@ -105,11 +110,16 @@ export async function POST(
         flagged++;
       }
 
+      // If there are soft flags but the applicant passed hard rules,
+      // set to under_review instead of eligible so organizer can review
+      const hasSoftFlags = evaluation.softFlags.length > 0;
+      const finalStatus = hasSoftFlags && eligibilityPassed ? "under_review" : newStatus;
+
       // Update the registration with screening results
       await supabase
         .from("hackathon_registrations")
         .update({
-          status: newStatus,
+          status: finalStatus,
           eligibility_passed: eligibilityPassed,
           screening_results: evaluation.results,
           completeness_score: completenessScore,
@@ -117,6 +127,67 @@ export async function POST(
           screening_flags: evaluation.softFlags,
         })
         .eq("id", reg.id);
+
+      // Send email + in-app notification
+      const userProfile = reg.user as { email?: string; name?: string } | null;
+      const userEmail = userProfile?.email;
+      const userName = userProfile?.name || "Applicant";
+      const hackathonName = (hackathon.name as string) || "the hackathon";
+
+      if (userEmail) {
+        const emailParams = {
+          to: userEmail,
+          applicantName: userName,
+          hackathonName,
+          hackathonId,
+        };
+
+        // Fire-and-forget emails (don't block the loop)
+        if (finalStatus === "eligible") {
+          sendApplicationEligibleEmail(emailParams).catch((e) =>
+            console.error("Failed to send eligible email:", e)
+          );
+        } else if (finalStatus === "ineligible") {
+          sendApplicationIneligibleEmail(emailParams).catch((e) =>
+            console.error("Failed to send ineligible email:", e)
+          );
+        } else if (finalStatus === "under_review") {
+          sendApplicationUnderReviewEmail(emailParams).catch((e) =>
+            console.error("Failed to send under-review email:", e)
+          );
+        }
+      }
+
+      // Create in-app notification
+      const notifMessages: Record<string, { title: string; message: string }> = {
+        eligible: {
+          title: "Application Eligible",
+          message: `Your application for ${hackathonName} has passed screening and is eligible for selection.`,
+        },
+        ineligible: {
+          title: "Application Ineligible",
+          message: `Your application for ${hackathonName} did not meet the eligibility criteria.`,
+        },
+        under_review: {
+          title: "Application Under Review",
+          message: `Your application for ${hackathonName} is being reviewed by the organizers.`,
+        },
+      };
+      const notif = notifMessages[finalStatus];
+      if (notif) {
+        supabase
+          .from("notifications")
+          .insert({
+            user_id: reg.user_id,
+            type: "hackathon-update",
+            title: notif.title,
+            message: notif.message,
+            link: `/hackathons/${hackathonId}`,
+          })
+          .then(({ error: notifErr }) => {
+            if (notifErr) console.error("Failed to insert notification:", notifErr);
+          });
+      }
     }
 
     return NextResponse.json({

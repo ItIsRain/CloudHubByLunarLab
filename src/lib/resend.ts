@@ -79,4 +79,162 @@ export async function sendWelcomeEmail(email: string, name: string) {
   });
 }
 
+// ── Application Status Email Templates ──────────────────
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+interface ApplicationEmailParams {
+  to: string;
+  applicantName: string;
+  hackathonName: string;
+  hackathonId: string;
+}
+
+export async function sendApplicationAcceptedEmail({ to, applicantName, hackathonName, hackathonId }: ApplicationEmailParams) {
+  return sendEmail({
+    to,
+    subject: `Congratulations! You've been accepted to ${hackathonName}`,
+    html: emailWrapper(`
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="display:inline-block;width:64px;height:64px;border-radius:50%;background:#16a34a22;line-height:64px;font-size:32px;">&#10003;</div>
+      </div>
+      <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;text-align:center;">You're In, ${escapeHtml(applicantName)}!</h1>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        Great news! Your application for <strong style="color:#fff;">${escapeHtml(hackathonName)}</strong> has been <strong style="color:#22c55e;">accepted</strong>.
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
+        You're officially registered as a participant. Check the hackathon page for next steps, team formation, and important dates.
+      </p>
+      <div style="text-align:center;">
+        <a href="${SITE_URL}/hackathons/${escapeHtml(hackathonId)}" style="display:inline-block;padding:12px 32px;background:#e8440a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">
+          View Hackathon
+        </a>
+      </div>
+    `),
+  });
+}
+
+export async function sendApplicationRejectedEmail({ to, applicantName, hackathonName, hackathonId }: ApplicationEmailParams) {
+  return sendEmail({
+    to,
+    subject: `Update on your application for ${hackathonName}`,
+    html: emailWrapper(`
+      <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;">Application Update</h1>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        Hi ${escapeHtml(applicantName)},
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        Thank you for your interest in <strong style="color:#fff;">${escapeHtml(hackathonName)}</strong>. After careful review, we were unable to accept your application at this time.
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
+        We encourage you to keep an eye out for future events and opportunities on CloudHub.
+      </p>
+      <div style="text-align:center;">
+        <a href="${SITE_URL}/explore" style="display:inline-block;padding:12px 32px;background:#e8440a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">
+          Explore More Events
+        </a>
+      </div>
+    `),
+  });
+}
+
+export async function sendApplicationUnderReviewEmail({ to, applicantName, hackathonName, hackathonId }: ApplicationEmailParams) {
+  return sendEmail({
+    to,
+    subject: `Your application for ${hackathonName} is under review`,
+    html: emailWrapper(`
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="display:inline-block;width:64px;height:64px;border-radius:50%;background:#f59e0b22;line-height:64px;font-size:32px;">&#128269;</div>
+      </div>
+      <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;text-align:center;">Application Under Review</h1>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        Hi ${escapeHtml(applicantName)},
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        Your application for <strong style="color:#fff;">${escapeHtml(hackathonName)}</strong> has been flagged for additional review by our team.
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
+        This is not a rejection — we just need to verify some details. You'll receive another email once a final decision has been made.
+      </p>
+      <div style="text-align:center;">
+        <a href="${SITE_URL}/hackathons/${escapeHtml(hackathonId)}" style="display:inline-block;padding:12px 32px;background:#e8440a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">
+          View Hackathon
+        </a>
+      </div>
+    `),
+  });
+}
+
+export async function sendApplicationWaitlistedEmail({ to, applicantName, hackathonName, hackathonId }: ApplicationEmailParams) {
+  return sendEmail({
+    to,
+    subject: `You've been waitlisted for ${hackathonName}`,
+    html: emailWrapper(`
+      <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;">You're on the Waitlist</h1>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        Hi ${escapeHtml(applicantName)},
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        Your application for <strong style="color:#fff;">${escapeHtml(hackathonName)}</strong> has been placed on the waitlist.
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
+        We'll notify you immediately if a spot opens up. Please keep your schedule open!
+      </p>
+      <div style="text-align:center;">
+        <a href="${SITE_URL}/hackathons/${escapeHtml(hackathonId)}" style="display:inline-block;padding:12px 32px;background:#e8440a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">
+          View Hackathon
+        </a>
+      </div>
+    `),
+  });
+}
+
+export async function sendApplicationEligibleEmail({ to, applicantName, hackathonName, hackathonId }: ApplicationEmailParams) {
+  return sendEmail({
+    to,
+    subject: `Your application for ${hackathonName} passed screening`,
+    html: emailWrapper(`
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="display:inline-block;width:64px;height:64px;border-radius:50%;background:#3b82f622;line-height:64px;font-size:32px;">&#10003;</div>
+      </div>
+      <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;text-align:center;">Application Eligible</h1>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        Hi ${escapeHtml(applicantName)},
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
+        Your application for <strong style="color:#fff;">${escapeHtml(hackathonName)}</strong> has passed the screening process and is eligible for selection. You'll hear from us soon with the final decision.
+      </p>
+      <div style="text-align:center;">
+        <a href="${SITE_URL}/hackathons/${escapeHtml(hackathonId)}" style="display:inline-block;padding:12px 32px;background:#e8440a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">
+          View Hackathon
+        </a>
+      </div>
+    `),
+  });
+}
+
+export async function sendApplicationIneligibleEmail({ to, applicantName, hackathonName, hackathonId }: ApplicationEmailParams) {
+  return sendEmail({
+    to,
+    subject: `Update on your application for ${hackathonName}`,
+    html: emailWrapper(`
+      <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;">Application Update</h1>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        Hi ${escapeHtml(applicantName)},
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+        After reviewing your application for <strong style="color:#fff;">${escapeHtml(hackathonName)}</strong>, it did not meet the eligibility criteria set by the organizers.
+      </p>
+      <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
+        We encourage you to explore other events and hackathons on CloudHub.
+      </p>
+      <div style="text-align:center;">
+        <a href="${SITE_URL}/explore" style="display:inline-block;padding:12px 32px;background:#e8440a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">
+          Explore More Events
+        </a>
+      </div>
+    `),
+  });
+}
+
 export { emailWrapper };
