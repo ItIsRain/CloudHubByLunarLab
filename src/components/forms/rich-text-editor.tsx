@@ -8,8 +8,7 @@ import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
-import { TextStyle } from "@tiptap/extension-text-style";
-import Color from "@tiptap/extension-color";
+import { TextStyle, Color } from "@tiptap/extension-text-style";
 import Highlight from "@tiptap/extension-highlight";
 import Youtube from "@tiptap/extension-youtube";
 import { marked } from "marked";
@@ -69,7 +68,10 @@ function ToolbarButton({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onMouseDown={(e) => {
+        e.preventDefault(); // Keep editor focus & selection
+        if (!disabled) onClick();
+      }}
       disabled={disabled}
       title={title}
       className={cn(
@@ -314,7 +316,8 @@ function ColorPickerPopover({
           <button
             key={c.name}
             type="button"
-            onClick={() => {
+            onMouseDown={(e) => {
+              e.preventDefault(); // Keep editor focus & selection
               onSelect(c.value);
               onClose();
             }}
@@ -392,7 +395,8 @@ function HeadingDropdown({
           <button
             key={item.label}
             type="button"
-            onClick={() => {
+            onMouseDown={(e) => {
+              e.preventDefault(); // Keep editor focus & selection
               item.action();
               onClose();
             }}
@@ -483,9 +487,12 @@ export function RichTextEditor({
         },
       }),
       Link.configure({
-        openOnClick: false,
+        openOnClick: true,
+        autolink: true,
         HTMLAttributes: {
-          class: "text-primary underline underline-offset-2 hover:text-primary/80",
+          class: "text-primary underline underline-offset-2 hover:text-primary/80 cursor-pointer",
+          target: "_blank",
+          rel: "noopener noreferrer",
         },
       }),
       Underline,
@@ -493,7 +500,9 @@ export function RichTextEditor({
         types: ["heading", "paragraph"],
       }),
       TextStyle,
-      Color,
+      Color.configure({
+        types: [TextStyle.name],
+      }),
       Highlight.configure({
         multicolor: true,
       }),
@@ -608,7 +617,8 @@ export function RichTextEditor({
         <div className="relative" data-toolbar-popover>
           <button
             type="button"
-            onClick={() => {
+            onMouseDown={(e) => {
+              e.preventDefault();
               closeAll();
               setShowHeadingDropdown(!showHeadingDropdown);
             }}

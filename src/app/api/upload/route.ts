@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     if (!ALLOWED_TYPES.has(file.type)) {
       return NextResponse.json(
-        { error: `File type "${file.type}" not allowed` },
+        { error: "File type not allowed. Please upload a supported format (images, PDF, DOC, PPT, XLS, CSV, TXT, ZIP, or MP4)." },
         { status: 400 }
       );
     }
@@ -66,6 +66,11 @@ export async function POST(request: NextRequest) {
       timestamp: String(timestamp),
     };
     if (context) params.context = context;
+
+    // Ensure raw resources (PDFs, docs, etc.) are publicly accessible
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      params.access_mode = "public";
+    }
 
     // Generate signature
     const sortedParams = Object.keys(params)

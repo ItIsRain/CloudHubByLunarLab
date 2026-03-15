@@ -28,18 +28,21 @@ if (typeof window !== "undefined") {
 export function SafeHtml({ content, className }: SafeHtmlProps) {
   const clean = DOMPurify.sanitize(content, {
     ALLOWED_TAGS: [
-      "p", "br", "strong", "em", "b", "i", "u", "s",
+      "p", "br", "strong", "em", "b", "i", "u", "s", "mark",
       "h1", "h2", "h3", "h4", "h5", "h6",
       "ul", "ol", "li", "a", "img",
       "blockquote", "pre", "code",
       "table", "thead", "tbody", "tr", "th", "td",
       "div", "span", "hr",
+      "iframe",
     ],
     ALLOWED_ATTR: [
       "href", "target", "rel", "src", "alt", "width", "height",
-      "class",
+      "class", "style",
+      // iframe attrs for YouTube embeds
+      "allowfullscreen", "frameborder", "allow",
     ],
-    FORBID_ATTR: ["style", "onerror", "onload", "onclick"],
+    FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus"],
     ALLOW_DATA_ATTR: false,
     ALLOWED_URI_REGEXP: SAFE_URI_RE,
   });

@@ -29,6 +29,8 @@ import {
   Lock,
   HelpCircle,
   EyeOff,
+  LogOut,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SafeHtml } from "@/components/ui/safe-html";
@@ -38,6 +40,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import dynamic from "next/dynamic";
 const ShareDialog = dynamic(() => import("@/components/dialogs/share-dialog").then(m => m.ShareDialog), { ssr: false });
 const AddToCalendarDialog = dynamic(() => import("@/components/dialogs/add-to-calendar-dialog").then(m => m.AddToCalendarDialog), { ssr: false });
@@ -112,6 +115,7 @@ export default function HackathonDetailPage() {
   const registrationStatus = regData?.registration?.status;
   const registerMutation = useRegisterForHackathon();
   const cancelMutation = useCancelHackathonRegistration();
+  const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false);
 
   const { bookmarkIds } = useBookmarkIds("hackathon");
   const toggleBookmark = useToggleBookmark();
@@ -208,7 +212,7 @@ export default function HackathonDetailPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
               <div className="text-white">
-                <div className="flex items-center gap-3 mb-3">
+                <div className="flex flex-wrap items-center gap-2 mb-3">
                   <Badge className={cn(status.color, "text-white")}>{status.label}</Badge>
                   <Badge variant="secondary" className="bg-white/20 text-white border-none">{hackathon.category}</Badge>
                   {isOrganizer && hackathon.visibility === "private" && (
@@ -279,40 +283,68 @@ export default function HackathonDetailPage() {
                     </Button>
                   ) : (hackathon.status === "published" || hackathon.status === "registration-open") && (
                     isRejected ? (
-                      <Badge variant="destructive" className="px-3 py-1.5 text-sm">
+                      <Badge variant="destructive" className="w-full justify-center whitespace-nowrap px-4 py-2 text-sm">
                         Application {registrationStatus === "ineligible" ? "Ineligible" : "Rejected"}
                       </Badge>
                     ) : isRegistered ? (
                       <div className="flex items-center gap-2">
                         {(registrationStatus === "accepted" || registrationStatus === "approved") && (
-                          <Badge variant="success" className="text-xs">Accepted</Badge>
-                        )}
-                        {registrationStatus === "eligible" && (
-                          <Badge variant="success" className="text-xs">Eligible</Badge>
-                        )}
-                        {registrationStatus === "pending" && (
-                          <Badge variant="warning" className="text-xs">Pending Review</Badge>
-                        )}
-                        {registrationStatus === "under_review" && (
-                          <Badge variant="warning" className="text-xs">Under Review</Badge>
-                        )}
-                        {registrationStatus === "waitlisted" && (
-                          <Badge variant="warning" className="text-xs">Waitlisted</Badge>
-                        )}
-                        {(registrationStatus === "accepted" || registrationStatus === "approved") ? (
-                          <Badge variant="success" className="px-3 py-1.5 text-sm">
-                            <Check className="h-4 w-4 mr-1" />
+                          <Badge variant="success" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
+                            <Check className="h-4 w-4 mr-1.5" />
                             Successfully Registered
                           </Badge>
-                        ) : (
-                          <Button size="sm" variant="secondary" onClick={async () => {
-                            await cancelMutation.mutateAsync(hackathon.id);
-                            toast.success("Registration cancelled");
-                          }} disabled={cancelMutation.isPending}>
-                            <Check className="h-4 w-4 mr-1" />
-                            {registrationStatus === "pending" || registrationStatus === "under_review" ? "Applied" : "Registered"}
-                          </Button>
                         )}
+                        {registrationStatus === "eligible" && (
+                          <Badge variant="success" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
+                            <Check className="h-4 w-4 mr-1.5" />
+                            Eligible
+                          </Badge>
+                        )}
+                        {registrationStatus === "pending" && (
+                          <Badge variant="warning" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
+                            <Clock className="h-4 w-4 mr-1.5" />
+                            Pending Review
+                          </Badge>
+                        )}
+                        {registrationStatus === "under_review" && (
+                          <Badge variant="warning" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
+                            <Clock className="h-4 w-4 mr-1.5" />
+                            Under Review
+                          </Badge>
+                        )}
+                        {registrationStatus === "waitlisted" && (
+                          <Badge variant="warning" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
+                            <Clock className="h-4 w-4 mr-1.5" />
+                            Waitlisted
+                          </Badge>
+                        )}
+                        {registrationStatus === "confirmed" && (
+                          <Badge variant="success" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
+                            <Check className="h-4 w-4 mr-1.5" />
+                            Registered
+                          </Badge>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-white/10 border-white/30 text-white hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-200"
+                          onClick={() => setCancelDialogOpen(true)}
+                          disabled={cancelMutation.isPending}
+                        >
+                          {cancelMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (registrationStatus === "accepted" || registrationStatus === "approved") ? (
+                            <>
+                              <LogOut className="h-4 w-4 mr-1" />
+                              Leave
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Cancel
+                            </>
+                          )}
+                        </Button>
                       </div>
                     ) : (
                       <Button size="sm" onClick={async () => {
@@ -805,6 +837,7 @@ export default function HackathonDetailPage() {
         <HackathonRegistrationDialog
           open={registrationDialogOpen}
           onOpenChange={setRegistrationDialogOpen}
+          hackathonId={hackathon.id}
           hackathonName={hackathon.name}
           registrationFields={hackathon.registrationFields}
           registrationSections={hackathon.registrationSections}
@@ -820,6 +853,53 @@ export default function HackathonDetailPage() {
           }}
         />
       )}
+
+      {/* Cancel Registration / Leave Hackathon Confirmation Dialog */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {(registrationStatus === "accepted" || registrationStatus === "approved")
+                ? "Leave Hackathon"
+                : "Cancel Registration"}
+            </DialogTitle>
+            <DialogDescription>
+              {(registrationStatus === "accepted" || registrationStatus === "approved")
+                ? "You are currently accepted as a participant. Leaving will give up your spot and the next person on the waitlist will be promoted. This action cannot be undone."
+                : "Are you sure you want to cancel your registration? You can re-register later if spots are still available."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>
+              Keep Registration
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={cancelMutation.isPending}
+              onClick={() => {
+                cancelMutation.mutate(hackathon.id, {
+                  onSuccess: () => {
+                    setCancelDialogOpen(false);
+                    toast.success(
+                      (registrationStatus === "accepted" || registrationStatus === "approved")
+                        ? "You have left the hackathon. Your spot has been released."
+                        : "Registration cancelled successfully."
+                    );
+                  },
+                  onError: (err) => {
+                    toast.error(err instanceof Error ? err.message : "Failed to cancel registration");
+                  },
+                });
+              }}
+            >
+              {cancelMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              {(registrationStatus === "accepted" || registrationStatus === "approved")
+                ? "Leave Hackathon"
+                : "Cancel Registration"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

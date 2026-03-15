@@ -12,6 +12,7 @@ import {
   Clock,
   Shield,
   ScrollText,
+  Flag,
 } from "lucide-react";
 import { SafeHtml } from "@/components/ui/safe-html";
 import { Navbar } from "@/components/layout/navbar";
@@ -20,34 +21,66 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useHackathon } from "@/hooks/use-hackathons";
+import { usePhases } from "@/hooks/use-phases";
 import { cn, formatDate, formatCurrency } from "@/lib/utils";
+import type { CompetitionPhase } from "@/lib/types";
 
-const phases = [
-  { key: "registration", label: "Registration" },
-  { key: "kickoff", label: "Kickoff" },
-  { key: "hacking", label: "Hacking" },
-  { key: "submission", label: "Submission" },
-  { key: "judging", label: "Judging" },
-  { key: "winners", label: "Winners" },
-];
+interface TimelineItem {
+  label: string;
+  date: string;
+  endDate?: string;
+  description?: string;
+  isCompetitionPhase?: boolean;
+  phaseType?: CompetitionPhase["phaseType"];
+  status?: CompetitionPhase["status"];
+}
 
-function getPhaseIndex(status: string): number {
-  switch (status) {
-    case "registration-open":
-      return 0;
-    case "registration-closed":
-      return 1;
-    case "hacking":
-      return 2;
-    case "submission":
-      return 3;
-    case "judging":
-      return 4;
-    case "completed":
-      return 5;
-    default:
-      return -1;
+function buildMergedTimeline(
+  hackathon: {
+    registrationStart: string;
+    registrationEnd: string;
+    hackingStart: string;
+    submissionDeadline: string;
+    judgingStart: string;
+    winnersAnnouncement: string;
+  },
+  competitionPhases: CompetitionPhase[]
+): TimelineItem[] {
+  const defaultItems: TimelineItem[] = [
+    { label: "Registration Opens", date: hackathon.registrationStart },
+    { label: "Registration Closes", date: hackathon.registrationEnd },
+    { label: "Hacking Starts", date: hackathon.hackingStart },
+    { label: "Submission Deadline", date: hackathon.submissionDeadline },
+    { label: "Judging Begins", date: hackathon.judgingStart },
+    { label: "Winners Announced", date: hackathon.winnersAnnouncement },
+  ];
+
+  const phaseItems: TimelineItem[] = competitionPhases
+    .filter((p) => p.startDate)
+    .map((p) => ({
+      label: p.name,
+      date: p.startDate!,
+      endDate: p.endDate ?? undefined,
+      description: p.description,
+      isCompetitionPhase: true,
+      phaseType: p.phaseType,
+      status: p.status,
+    }));
+
+  return [...defaultItems, ...phaseItems].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+}
+
+function getActiveTimelineIndex(items: TimelineItem[]): number {
+  const now = new Date();
+  let lastPastIndex = -1;
+  for (let i = 0; i < items.length; i++) {
+    if (new Date(items[i].date) <= now) {
+      lastPastIndex = i;
+    }
   }
+  return lastPastIndex;
 }
 
 export default function HackathonOverviewPage() {
@@ -56,6 +89,8 @@ export default function HackathonOverviewPage() {
 
   const { data: hackathonData, isLoading } = useHackathon(hackathonId);
   const hackathon = hackathonData?.data;
+  const { data: phasesData } = usePhases(hackathonId);
+  const competitionPhases = phasesData?.data ?? [];
 
   if (isLoading) {
     return (
@@ -94,18 +129,10 @@ export default function HackathonOverviewPage() {
     );
   }
 
-  const currentPhaseIndex = getPhaseIndex(hackathon.status);
+  const timeline = buildMergedTimeline(hackathon, competitionPhases);
+  const currentPhaseIndex = getActiveTimelineIndex(timeline);
 
-  const timeline = [
-    { label: "Registration Opens", date: hackathon.registrationStart },
-    { label: "Registration Closes", date: hackathon.registrationEnd },
-    { label: "Hacking Starts", date: hackathon.hackingStart },
-    { label: "Submission Deadline", date: hackathon.submissionDeadline },
-    { label: "Judging Begins", date: hackathon.judgingStart },
-    { label: "Winners Announced", date: hackathon.winnersAnnouncement },
-  ];
-
-  const topPrizes = hackathon.prizes
+  const topPrizes = (hackathon.prizes ?? [])
     .filter((p) => typeof p.place === "number" && p.place <= 3)
     .sort((a, b) => (a.place as number) - (b.place as number));
 
@@ -199,18 +226,18 @@ export default function HackathonOverviewPage() {
                       <div
                         className="absolute top-5 left-0 h-0.5 bg-primary transition-all duration-500"
                         style={{
-                          width: `${currentPhaseIndex >= 0 ? (currentPhaseIndex / (phases.length - 1)) * 100 : 0}%`,
+                          width: `${currentPhaseIndex >= 0 ? (currentPhaseIndex / Math.max(timeline.length - 1, 1)) * 100 : 0}%`,
                         }}
                       />
 
-                      {phases.map((phase, i) => {
+                      {timeline.map((item, i) => {
                         const isPast = i < currentPhaseIndex;
                         const isCurrent = i === currentPhaseIndex;
                         const isFuture = i > currentPhaseIndex;
 
                         return (
                           <div
-                            key={phase.key}
+                            key={`${item.label}-${i}`}
                             className="flex flex-col items-center relative z-10"
                           >
                             <div
@@ -220,10 +247,22 @@ export default function HackathonOverviewPage() {
                                   "bg-primary border-primary text-primary-foreground",
                                 isCurrent &&
                                   "bg-primary border-primary text-primary-foreground ring-4 ring-primary/20",
-                                isFuture && "bg-background border-muted"
+                                isFuture && "bg-background border-muted",
+                                item.isCompetitionPhase &&
+                                  isFuture &&
+                                  "border-accent bg-accent/10"
                               )}
                             >
-                              {isPast ? (
+                              {item.isCompetitionPhase ? (
+                                <Flag
+                                  className={cn(
+                                    "h-4 w-4",
+                                    isPast || isCurrent
+                                      ? "text-primary-foreground"
+                                      : "text-accent"
+                                  )}
+                                />
+                              ) : isPast ? (
                                 <CheckCircle2 className="h-5 w-5" />
                               ) : isCurrent ? (
                                 <div className="h-3 w-3 rounded-full bg-white animate-pulse" />
@@ -233,7 +272,7 @@ export default function HackathonOverviewPage() {
                             </div>
                             <span
                               className={cn(
-                                "text-xs font-medium mt-2 text-center",
+                                "text-xs font-medium mt-2 text-center max-w-[80px] leading-tight",
                                 isCurrent
                                   ? "text-primary"
                                   : isPast
@@ -241,10 +280,18 @@ export default function HackathonOverviewPage() {
                                     : "text-muted-foreground"
                               )}
                             >
-                              {phase.label}
+                              {item.label}
                             </span>
+                            {item.isCompetitionPhase && (
+                              <Badge
+                                variant="outline"
+                                className="mt-1 text-[9px] px-1.5 py-0 h-4 capitalize"
+                              >
+                                {item.phaseType}
+                              </Badge>
+                            )}
                             <span className="text-[10px] text-muted-foreground mt-0.5">
-                              {formatDate(timeline[i]?.date || "")}
+                              {formatDate(item.date)}
                             </span>
                           </div>
                         );
@@ -257,23 +304,55 @@ export default function HackathonOverviewPage() {
                     {timeline.map((item, i) => {
                       const isPast = new Date(item.date) < new Date();
                       return (
-                        <div key={i} className="flex items-start gap-4">
+                        <div key={`mobile-${item.label}-${i}`} className="flex items-start gap-4">
                           <div className="flex flex-col items-center">
                             <div
                               className={cn(
-                                "h-3 w-3 rounded-full",
-                                isPast ? "bg-primary" : "bg-muted"
+                                "rounded-full flex items-center justify-center",
+                                item.isCompetitionPhase
+                                  ? "h-5 w-5"
+                                  : "h-3 w-3",
+                                isPast
+                                  ? "bg-primary"
+                                  : item.isCompetitionPhase
+                                    ? "bg-accent/20 border border-accent"
+                                    : "bg-muted"
                               )}
-                            />
+                            >
+                              {item.isCompetitionPhase && (
+                                <Flag
+                                  className={cn(
+                                    "h-2.5 w-2.5",
+                                    isPast ? "text-primary-foreground" : "text-accent"
+                                  )}
+                                />
+                              )}
+                            </div>
                             {i < timeline.length - 1 && (
                               <div className="w-0.5 h-8 bg-muted mt-1" />
                             )}
                           </div>
                           <div className="flex-1 -mt-1">
-                            <p className="text-sm font-medium">{item.label}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium">{item.label}</p>
+                              {item.isCompetitionPhase && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] px-1.5 py-0 h-4 capitalize"
+                                >
+                                  {item.phaseType}
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">
                               {formatDate(item.date)}
+                              {item.endDate && ` — ${formatDate(item.endDate)}`}
                             </p>
+                            {item.description && (
+                              <p className="text-xs text-muted-foreground/80 mt-0.5">
+                                {item.description}
+                              </p>
+                            )}
                           </div>
                         </div>
                       );
@@ -334,14 +413,14 @@ export default function HackathonOverviewPage() {
                   </div>
 
                   {/* Special prizes */}
-                  {hackathon.prizes.filter((p) => p.place === "special")
+                  {(hackathon.prizes ?? []).filter((p) => p.place === "special")
                     .length > 0 && (
                     <div>
                       <h4 className="font-medium text-sm text-muted-foreground mb-3">
                         Special Awards
                       </h4>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {hackathon.prizes
+                        {(hackathon.prizes ?? [])
                           .filter((p) => p.place === "special")
                           .map((prize, i) => (
                             <motion.div
@@ -390,7 +469,7 @@ export default function HackathonOverviewPage() {
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-3">
-                    {hackathon.eligibility.map((item, i) => (
+                    {(hackathon.eligibility ?? []).map((item, i) => (
                       <motion.li
                         key={i}
                         initial={{ opacity: 0, x: -10 }}
@@ -440,7 +519,7 @@ export default function HackathonOverviewPage() {
                 </CardHeader>
                 <CardContent>
                   <SafeHtml
-                    content={hackathon.rules}
+                    content={hackathon.rules ?? ""}
                     className="prose prose-sm dark:prose-invert max-w-none [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1 [&_p:empty]:hidden"
                   />
                 </CardContent>

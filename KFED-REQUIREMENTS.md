@@ -24,26 +24,26 @@
 ## 1. APPLICATION INTAKE & FORM MANAGEMENT
 
 ### 1.1 Application Form Engine
-- [ ] **Configurable form schema system** — JSON-based field definitions (text, textarea, select, multi-select, checkbox, radio, number, email, phone, URL, date, file upload)
-- [ ] **Dynamic form renderer** — Renders forms from schema with validation
-- [ ] **Multi-step form wizard** — Break long applications into logical sections
-- [ ] **Field validation rules** — Required, min/max length, regex patterns, conditional visibility
-- [ ] **Conditional logic** — Show/hide fields based on other field values
-- [ ] **File upload support** — PDF, PPT, DOC for pitch decks, trade licenses (up to 10MB)
+- [x] **Configurable form schema system** — JSON-based field definitions (text, textarea, select, multi-select, checkbox, radio, number, email, phone, URL, date, file upload)
+- [x] **Dynamic form renderer** — Renders forms from schema with validation
+- [x] **Multi-step form wizard** — Break long applications into logical sections
+- [x] **Field validation rules** — Required, min/max length, regex patterns, conditional visibility
+- [x] **Conditional logic** — Show/hide fields based on other field values
+- [x] **File upload support** — PDF, PPT, DOC for pitch decks, trade licenses (up to 10MB) via Cloudinary (access_mode: public for raw files)
 - [ ] **Draft saving** — Auto-save and manual save of incomplete applications
 - [ ] **Application preview** — Applicants can review before final submission
-- [ ] **Application confirmation** — Email confirmation on successful submission
+- [x] **Application confirmation** — Email confirmation on successful submission (via Resend)
 - [ ] **Application editing** — Allow edits until deadline (configurable)
-- [ ] **Public application landing page** — Branded page with competition info + embedded form
+- [x] **Public application landing page** — Branded page with competition info + embedded form
 
 ### 1.2 Application Management (Admin)
-- [ ] **Application list view** — Sortable, filterable table of all applications
-- [ ] **Application detail view** — Full read-only view of any application
-- [ ] **Application status pipeline** — submitted → under-review → accepted → waitlisted → rejected
-- [ ] **Bulk status updates** — Select multiple and change status
-- [ ] **Application search** — Full-text search across all fields
-- [ ] **Application filters** — By status, campus, sector, date range, completeness
-- [ ] **Application notes** — Internal reviewer notes per application
+- [x] **Application list view** — Sortable, filterable table of all applications (with expand for detail)
+- [x] **Application detail view** — Full read-only view of any application (expanded row with all form fields)
+- [x] **Application status pipeline** — pending → under_review → eligible → ineligible → accepted → waitlisted → rejected → cancelled
+- [x] **Bulk status updates** — Select multiple and change status
+- [x] **Application search** — Full-text search across name/email
+- [x] **Application filters** — By status (dropdown filter)
+- [x] **Application notes** — Internal reviewer notes per application
 
 ### 1.3 Database
 - [x] `competition_forms` table — Form schema definitions
@@ -57,45 +57,49 @@
 ## 2. SCREENING & SELECTION
 
 ### 2.1 Automated Eligibility Checks
-- [ ] **Rule engine** — Configurable pass/fail rules on structured fields
-- [ ] **Hard eligibility filters:**
-  - [ ] Age verification (18+)
-  - [ ] Residency check (Abu Dhabi / Al Ain / Al Dhafra)
-  - [ ] Ownership confirmation (Emirati ownership/co-ownership)
-  - [ ] Startup stage filter (≥ prototype/MVP)
-  - [ ] Availability confirmation (bootcamp + final pitch)
-- [ ] **Completeness check** — All required fields filled, mandatory commitments ticked
-- [ ] **Duplicate detection:**
-  - [ ] Matching email addresses
-  - [ ] Matching phone numbers
-  - [ ] Matching LinkedIn URLs
-  - [ ] Matching startup names (fuzzy match)
-  - [ ] Flag duplicates for review (don't auto-reject)
-- [ ] **Soft flags** (reviewer awareness, not disqualification):
-  - [ ] No pitch deck uploaded
-  - [ ] No website provided
-  - [ ] No trade license
-  - [ ] Residency = "Other"
+- [x] **Rule engine** — Configurable pass/fail rules on structured fields (14 operators, rejection-condition paradigm)
+- [x] **Hard eligibility filters:** (all configurable via screening rules UI)
+  - [x] Age verification (18+) — via greater_equal/less_than operators
+  - [x] Residency check (Abu Dhabi / Al Ain / Al Dhafra) — via equals/not_equals/in operators
+  - [x] Ownership confirmation (Emirati ownership/co-ownership) — via is_true/equals operators
+  - [x] Startup stage filter (≥ prototype/MVP) — via in/not_in operators
+  - [x] Availability confirmation (bootcamp + final pitch) — via is_true operator
+- [x] **Completeness check** — Completeness score (0-100) calculated per application
+- [x] **Duplicate detection:**
+  - [x] Matching email addresses
+  - [x] Matching phone numbers (normalized)
+  - [x] Matching LinkedIn URLs (normalized)
+  - [x] Matching startup names (fuzzy match >80% character overlap)
+  - [x] Flag duplicates for review (don't auto-reject)
+- [x] **Soft flags** (reviewer awareness, not disqualification):
+  - [x] Configurable soft rules — any field + operator combination
+  - [x] Quota-based soft flags — per-option soft flag on linked form field
+  - [x] Soft flags trigger `under_review` status for organizer review
 
 ### 2.2 Quota Enforcement
-- [ ] **Campus-based quotas** — 75 Abu Dhabi, 50 Al Ain, 25 Al Dhafra
-- [ ] **Overflow ranking** — When eligible > quota, rank by:
-  - [ ] Application completeness score (pitch deck, website, trade license, traction)
-  - [ ] First-come-first-served as tiebreaker
-- [ ] **Waitlist management** — Auto-waitlist overflow applicants
+- [x] **Campus-based quotas** — Configurable per-option quotas linked to any radio/select form field
+- [x] **3-state quota options** — Applicable / Soft Flag (review required) / Not Applicable (auto-reject)
+- [x] **Fill tracking** — Real-time fill counts per option with progress bars
+- [x] **Smart form handling** — Full options show "Waitlisted" badge (still selectable, auto-waitlisted on submit), N/A options disabled, soft-flagged options show warning
+- [x] **FCFS overflow ranking** — When eligible exceeds quota, first-come-first-served by registration date (`created_at ASC`); accepted within quota, waitlisted overflow
+  - [x] First-come-first-served as tiebreaker
+  - [ ] Application completeness score as additional ranking factor
+- [x] **Waitlist management** — Auto-waitlist applicants who select a full quota option at registration
+- [x] **Quota enforcement toggle** — Organizer chooses "During Registration" (show fills, auto-waitlist on form) vs "During Screening" (enforce quotas when screening runs)
+- [x] **Automatic waitlist backfill** — When an accepted user leaves, the next waitlisted person from the same campus is auto-promoted to accepted with email notification
 
 ### 2.3 Screening Dashboard
-- [ ] **Summary cards** — Total applications, eligible, ineligible, incomplete, pending review
-- [ ] **Campus breakdown** — Counts by campus (AD / AA / DHA) with quota progress bars
+- [x] **Summary cards** — Total applications, Screened (with %), Eligible, Ineligible/Rejected, Accepted
+- [x] **Campus breakdown** — Counts by campus with quota progress bars (in Campus Quotas section)
 - [ ] **Sector distribution** — Applications by sector
-- [ ] **Eligibility breakdown** — Pass/fail counts per rule
-- [ ] **Duplicate flags list** — Flagged applications requiring manual review
-- [ ] **Soft flags list** — Applications with warnings
+- [x] **Eligibility breakdown** — Per-application screening results with rule-by-rule pass/fail in expanded view
+- [x] **Duplicate flags list** — Flagged applications with flag count badges
+- [x] **Soft flags list** — Applications with soft flag badges (yellow warning) visible inline + in detail view
 
 ### 2.4 Audit Trail
-- [ ] **Eligibility decision logging** — Every pass/fail recorded with rule reference
+- [x] **Eligibility decision logging** — Every pass/fail recorded with rule reference (screening_results JSONB per registration)
 - [ ] **Manual override logging** — When admin overrides automated decision
-- [ ] **Screening completion timestamp** — When screening was finalized
+- [x] **Screening completion timestamp** — `screening_completed_at` stored per registration
 
 ### 2.5 Database
 - [x] `screening_rules` table — Configurable eligibility rules
@@ -109,6 +113,7 @@
 ## 3. APPLICANT COMMUNICATIONS
 
 ### 3.1 Email Templates
+- [x] **Automated status emails** — Eligible, ineligible, under review, accepted, rejected, waitlisted (via Resend, only sent on status change)
 - [ ] **Template editor** — Rich text editor for email templates with placeholders
 - [ ] **Template library** — Save/reuse templates (acceptance, waitlist, rejection, reminder)
 - [ ] **Dynamic placeholders** — {applicant_name}, {startup_name}, {campus}, {competition_name}, {deadline}, etc.
@@ -123,7 +128,7 @@
 ### 3.3 Attendance Confirmation
 - [ ] **RSVP collection** — Accepted applicants confirm/decline attendance
 - [ ] **RSVP deadline** — Configurable deadline for confirmation
-- [ ] **Waitlist promotion** — Auto-advance waitlisted when accepted declines
+- [x] **Waitlist promotion** — Auto-advance waitlisted when accepted leaves/cancels (same-campus FCFS backfill)
 - [ ] **RSVP dashboard** — Confirmed vs. pending vs. declined counts
 
 ### 3.4 Database
@@ -136,52 +141,52 @@
 ## 4. POST-BOOTCAMP FINALIST SELECTION (150 → 15)
 
 ### 4.1 Configurable Scorecard
-- [ ] **Custom criteria** — Configurable scoring criteria per competition phase
-- [ ] **Flexible scale** — Support 0-3, 0-5, 0-10 scales per criteria
-- [ ] **Criteria descriptions** — Help text for each criteria to guide reviewers
+- [x] **Custom criteria** — Configurable scoring criteria per competition phase (JSONB array on competition_phases)
+- [x] **Flexible scale** — Support 0-3, 0-5, 0-10 scales per criteria (scoring_scale_max 1-100)
+- [x] **Criteria descriptions** — Help text for each criteria to guide reviewers
 - [ ] **KFED Bootcamp Scorecard:**
   - [ ] Problem-Solution Fit (0–3)
   - [ ] Execution Readiness (0–3)
   - [ ] Traction & Validation (0–3)
 
 ### 4.2 Reviewer Assignments
-- [ ] **Assignment matrix** — Map specific reviewers to specific applications/startups
-- [ ] **3 reviewers per startup** — Configurable reviewer count
-- [ ] **Blind review** — Reviewers cannot see each other's scores until all submitted
+- [x] **Assignment matrix** — Map specific reviewers to specific applications/startups (reviewer_assignments table)
+- [x] **3 reviewers per startup** — Configurable reviewer count per phase
+- [x] **Blind review** — Reviewers see only own scores (enforced at API level + RLS)
 - [ ] **Conflict of interest** — Flag/prevent reviewer from scoring own startup or declared conflicts
-- [ ] **Load balancing** — Distribute reviews evenly across available reviewers
-- [ ] **Auto-assignment** — Algorithm to assign reviewers respecting constraints
+- [x] **Load balancing** — Round-robin auto-assignment distributes evenly across reviewers
+- [x] **Auto-assignment** — Algorithm to assign reviewers with campus filtering and load balancing
 
 ### 4.3 Binary Recommendation
-- [ ] **Recommend / Do Not Recommend toggle** — Per reviewer, per startup
-- [ ] **Mandatory before submission** — Cannot submit score without recommendation
+- [x] **Recommend / Do Not Recommend toggle** — Per reviewer, per registration (recommendation field on phase_scores)
+- [x] **Mandatory before submission** — API enforces recommendation when phase.require_recommendation = true
 
 ### 4.4 Decision Logic
-- [ ] **Majority rule engine:**
-  - [ ] 3/3 Recommend → Advances
-  - [ ] 2/3 Recommend → Advances
-  - [ ] 1/3 Recommend → Does not advance (unless borderline triggers calibration)
-  - [ ] 0/3 Recommend → Does not advance
-- [ ] **Borderline detection** — Flag applications near the cutoff for calibration review
-- [ ] **Calibration mode** — Admin can review and override borderline decisions
+- [x] **Majority rule engine:**
+  - [x] 3/3 Recommend → Advances
+  - [x] 2/3 Recommend → Advances
+  - [x] 1/3 Recommend → Borderline (triggers calibration review)
+  - [x] 0/3 Recommend → Does not advance
+- [x] **Borderline detection** — 1/N recommendations flagged as borderline for calibration
+- [x] **Calibration mode** — Admin can review and override decisions (is_override flag)
 - [ ] **Finalist quota enforcement** — 15 total (configurable per campus)
 
 ### 4.5 Parallel Scoring Support
-- [ ] **Campus-based sessions** — Independent scoring per campus (AD, AA, DHA)
+- [x] **Campus-based sessions** — Independent phases per campus with campus_filter
 - [ ] **Pitch room management** — Multiple parallel rooms with separate jury panels
-- [ ] **Real-time aggregation** — Live score updates per campus
+- [x] **Real-time aggregation** — Live score/assignment/decision counts per phase
 
 ### 4.6 Reviewer Dashboard
-- [ ] **Progress tracker** — Scored / remaining / flagged counts
+- [x] **Progress tracker** — Score count vs assignment count per phase (organizer view)
 - [ ] **Quick-score interface** — Optimized for rapid scoring during live pitches (2-4 min per scorecard)
 - [ ] **Score history** — View and edit own submitted scores
-- [ ] **Flagged submissions** — Mark for calibration review
+- [x] **Flagged submissions** — Mark for calibration review (flagged field on phase_scores)
 
 ### 4.7 Database
-- [ ] `competition_phases` table — Phase definitions with scoring config
-- [ ] `reviewer_assignments` table — Judge-to-application mapping
-- [ ] `phase_scores` table — Scores per phase with recommendation field
-- [ ] `phase_decisions` table — Advancement decisions with rationale
+- [x] `competition_phases` table — Phase definitions with scoring config, campus filter, reviewer count, blind review
+- [x] `reviewer_assignments` table — Judge-to-application mapping with phase scope
+- [x] `phase_scores` table — Scores per phase with recommendation field, criteria_scores JSONB
+- [x] `phase_decisions` table — Advancement decisions with rationale, override tracking
 
 ---
 
@@ -193,12 +198,12 @@
   - [ ] Market Potential & Scalability (25%)
   - [ ] Team Assessment (25%)
   - [ ] Technical Feasibility & Execution (20%)
-- [ ] **Configurable weights** — Admin can adjust weights per competition
+- [x] **Configurable weights** — Admin can adjust weights per phase (is_weighted + weight field on criteria)
 
 ### 5.2 Multi-Phase Jury Management
-- [ ] **Separate jury panels** — Different judges for bootcamp vs. final
-- [ ] **Jury invitation per phase** — Invite judges to specific competition phase
-- [ ] **Phase-gated access** — Judges only see their assigned phase
+- [x] **Separate jury panels** — Different phase_reviewers per phase
+- [x] **Jury invitation per phase** — Invite judges to specific competition phase (phase_reviewers table)
+- [x] **Phase-gated access** — RLS policies restrict reviewers to assigned phases only
 
 ### 5.3 Award-Specific Scoring
 - [ ] **Innovation award tracks:**
@@ -257,14 +262,18 @@
 
 ### 7.1 Data & Security
 - [ ] **UAE data hosting** — Supabase project in Bahrain region (closest)
+- [x] **Dashboard access control** — Client-side ownership guard (organizer_id check) + server-side API auth on all endpoints
+- [x] **UUID validation** — All API route handlers validate path params with `UUID_RE.test()` before any DB query
+- [x] **Input validation** — Deep validation of scoring criteria, boolean fields, numeric ranges on all phase/score endpoints
 - [ ] **Read-only role** — Viewer access for stakeholders (no edit permissions)
 - [ ] **Fine-grained RBAC** — competition_admin, reviewer, read_only roles
-- [ ] **Audit trail coverage** — All screening, scoring, and override decisions logged
+- [x] **Audit trail coverage** — Screening results, timestamps, eligibility decisions stored per registration
 - [ ] **GDPR/UAE compliance** — Consent collection, data retention policy, export self-service
 
 ### 7.2 API & Integration
-- [ ] **Webhook events** — application.submitted, application.status_changed, screening.completed, score.submitted, winner.announced
-- [ ] **API endpoints** — CRUD for applications, screening results, scores, winners
+- [x] **Webhook events** — hackathon.participant.status_changed (via webhook delivery system)
+- [x] **API endpoints** — CRUD for applications, screening rules, quotas, screening execution, participants
+- [x] **Dual auth** — Session cookies OR API key with scope-based access
 - [ ] **M365 integration readiness** — API-first design for potential M365 backend integration
 
 ---
@@ -273,7 +282,7 @@
 
 | Milestone | Target Date | Status |
 |---|---|---|
-| Platform configured & UAT-complete | April 1, 2026 | ⬜ Not Started |
+| Platform configured & UAT-complete | April 1, 2026 | 🟡 In Progress |
 | Applications open | April 6, 2026 | ⬜ Not Started |
 | Applications close | June 5, 2026 | ⬜ Not Started |
 | Eligibility screening complete | June 26, 2026 | ⬜ Not Started |
@@ -296,11 +305,18 @@
 6. ⬜ File upload to Supabase Storage (UI exists, needs storage integration)
 
 ### Phase 2: Screening & Selection
-7. ✅ Rule engine + automated eligibility checks (configurable rules, 14 operators, hard/soft types)
+7. ✅ Rule engine + automated eligibility checks (configurable rules, 14 operators, rejection-condition paradigm, hard/soft types)
 8. ✅ Duplicate detection system (email, phone, LinkedIn, startup name fuzzy matching)
-9. ✅ Quota enforcement + campus quotas API (overflow ranking needs UI)
-10. ✅ Screening dashboard (summary cards, campus distribution, flag counts, run screening button)
-11. ✅ Screening audit trail (all screening runs logged via audit system)
+9. ✅ Quota enforcement + campus quotas (3-state: applicable/soft-flag/not-applicable, fill tracking, smart form disabling)
+10. ✅ Screening dashboard (stat cards with screened %, inline failure badges, detailed breakdown in expanded view)
+11. ✅ Screening audit trail (per-registration screening_results, screening_completed_at, eligibility_passed)
+12. ✅ Run Screening (new apps only) + Force Re-screen (re-screen all, emails only on status change)
+13. ✅ Screening results visible in applications tab (hard fails red, soft flags yellow, "Screened" badge)
+14. ✅ FCFS campus quota enforcement during screening (accepted/waitlisted statuses)
+15. ✅ Quota enforcement toggle (registration vs screening mode)
+16. ✅ Publish Results with confirmation dialog (disabled until all screened)
+17. ✅ Cancel Registration / Leave Hackathon with automatic waitlist backfill
+18. ✅ Comprehensive security audit (UUID validation, RLS granular policies, input validation, race condition fixes)
 
 ### Phase 3: Communications
 12. ⬜ Email template editor + library
@@ -309,17 +325,17 @@
 15. ⬜ Email scheduling
 
 ### Phase 4: Bootcamp Judging
-16. ⬜ Configurable scorecard (0-3 scale)
-17. ⬜ Reviewer assignment system
-18. ⬜ Blind review mode
-19. ⬜ Recommend / Do Not Recommend toggle
-20. ⬜ Majority-rule decision logic
-21. ⬜ Parallel campus scoring
-22. ⬜ Reviewer dashboard
+16. ✅ Configurable scorecard (flexible 0-N scale, per-phase criteria with descriptions)
+17. ✅ Reviewer assignment system (auto-assign with round-robin load balancing)
+18. ✅ Blind review mode (API + RLS enforced)
+19. ✅ Recommend / Do Not Recommend toggle (mandatory when configured)
+20. ✅ Majority-rule decision logic (advance/borderline/do_not_advance + override)
+21. ✅ Parallel campus scoring (campus_filter per phase)
+22. ⬜ Reviewer quick-score interface (judge-facing scoring UI)
 
 ### Phase 5: Final Scoring & Winners
-23. ⬜ Weighted final scorecard
-24. ⬜ Multi-phase jury management
+23. ✅ Weighted final scorecard (is_weighted + weight % per criteria)
+24. ✅ Multi-phase jury management (phase_reviewers + phase-gated RLS)
 25. ⬜ Award-specific scoring tracks
 26. ⬜ Winner selection + calibration workflow
 

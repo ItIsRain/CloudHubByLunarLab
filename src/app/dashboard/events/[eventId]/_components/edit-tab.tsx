@@ -1,31 +1,18 @@
 "use client";
 
 import * as React from "react";
-import DOMPurify from "dompurify";
 import { motion } from "framer-motion";
-import {
-  Save,
-  Bold,
-  Italic,
-  Underline,
-  List,
-  ListOrdered,
-  Heading2,
-  Undo2,
-  Redo2,
-  Link2,
-  Strikethrough,
-} from "lucide-react";
+import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TagSelector } from "@/components/forms/tag-selector";
 import { DateTimePicker } from "@/components/forms/date-time-picker";
 import { LocationPicker } from "@/components/forms/location-picker";
+import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import type { Event, EventType } from "@/lib/types";
 import { useUpdateEvent } from "@/hooks/use-events";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 interface EditTabProps {
   event: Event;
@@ -49,122 +36,6 @@ const eventCategories = [
 
 const selectClasses =
   "flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50";
-
-// ── Rich Text Editor ────────────────────────────────────────────────
-
-interface RichTextEditorProps {
-  value: string;
-  onChange: (html: string) => void;
-  placeholder?: string;
-  minHeight?: string;
-}
-
-function RichTextEditor({
-  value,
-  onChange,
-  placeholder = "Start typing...",
-  minHeight = "160px",
-}: RichTextEditorProps) {
-  const editorRef = React.useRef<HTMLDivElement>(null);
-  const isInternalUpdate = React.useRef(false);
-
-  React.useEffect(() => {
-    if (isInternalUpdate.current) {
-      isInternalUpdate.current = false;
-      return;
-    }
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = DOMPurify.sanitize(value);
-    }
-  }, [value]);
-
-  const handleInput = () => {
-    if (editorRef.current) {
-      isInternalUpdate.current = true;
-      onChange(editorRef.current.innerHTML);
-    }
-  };
-
-  const exec = (command: string, val?: string) => {
-    editorRef.current?.focus();
-    document.execCommand(command, false, val);
-    handleInput();
-  };
-
-  const toolbarButtons = [
-    { icon: Bold, command: "bold", label: "Bold" },
-    { icon: Italic, command: "italic", label: "Italic" },
-    { icon: Underline, command: "underline", label: "Underline" },
-    { icon: Strikethrough, command: "strikeThrough", label: "Strikethrough" },
-    { divider: true },
-    { icon: Heading2, command: "formatBlock", value: "H3", label: "Heading" },
-    { icon: List, command: "insertUnorderedList", label: "Bullet list" },
-    { icon: ListOrdered, command: "insertOrderedList", label: "Numbered list" },
-    { divider: true },
-    { icon: Link2, command: "createLink", label: "Link", prompt: true },
-    { divider: true },
-    { icon: Undo2, command: "undo", label: "Undo" },
-    { icon: Redo2, command: "redo", label: "Redo" },
-  ] as const;
-
-  return (
-    <div className="rounded-xl border border-input overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:border-primary transition-all duration-200">
-      <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b bg-muted/30">
-        {toolbarButtons.map((btn, i) => {
-          if ("divider" in btn && btn.divider) {
-            return (
-              <div key={`div-${i}`} className="w-px h-5 bg-border mx-1" />
-            );
-          }
-
-          const b = btn as {
-            icon: React.ComponentType<{ className?: string }>;
-            command: string;
-            value?: string;
-            label: string;
-            prompt?: boolean;
-          };
-
-          return (
-            <button
-              key={b.command + (b.value || "")}
-              type="button"
-              title={b.label}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                if (b.prompt) {
-                  const url = window.prompt("Enter URL:");
-                  if (url && /^https?:\/\/.+/i.test(url)) exec(b.command, url);
-                } else {
-                  exec(b.command, b.value);
-                }
-              }}
-              className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            >
-              <b.icon className="h-3.5 w-3.5" />
-            </button>
-          );
-        })}
-      </div>
-
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={handleInput}
-        data-placeholder={placeholder}
-        className={cn(
-          "px-4 py-3 text-sm outline-none",
-          "prose prose-sm dark:prose-invert max-w-none",
-          "[&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:my-1",
-          "[&_p:empty]:hidden",
-          "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground empty:before:pointer-events-none"
-        )}
-        style={{ minHeight }}
-      />
-    </div>
-  );
-}
 
 // ── Main EditTab ────────────────────────────────────────────────────
 

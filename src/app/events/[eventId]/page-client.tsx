@@ -160,7 +160,7 @@ export default function EventDetailPage() {
         >
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
             <div className="text-white">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
                 <Badge variant="secondary" className="bg-white/20 text-white border-none">
                   {event.category}
                 </Badge>

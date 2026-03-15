@@ -3,6 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canRegister, getPhaseMessage } from "@/lib/hackathon-phases";
 import { fireWebhooks } from "@/lib/webhook-delivery";
+import { sendApplicationAcceptedEmail } from "@/lib/resend";
 
 export async function GET(
   _request: NextRequest,
@@ -109,17 +110,52 @@ export async function POST(
 
     // Determine initial status: if hackathon has registration fields (application form),
     // new registrations start as "pending" for organizer review. Otherwise auto-confirm.
+    // If the applicant selected a quota option that is already full, auto-waitlist them.
     const { data: hackathonInfo } = await supabase
       .from("hackathons")
-      .select("registration_fields")
+      .select("registration_fields, screening_config")
       .eq("id", hackathonId)
       .single();
 
     const hasFormFields = Array.isArray(hackathonInfo?.registration_fields) &&
       hackathonInfo.registration_fields.length > 0;
-    const initialStatus = hasFormFields && Object.keys(formData).length > 0
+    let initialStatus = hasFormFields && Object.keys(formData).length > 0
       ? "pending"
       : "confirmed";
+
+    // Check if applicant selected a full quota option → auto-waitlist
+    const screeningConfig = (hackathonInfo?.screening_config as Record<string, unknown>) || {};
+    const quotaFieldId = screeningConfig.quotaFieldId as string | undefined;
+    const quotaEntries = (screeningConfig.quotas as { campus: string; quota: number; rejected?: boolean }[]) || [];
+
+    if (quotaFieldId && Object.keys(formData).length > 0) {
+      const selectedValue = String(formData[quotaFieldId] || "");
+      if (selectedValue) {
+        const quotaEntry = quotaEntries.find((q) => q.campus === selectedValue);
+        if (quotaEntry && !quotaEntry.rejected) {
+          // Count current fills for this option (exclude cancelled/rejected/ineligible/declined/withdrawn)
+          const { data: existingRegs } = await supabase
+            .from("hackathon_registrations")
+            .select("form_data")
+            .eq("hackathon_id", hackathonId)
+            .not("status", "in", '("cancelled","rejected","ineligible","declined","withdrawn")');
+
+          let fillCount = 0;
+          if (existingRegs) {
+            for (const reg of existingRegs) {
+              const regForm = reg.form_data as Record<string, unknown> | null;
+              if (regForm && String(regForm[quotaFieldId] || "") === selectedValue) {
+                fillCount++;
+              }
+            }
+          }
+
+          if (fillCount >= quotaEntry.quota) {
+            initialStatus = "waitlisted";
+          }
+        }
+      }
+    }
 
     let data;
     let error;
@@ -184,7 +220,7 @@ export async function POST(
       .from("hackathon_registrations")
       .select("id", { count: "exact", head: true })
       .eq("hackathon_id", hackathonId)
-      .in("status", ["confirmed", "approved"]);
+      .in("status", ["confirmed", "approved", "accepted"]);
 
     if (participantCount !== null) {
       await supabase
@@ -220,38 +256,123 @@ export async function DELETE(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Soft-delete: mark as cancelled (consistent with event registration pattern)
+    // Fetch current registration to check status before cancelling
+    const { data: currentReg } = await supabase
+      .from("hackathon_registrations")
+      .select("id, status, form_data")
+      .eq("hackathon_id", hackathonId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!currentReg) {
+      return NextResponse.json({ error: "No registration found" }, { status: 404 });
+    }
+
+    if (currentReg.status === "cancelled") {
+      return NextResponse.json({ error: "Registration already cancelled" }, { status: 409 });
+    }
+
+    const wasAccepted = currentReg.status === "accepted" || currentReg.status === "approved";
+
+    // Soft-delete: mark as cancelled
     const { error } = await supabase
       .from("hackathon_registrations")
       .update({ status: "cancelled" })
-      .eq("hackathon_id", hackathonId)
-      .eq("user_id", user.id);
+      .eq("id", currentReg.id);
 
     if (error) {
       return NextResponse.json({ error: "Failed to cancel registration" }, { status: 400 });
     }
 
-    // Fire webhook for the hackathon organizer
-    const { data: hackCancelOrg } = await supabase
+    // Fetch hackathon info for webhooks, name, and screening config
+    const { data: hackInfo } = await supabase
       .from("hackathons")
-      .select("organizer_id, name")
+      .select("organizer_id, name, screening_config")
       .eq("id", hackathonId)
       .single();
 
-    if (hackCancelOrg?.organizer_id) {
-      fireWebhooks(hackCancelOrg.organizer_id, "hackathon.registration.cancelled", {
+    if (hackInfo?.organizer_id) {
+      fireWebhooks(hackInfo.organizer_id, "hackathon.registration.cancelled", {
         hackathonId,
-        hackathonName: hackCancelOrg.name,
+        hackathonName: hackInfo.name,
         userId: user.id,
       });
     }
 
-    // Update participant_count
+    // Automatic waitlist backfill: if the departing user was accepted,
+    // promote the next waitlisted person from the same campus (FCFS by created_at)
+    let promotedUser: { id: string; email: string; name: string } | null = null;
+
+    if (wasAccepted && hackInfo) {
+      const screeningConfig = (hackInfo.screening_config as Record<string, unknown>) || {};
+      const quotaFieldId = screeningConfig.quotaFieldId as string | undefined;
+      const leavingFormData = (currentReg.form_data as Record<string, unknown>) || {};
+      const leavingCampus = quotaFieldId ? String(leavingFormData[quotaFieldId] || "") : "";
+
+      // Find waitlisted registrations for this hackathon, ordered by created_at (FCFS)
+      const { data: waitlisted } = await supabase
+        .from("hackathon_registrations")
+        .select("id, user_id, form_data, created_at")
+        .eq("hackathon_id", hackathonId)
+        .eq("status", "waitlisted")
+        .order("created_at", { ascending: true });
+
+      if (waitlisted && waitlisted.length > 0) {
+        // Find the first waitlisted person from the same campus (or first overall if no quota field)
+        const nextInLine = leavingCampus && quotaFieldId
+          ? waitlisted.find((w) => {
+              const wForm = (w.form_data as Record<string, unknown>) || {};
+              return String(wForm[quotaFieldId] || "") === leavingCampus;
+            })
+          : waitlisted[0];
+
+        if (nextInLine) {
+          // Promote to accepted
+          const { error: promoteError } = await supabase
+            .from("hackathon_registrations")
+            .update({ status: "accepted" })
+            .eq("id", nextInLine.id);
+
+          if (!promoteError) {
+            // Fetch promoted user's profile for email
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("email, full_name, display_name")
+              .eq("id", nextInLine.user_id)
+              .single();
+
+            if (profile?.email) {
+              const displayName = profile.display_name || profile.full_name || "Participant";
+              promotedUser = { id: nextInLine.user_id, email: profile.email, name: displayName };
+
+              // Send acceptance email (fire-and-forget)
+              sendApplicationAcceptedEmail({
+                to: profile.email,
+                applicantName: displayName,
+                hackathonName: hackInfo.name,
+                hackathonId,
+              }).catch(() => { /* non-critical */ });
+
+              // Create in-app notification for the promoted user
+              await supabase.from("notifications").insert({
+                user_id: nextInLine.user_id,
+                type: "hackathon_update",
+                title: `You've been accepted to ${hackInfo.name}!`,
+                message: "A spot opened up and you've been moved from the waitlist. You're now an accepted participant!",
+                link: `/hackathons/${hackathonId}`,
+              }).then(() => {}, () => {});
+            }
+          }
+        }
+      }
+    }
+
+    // Update participant_count (include accepted status)
     const { count: participantCount } = await supabase
       .from("hackathon_registrations")
       .select("id", { count: "exact", head: true })
       .eq("hackathon_id", hackathonId)
-      .in("status", ["confirmed", "approved"]);
+      .in("status", ["confirmed", "approved", "accepted"]);
 
     if (participantCount !== null) {
       await supabase
@@ -260,7 +381,10 @@ export async function DELETE(
         .eq("id", hackathonId);
     }
 
-    return NextResponse.json({ message: "Registration cancelled" });
+    return NextResponse.json({
+      message: "Registration cancelled",
+      backfill: promotedUser ? { userId: promotedUser.id, name: promotedUser.name } : null,
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json(

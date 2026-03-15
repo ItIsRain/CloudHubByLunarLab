@@ -1,7 +1,13 @@
 /**
  * Screening Engine
  * Evaluates application data against configurable screening rules.
- * Supports hard rules (pass/fail) and soft rules (flags/warnings).
+ *
+ * Rules define REJECTION / FLAG conditions (not pass conditions).
+ * - Hard rule: "Reject when [field] [operator] [value]"
+ * - Soft rule: "Flag when [field] [operator] [value]"
+ *
+ * If the operator condition matches, the rule is TRIGGERED and the
+ * applicant fails that rule.
  */
 
 import type { ScreeningRule, ScreeningOperator, FormField } from "@/lib/types";
@@ -37,10 +43,12 @@ export function evaluateRule(
   };
 
   try {
-    result.passed = evaluateOperator(rule.operator, fieldValue, rule.value);
+    // Rules define rejection conditions: operator match = TRIGGERED = applicant fails
+    const triggered = evaluateOperator(rule.operator, fieldValue, rule.value);
+    result.passed = !triggered;
     result.reason = result.passed
       ? `${fieldLabel}: passed "${rule.name}"`
-      : `${fieldLabel}: failed "${rule.name}" — expected ${describeExpectation(rule.operator, rule.value)}, got "${String(fieldValue ?? "(empty)")}"`;
+      : `${fieldLabel}: failed "${rule.name}" — value "${String(fieldValue ?? "(empty)")}" ${describeCondition(rule.operator, rule.value)}`;
   } catch {
     result.passed = false;
     result.reason = `Error evaluating rule "${rule.name}" on field "${fieldLabel}"`;
@@ -222,7 +230,7 @@ function evaluateOperator(
     case "equals":
       return String(actual).toLowerCase().trim() === String(expected).toLowerCase().trim();
     case "not_equals":
-      return String(actual).toLowerCase().trim() !== String(expected).toLowerCase().trim();
+      return String(actual ?? "").toLowerCase().trim() !== String(expected).toLowerCase().trim();
     case "contains":
       return String(actual).toLowerCase().includes(String(expected).toLowerCase());
     case "not_contains":
@@ -264,22 +272,23 @@ function evaluateOperator(
   }
 }
 
-function describeExpectation(operator: ScreeningOperator, value: unknown): string {
+/** Describes the rejection condition that was triggered (human-readable). */
+function describeCondition(operator: ScreeningOperator, value: unknown): string {
   switch (operator) {
-    case "equals": return `"${value}"`;
-    case "not_equals": return `not "${value}"`;
-    case "contains": return `containing "${value}"`;
-    case "not_contains": return `not containing "${value}"`;
-    case "greater_than": return `> ${value}`;
-    case "less_than": return `< ${value}`;
-    case "greater_equal": return `>= ${value}`;
-    case "less_equal": return `<= ${value}`;
-    case "in": return `one of [${Array.isArray(value) ? value.join(", ") : value}]`;
-    case "not_in": return `not one of [${Array.isArray(value) ? value.join(", ") : value}]`;
-    case "is_empty": return "empty";
-    case "is_not_empty": return "not empty";
-    case "is_true": return "true/yes";
-    case "is_false": return "false/no";
+    case "equals": return `equals "${value}"`;
+    case "not_equals": return `does not equal "${value}"`;
+    case "contains": return `contains "${value}"`;
+    case "not_contains": return `does not contain "${value}"`;
+    case "greater_than": return `is greater than ${value}`;
+    case "less_than": return `is less than ${value}`;
+    case "greater_equal": return `is >= ${value}`;
+    case "less_equal": return `is <= ${value}`;
+    case "in": return `is one of [${Array.isArray(value) ? value.join(", ") : value}]`;
+    case "not_in": return `is not one of [${Array.isArray(value) ? value.join(", ") : value}]`;
+    case "is_empty": return "is empty";
+    case "is_not_empty": return "is not empty";
+    case "is_true": return "is true/yes";
+    case "is_false": return "is false/no";
     default: return String(value);
   }
 }

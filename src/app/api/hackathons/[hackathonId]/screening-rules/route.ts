@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { UUID_RE } from "@/lib/constants";
 import type { ScreeningRule } from "@/lib/types";
 
 export async function GET(
@@ -10,6 +11,10 @@ export async function GET(
 ) {
   try {
     const { hackathonId } = await params;
+
+    if (!UUID_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -45,11 +50,37 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const config = (hackathon.screening_config as Record<string, unknown>) || {};
+    const quotaFieldId = config.quotaFieldId as string | undefined;
+    let quotaCounts: Record<string, number> = {};
+
+    // If quotas are linked to a field, count registrations per field value
+    if (quotaFieldId) {
+      const { data: registrations } = await supabase
+        .from("hackathon_registrations")
+        .select("form_data")
+        .eq("hackathon_id", hackathonId)
+        .not("status", "in", '("cancelled","rejected","ineligible","declined","withdrawn")');
+
+      if (registrations) {
+        for (const reg of registrations) {
+          const formData = reg.form_data as Record<string, unknown> | null;
+          if (formData) {
+            const fieldValue = String(formData[quotaFieldId] || "");
+            if (fieldValue) {
+              quotaCounts[fieldValue] = (quotaCounts[fieldValue] || 0) + 1;
+            }
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       data: {
         rules: (hackathon.screening_rules as ScreeningRule[]) || [],
-        config: (hackathon.screening_config as Record<string, unknown>) || {},
+        config,
         fields: (hackathon.registration_fields as Record<string, unknown>[]) || [],
+        quotaCounts,
       },
     });
   } catch (err) {
@@ -67,6 +98,10 @@ export async function POST(
 ) {
   try {
     const { hackathonId } = await params;
+
+    if (!UUID_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -144,6 +179,10 @@ export async function PATCH(
   try {
     const { hackathonId } = await params;
 
+    if (!UUID_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
+
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
 
@@ -182,6 +221,9 @@ export async function PATCH(
       config: {
         quotas?: { campus: string; quota: number }[];
         detectDuplicates?: boolean;
+        quotaEnforcement?: string;
+        quotaFieldId?: string;
+        [key: string]: unknown;
       };
     };
 

@@ -919,3 +919,108 @@ export function dbRowToReport(
     updatedAt: row.updated_at as string,
   };
 }
+
+// ── Competition Phase Mappers ─────────────────────────────
+
+import type {
+  CompetitionPhase,
+  PhaseReviewer,
+  PhaseScore,
+  PhaseDecision,
+  PhaseScoringCriteria,
+  PhaseType,
+  PhaseStatus,
+  PhaseReviewerStatus,
+  PhaseRecommendation,
+  PhaseDecisionType,
+} from "@/lib/types";
+
+export function dbRowToCompetitionPhase(row: Record<string, unknown>): CompetitionPhase {
+  return {
+    id: row.id as string,
+    hackathonId: row.hackathon_id as string,
+    name: row.name as string,
+    description: (row.description as string) || undefined,
+    phaseType: (row.phase_type as PhaseType) || "bootcamp",
+    campusFilter: (row.campus_filter as string) || null,
+    scoringCriteria: (row.scoring_criteria as PhaseScoringCriteria[]) || [],
+    scoringScaleMax: (row.scoring_scale_max as number) || 3,
+    requireRecommendation: row.require_recommendation !== false,
+    reviewerCount: (row.reviewer_count as number) || 3,
+    isWeighted: !!row.is_weighted,
+    blindReview: row.blind_review !== false,
+    startDate: (row.start_date as string) || null,
+    endDate: (row.end_date as string) || null,
+    location: (row.location as string) || null,
+    sortOrder: (row.sort_order as number) || 0,
+    status: (row.status as PhaseStatus) || "draft",
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export function dbRowToPhaseReviewer(row: Record<string, unknown>): PhaseReviewer {
+  return {
+    id: row.id as string,
+    phaseId: row.phase_id as string,
+    userId: row.user_id as string,
+    name: row.name as string,
+    email: row.email as string,
+    status: (row.status as PhaseReviewerStatus) || "invited",
+    invitedAt: row.invited_at as string,
+    acceptedAt: (row.accepted_at as string) || null,
+  };
+}
+
+export function dbRowToPhaseScore(row: Record<string, unknown>): PhaseScore {
+  return {
+    id: row.id as string,
+    phaseId: row.phase_id as string,
+    reviewerId: row.reviewer_id as string,
+    registrationId: row.registration_id as string,
+    criteriaScores: (row.criteria_scores as PhaseScore["criteriaScores"]) || [],
+    totalScore: Number(row.total_score) || 0,
+    recommendation: (row.recommendation as PhaseRecommendation) || null,
+    overallFeedback: (row.overall_feedback as string) || null,
+    flagged: !!row.flagged,
+    submittedAt: row.submitted_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export function dbRowToPhaseDecision(row: Record<string, unknown>): PhaseDecision {
+  return {
+    id: row.id as string,
+    phaseId: row.phase_id as string,
+    registrationId: row.registration_id as string,
+    decision: row.decision as PhaseDecisionType,
+    recommendationCount: (row.recommendation_count as number) || 0,
+    totalReviewers: (row.total_reviewers as number) || 0,
+    averageScore: row.average_score != null ? Number(row.average_score) : null,
+    decidedBy: (row.decided_by as string) || null,
+    rationale: (row.rationale as string) || null,
+    isOverride: !!row.is_override,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export function phaseFormToDbRow(phase: Partial<CompetitionPhase>): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  if (phase.name !== undefined) row.name = phase.name;
+  if (phase.description !== undefined) row.description = phase.description;
+  if (phase.phaseType !== undefined) row.phase_type = phase.phaseType;
+  if (phase.campusFilter !== undefined) row.campus_filter = phase.campusFilter;
+  if (phase.scoringCriteria !== undefined) row.scoring_criteria = phase.scoringCriteria;
+  if (phase.scoringScaleMax !== undefined) row.scoring_scale_max = phase.scoringScaleMax;
+  if (phase.requireRecommendation !== undefined) row.require_recommendation = phase.requireRecommendation;
+  if (phase.reviewerCount !== undefined) row.reviewer_count = phase.reviewerCount;
+  if (phase.isWeighted !== undefined) row.is_weighted = phase.isWeighted;
+  if (phase.blindReview !== undefined) row.blind_review = phase.blindReview;
+  if (phase.startDate !== undefined) row.start_date = phase.startDate;
+  if (phase.endDate !== undefined) row.end_date = phase.endDate;
+  if (phase.location !== undefined) row.location = phase.location;
+  if (phase.sortOrder !== undefined) row.sort_order = phase.sortOrder;
+  if (phase.status !== undefined) row.status = phase.status;
+  return row;
+}

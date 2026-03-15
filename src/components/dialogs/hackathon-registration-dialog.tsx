@@ -17,9 +17,41 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { FormField, FormSection } from "@/lib/types";
 
+/** Convert raw MIME types to human-readable labels */
+const MIME_LABELS: Record<string, string> = {
+  "application/pdf": "PDF",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+  "application/msword": "DOC",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
+  "application/vnd.ms-powerpoint": "PPT",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+  "application/vnd.ms-excel": "XLS",
+  "image/*": "Images",
+  "video/*": "Videos",
+  "audio/*": "Audio",
+  "text/plain": "TXT",
+  "text/csv": "CSV",
+};
+
+function formatFileTypes(types: string[]): string {
+  return types.map((t) => MIME_LABELS[t] || t.replace("application/", "")).join(", ");
+}
+
+interface QuotaStatus {
+  quotaFieldId: string | null;
+  quotas: Record<string, number>;
+  fills: Record<string, number>;
+  rejected: Record<string, boolean>;
+  rejectionMessages: Record<string, string>;
+  softFlagged: Record<string, boolean>;
+  softFlagMessages: Record<string, string>;
+  quotaEnforcement?: string;
+}
+
 interface HackathonRegistrationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  hackathonId: string;
   hackathonName: string;
   registrationFields: FormField[];
   registrationSections?: FormSection[];
@@ -30,6 +62,7 @@ interface HackathonRegistrationDialogProps {
 export function HackathonRegistrationDialog({
   open,
   onOpenChange,
+  hackathonId,
   hackathonName,
   registrationFields,
   registrationSections,
@@ -39,6 +72,17 @@ export function HackathonRegistrationDialog({
   const [formData, setFormData] = React.useState<Record<string, unknown>>({});
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = React.useState(0);
+  const [quotaStatus, setQuotaStatus] = React.useState<QuotaStatus | null>(null);
+
+  // Fetch quota status when dialog opens
+  React.useEffect(() => {
+    if (open && hackathonId) {
+      fetch(`/api/hackathons/${hackathonId}/quota-status`)
+        .then((res) => res.json())
+        .then((data) => setQuotaStatus(data))
+        .catch(() => setQuotaStatus(null));
+    }
+  }, [open, hackathonId]);
 
   // Build a lookup from sectionId → section metadata
   const sectionMeta = React.useMemo(() => {
@@ -247,6 +291,7 @@ export function HackathonRegistrationDialog({
                 value={formData[field.id]}
                 error={errors[field.id]}
                 onChange={(val) => updateField(field.id, val)}
+                quotaStatus={quotaStatus}
               />
             );
           })}
@@ -294,12 +339,16 @@ function RegistrationField({
   value,
   error,
   onChange,
+  quotaStatus,
 }: {
   field: FormField;
   value: unknown;
   error?: string;
   onChange: (value: unknown) => void;
+  quotaStatus: QuotaStatus | null;
 }) {
+  // Check if this field is the quota-linked field
+  const isQuotaField = quotaStatus?.quotaFieldId === field.id;
   const inputClasses =
     "flex w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -382,11 +431,22 @@ function RegistrationField({
           className={cn(inputClasses, "appearance-none", error && "border-destructive")}
         >
           <option value="">{field.placeholder || "Select..."}</option>
-          {(field.options || []).map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
+          {(field.options || []).map((opt) => {
+            const showFills = isQuotaField && quotaStatus?.quotaEnforcement !== "screening";
+            const optRejected = isQuotaField && quotaStatus?.rejected?.[opt.value];
+            const optSoftFlagged = isQuotaField && quotaStatus?.softFlagged?.[opt.value];
+            const optFull = showFills && !optRejected &&
+              quotaStatus &&
+              quotaStatus.quotas[opt.value] !== undefined &&
+              (quotaStatus.fills[opt.value] || 0) >= quotaStatus.quotas[opt.value];
+            const disabled = !!optRejected;
+            const suffix = optRejected ? " (Not applicable)" : optFull ? " (Waitlisted)" : optSoftFlagged ? " (Review required)" : "";
+            return (
+              <option key={opt.value} value={opt.value} disabled={disabled}>
+                {opt.label}{suffix}
+              </option>
+            );
+          })}
         </select>
       )}
 
@@ -426,19 +486,78 @@ function RegistrationField({
       {/* Radio */}
       {field.type === "radio" && (
         <div className="space-y-2">
-          {(field.options || []).map((opt) => (
-            <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name={field.id}
-                value={opt.value}
-                checked={value === opt.value}
-                onChange={(e) => onChange(e.target.value)}
-                className="h-4 w-4 text-primary border-input"
-              />
-              <span className="text-sm">{opt.label}</span>
-            </label>
-          ))}
+          {(field.options || []).map((opt) => {
+            const showFills = isQuotaField && quotaStatus?.quotaEnforcement !== "screening";
+            const optRejected = isQuotaField && quotaStatus?.rejected?.[opt.value];
+            const optSoftFlagged = isQuotaField && quotaStatus?.softFlagged?.[opt.value];
+            const optFull = showFills && !optRejected &&
+              quotaStatus &&
+              quotaStatus.quotas[opt.value] !== undefined &&
+              (quotaStatus.fills[opt.value] || 0) >= quotaStatus.quotas[opt.value];
+            const disabled = !!optRejected;
+            const rejectionMsg = optRejected && quotaStatus?.rejectionMessages?.[opt.value];
+
+            return (
+              <label
+                key={opt.value}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border px-3 py-2.5 transition-all",
+                  disabled
+                    ? "opacity-60 cursor-not-allowed border-border bg-muted/30"
+                    : "cursor-pointer hover:border-primary/30",
+                  value === opt.value && !disabled && "border-primary bg-primary/5",
+                  optFull && !disabled && "border-yellow-300 dark:border-yellow-800",
+                  optSoftFlagged && !disabled && "border-yellow-300 dark:border-yellow-800"
+                )}
+              >
+                <input
+                  type="radio"
+                  name={field.id}
+                  value={opt.value}
+                  checked={value === opt.value}
+                  onChange={(e) => onChange(e.target.value)}
+                  disabled={disabled}
+                  className="h-4 w-4 text-primary border-input"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className={cn("text-sm", disabled && "text-muted-foreground")}>
+                    {opt.label}
+                  </span>
+                  {optRejected && rejectionMsg && (
+                    <p className="text-[11px] text-destructive mt-0.5">{rejectionMsg}</p>
+                  )}
+                  {optFull && value === opt.value && (
+                    <p className="text-[11px] text-yellow-600 dark:text-yellow-400 mt-0.5">
+                      This option is at capacity — you will be placed on the waitlist
+                    </p>
+                  )}
+                </div>
+                {optRejected && (
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">
+                    Not applicable
+                  </Badge>
+                )}
+                {optSoftFlagged && !optRejected && !optFull && (
+                  <Badge variant="warning" className="text-[10px] px-1.5 py-0 shrink-0">
+                    Review required
+                  </Badge>
+                )}
+                {optFull && (
+                  <Badge variant="warning" className="text-[10px] px-1.5 py-0 shrink-0">
+                    Waitlisted
+                  </Badge>
+                )}
+                {showFills && quotaStatus && quotaStatus.quotas[opt.value] !== undefined && !disabled && (
+                  <span className={cn(
+                    "text-[10px] font-mono shrink-0",
+                    optFull ? "text-yellow-600 dark:text-yellow-400" : "text-muted-foreground"
+                  )}>
+                    {quotaStatus.fills[opt.value] || 0}/{quotaStatus.quotas[opt.value]}
+                  </span>
+                )}
+              </label>
+            );
+          })}
         </div>
       )}
 
@@ -510,7 +629,7 @@ function FileUploadField({
     if (field.validation?.allowedFileTypes && field.validation.allowedFileTypes.length > 0) {
       const ext = `.${file.name.split(".").pop()?.toLowerCase()}`;
       if (!field.validation.allowedFileTypes.some((t) => t.toLowerCase() === ext || file.type.includes(t.replace(".", "")))) {
-        toast.error(`File type not allowed. Accepted: ${field.validation.allowedFileTypes.join(", ")}`);
+        toast.error(`File type not allowed. Accepted: ${formatFileTypes(field.validation.allowedFileTypes)}`);
         return;
       }
     }
@@ -651,7 +770,7 @@ function FileUploadField({
               </p>
               {field.validation?.allowedFileTypes && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Accepted: {field.validation.allowedFileTypes.join(", ")}
+                  Accepted: {formatFileTypes(field.validation.allowedFileTypes)}
                 </p>
               )}
               {field.validation?.maxFileSize && (

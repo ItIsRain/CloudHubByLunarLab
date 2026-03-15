@@ -6,7 +6,6 @@ import {
   Shield,
   Plus,
   Trash2,
-  Play,
   Settings,
   AlertTriangle,
   CheckCircle2,
@@ -15,7 +14,6 @@ import {
   ChevronUp,
   Pencil,
   Loader2,
-  Clock,
   BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -88,32 +86,19 @@ const valuelessOperators: ScreeningOperator[] = [
 const selectClasses =
   "flex h-11 rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary appearance-none";
 
-const DEFAULT_CAMPUS_QUOTAS = [
-  { campus: "Abu Dhabi", quota: 75 },
-  { campus: "Al Ain", quota: 50 },
-  { campus: "Al Dhafra", quota: 25 },
-];
-
 // ── Types ────────────────────────────────────────────────
 
 interface RulesResponse {
   data: {
     rules: ScreeningRule[];
     config: {
+      quotaFieldId?: string;
       quotas?: { campus: string; quota: number }[];
       detectDuplicates?: boolean;
+      quotaEnforcement?: string;
     };
     fields: FormField[];
-  };
-}
-
-interface ScreeningResultSummary {
-  data: {
-    screened: number;
-    eligible: number;
-    ineligible: number;
-    flagged: number;
-    lastRunAt: string;
+    quotaCounts: Record<string, number>;
   };
 }
 
@@ -141,8 +126,6 @@ export function ScreeningTab({ hackathon, hackathonId }: ScreeningTabProps) {
   // Collapsible sections
   const [rulesOpen, setRulesOpen] = React.useState(true);
   const [quotasOpen, setQuotasOpen] = React.useState(true);
-  const [dashboardOpen, setDashboardOpen] = React.useState(true);
-
   // ── Data Fetching ──
 
   const { data: rulesData, isLoading: rulesLoading } = useQuery<RulesResponse>({
@@ -155,6 +138,9 @@ export function ScreeningTab({ hackathon, hackathonId }: ScreeningTabProps) {
 
   const rules = rulesData?.data?.rules ?? [];
   const campusQuotas = rulesData?.data?.config?.quotas ?? [];
+  const quotaFieldId = rulesData?.data?.config?.quotaFieldId ?? "";
+  const quotaCounts = rulesData?.data?.quotaCounts ?? {};
+  const quotaEnforcement = rulesData?.data?.config?.quotaEnforcement || "screening";
 
   // Filterable registration fields (exclude heading/paragraph)
   const screenableFields = React.useMemo(
@@ -221,6 +207,10 @@ export function ScreeningTab({ hackathon, hackathonId }: ScreeningTabProps) {
         <CampusQuotasSection
           hackathonId={hackathonId}
           quotas={campusQuotas}
+          quotaFieldId={quotaFieldId}
+          quotaCounts={quotaCounts}
+          registrationFields={hackathon.registrationFields}
+          remoteQuotaEnforcement={quotaEnforcement}
           isLoading={rulesLoading}
           isOpen={quotasOpen}
           onToggle={() => setQuotasOpen((v) => !v)}
@@ -228,19 +218,6 @@ export function ScreeningTab({ hackathon, hackathonId }: ScreeningTabProps) {
         />
       </motion.div>
 
-      {/* Section 3: Screening Dashboard */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
-      >
-        <ScreeningDashboardSection
-          hackathonId={hackathonId}
-          isOpen={dashboardOpen}
-          onToggle={() => setDashboardOpen((v) => !v)}
-          queryClient={queryClient}
-        />
-      </motion.div>
     </div>
   );
 }
@@ -535,6 +512,12 @@ function ScreeningRulesSection({
                                 )}
                               </div>
                               <p className="text-xs text-muted-foreground">
+                                <span className={cn(
+                                  "font-semibold mr-1",
+                                  rule.ruleType === "hard" ? "text-red-600 dark:text-red-400" : "text-yellow-600 dark:text-yellow-400"
+                                )}>
+                                  {rule.ruleType === "hard" ? "Reject" : "Flag"} when
+                                </span>
                                 <span className="font-medium">
                                   {field?.label ?? rule.fieldId}
                                 </span>{" "}
@@ -802,7 +785,7 @@ function ScreeningRulesSection({
                                 )}
                               >
                                 <XCircle className="h-4 w-4" />
-                                Hard (Pass/Fail)
+                                Hard (Auto-Reject)
                               </button>
                               <button
                                 type="button"
@@ -817,10 +800,38 @@ function ScreeningRulesSection({
                                 )}
                               >
                                 <AlertTriangle className="h-4 w-4" />
-                                Soft (Flag Only)
+                                Soft (Flag for Review)
                               </button>
                             </div>
                           </div>
+
+                          {/* Live Preview */}
+                          {form.fieldId && form.operator && (
+                            <div className={cn(
+                              "rounded-lg border px-3 py-2 text-xs",
+                              form.ruleType === "hard"
+                                ? "border-red-200 bg-red-50/50 text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400"
+                                : "border-yellow-200 bg-yellow-50/50 text-yellow-700 dark:border-yellow-900/50 dark:bg-yellow-950/20 dark:text-yellow-400"
+                            )}>
+                              <span className="font-semibold">
+                                {form.ruleType === "hard" ? "Reject" : "Flag"}
+                              </span>
+                              {" applicant when "}
+                              <span className="font-medium">
+                                {fieldMap.get(form.fieldId)?.label ?? form.fieldId}
+                              </span>
+                              {" "}
+                              {operatorLabels[form.operator]}
+                              {form.value && !valuelessOperators.includes(form.operator) && (
+                                <>
+                                  {" "}
+                                  <span className="font-mono bg-white/50 dark:bg-black/20 px-1 rounded">
+                                    {form.value}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          )}
 
                           {/* Actions */}
                           <div className="flex items-center justify-end gap-2 pt-2">
@@ -878,49 +889,103 @@ function ScreeningRulesSection({
 function CampusQuotasSection({
   hackathonId,
   quotas,
+  quotaFieldId: remoteQuotaFieldId,
+  quotaCounts,
+  registrationFields,
+  remoteQuotaEnforcement,
   isLoading,
   isOpen,
   onToggle,
   queryClient,
 }: {
   hackathonId: string;
-  quotas: { campus: string; quota: number }[];
+  quotas: { campus: string; quota: number; rejected?: boolean; rejectionMessage?: string; softFlagged?: boolean; softFlagMessage?: string }[];
+  quotaFieldId: string;
+  quotaCounts: Record<string, number>;
+  registrationFields: FormField[];
+  remoteQuotaEnforcement: string;
   isLoading: boolean;
   isOpen: boolean;
   onToggle: () => void;
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
-  const [newCampus, setNewCampus] = React.useState("");
-  const [newQuota, setNewQuota] = React.useState("");
   const [localQuotas, setLocalQuotas] = React.useState<
-    { campus: string; quota: number }[]
+    { campus: string; quota: number; rejected?: boolean; rejectionMessage?: string; softFlagged?: boolean; softFlagMessage?: string }[]
   >([]);
+  const [selectedFieldId, setSelectedFieldId] = React.useState("");
+  const [editingQuota, setEditingQuota] = React.useState<{ campus: string; value: string } | null>(null);
   const [initialized, setInitialized] = React.useState(false);
+  const [quotaEnforcement, setQuotaEnforcement] = React.useState<"registration" | "screening">("screening");
 
-  // Sync remote quotas into local state
+  // Fields that can be used for quotas (radio or select with options)
+  const quotaFields = React.useMemo(
+    () =>
+      registrationFields.filter(
+        (f) =>
+          (f.type === "radio" || f.type === "select") &&
+          f.options &&
+          f.options.length > 0
+      ),
+    [registrationFields]
+  );
+
+  // Sync remote state into local state
   React.useEffect(() => {
     if (!isLoading && !initialized) {
       setLocalQuotas(quotas.length > 0 ? quotas : []);
+      setSelectedFieldId(remoteQuotaFieldId || "");
       setInitialized(true);
     }
-  }, [isLoading, quotas, initialized]);
+  }, [isLoading, quotas, remoteQuotaFieldId, initialized]);
 
-  // Keep in sync when remote data updates (but only if user hasn't made local edits)
   React.useEffect(() => {
     if (initialized && quotas.length > 0) {
       setLocalQuotas(quotas);
     }
   }, [quotas, initialized]);
 
-  const saveQuotas = useMutation({
-    mutationFn: async (updatedQuotas: { campus: string; quota: number }[]) => {
+  React.useEffect(() => {
+    if (initialized && remoteQuotaFieldId) {
+      setSelectedFieldId(remoteQuotaFieldId);
+    }
+  }, [remoteQuotaFieldId, initialized]);
+
+  React.useEffect(() => {
+    if (initialized && remoteQuotaEnforcement) {
+      setQuotaEnforcement(remoteQuotaEnforcement as "registration" | "screening");
+    }
+  }, [remoteQuotaEnforcement, initialized]);
+
+  const activeQuotas = localQuotas.filter((q) => !q.rejected);
+  const totalCapacity = activeQuotas.reduce((sum, q) => sum + q.quota, 0);
+  const totalFilled = activeQuotas.reduce(
+    (sum, q) => sum + (quotaCounts[q.campus] || 0),
+    0
+  );
+  const rejectedCount = localQuotas.filter((q) => q.rejected).length;
+  const softFlaggedCount = localQuotas.filter((q) => q.softFlagged && !q.rejected).length;
+
+  const saveConfig = useMutation({
+    mutationFn: async ({
+      updatedQuotas,
+      fieldId,
+      quotaEnforcement: enforcement,
+    }: {
+      updatedQuotas: { campus: string; quota: number }[];
+      fieldId: string;
+      quotaEnforcement?: string;
+    }) => {
       const res = await fetch(
         `/api/hackathons/${hackathonId}/screening-rules`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            config: { quotas: updatedQuotas },
+            config: {
+              quotas: updatedQuotas,
+              quotaFieldId: fieldId || undefined,
+              quotaEnforcement: enforcement || undefined,
+            },
           }),
         }
       );
@@ -941,40 +1006,86 @@ function CampusQuotasSection({
     },
   });
 
-  const handleAdd = () => {
-    const campus = newCampus.trim();
-    const quota = parseInt(newQuota, 10);
+  const handleFieldChange = (fieldId: string) => {
+    setSelectedFieldId(fieldId);
 
-    if (!campus) {
-      toast.error("Please enter a campus name");
-      return;
-    }
-    if (isNaN(quota) || quota < 1) {
-      toast.error("Please enter a valid quota number");
-      return;
-    }
-    if (localQuotas.some((q) => q.campus.toLowerCase() === campus.toLowerCase())) {
-      toast.error("This campus already has a quota");
+    if (!fieldId) {
+      // Unlink field — clear quotas
+      setLocalQuotas([]);
+      saveConfig.mutate({ updatedQuotas: [], fieldId: "", quotaEnforcement });
       return;
     }
 
-    const updated = [...localQuotas, { campus, quota }];
+    const field = registrationFields.find((f) => f.id === fieldId);
+    if (!field?.options) return;
+
+    // Build quotas from field options, preserving existing values
+    const existingMap = new Map(localQuotas.map((q) => [q.campus, q]));
+    const newQuotas = field.options.map((opt) => ({
+      campus: opt.value,
+      quota: existingMap.get(opt.value)?.quota ?? 50,
+      rejected: existingMap.get(opt.value)?.rejected ?? false,
+      rejectionMessage: existingMap.get(opt.value)?.rejectionMessage,
+      softFlagged: existingMap.get(opt.value)?.softFlagged ?? false,
+      softFlagMessage: existingMap.get(opt.value)?.softFlagMessage,
+    }));
+
+    setLocalQuotas(newQuotas);
+    saveConfig.mutate({ updatedQuotas: newQuotas, fieldId, quotaEnforcement });
+  };
+
+  const handleQuotaUpdate = (campus: string, newQuota: number) => {
+    if (isNaN(newQuota) || newQuota < 1) return;
+    const updated = localQuotas.map((q) =>
+      q.campus === campus ? { ...q, quota: newQuota } : q
+    );
     setLocalQuotas(updated);
-    setNewCampus("");
-    setNewQuota("");
-    saveQuotas.mutate(updated);
+    setEditingQuota(null);
+    saveConfig.mutate({ updatedQuotas: updated, fieldId: selectedFieldId, quotaEnforcement });
   };
 
-  const handleDelete = (campus: string) => {
-    const updated = localQuotas.filter((q) => q.campus !== campus);
+  const handleSetQuotaStatus = (campus: string, status: "applicable" | "soft_flag" | "not_applicable") => {
+    const updated = localQuotas.map((q) => {
+      if (q.campus !== campus) return q;
+      switch (status) {
+        case "applicable":
+          return { ...q, rejected: false, softFlagged: false };
+        case "soft_flag":
+          return { ...q, rejected: false, softFlagged: true };
+        case "not_applicable":
+          return { ...q, rejected: true, softFlagged: false };
+        default:
+          return q;
+      }
+    });
     setLocalQuotas(updated);
-    saveQuotas.mutate(updated);
+    saveConfig.mutate({ updatedQuotas: updated, fieldId: selectedFieldId, quotaEnforcement });
   };
 
-  const handleLoadDefaults = () => {
-    setLocalQuotas(DEFAULT_CAMPUS_QUOTAS);
-    saveQuotas.mutate(DEFAULT_CAMPUS_QUOTAS);
+  // Only update local state on change; save on blur
+  const handleMessageChange = (campus: string, field: "rejectionMessage" | "softFlagMessage", message: string) => {
+    setLocalQuotas((prev) =>
+      prev.map((q) =>
+        q.campus === campus ? { ...q, [field]: message || undefined } : q
+      )
+    );
   };
+
+  const handleMessageSave = () => {
+    saveConfig.mutate({ updatedQuotas: localQuotas, fieldId: selectedFieldId, quotaEnforcement });
+  };
+
+  // Get the label for a quota campus value (option label from the linked field)
+  const selectedField = quotaFields.find((f) => f.id === selectedFieldId);
+  const optionLabelMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    if (selectedField?.options) {
+      for (const opt of selectedField.options) {
+        map.set(opt.value, opt.label);
+      }
+    }
+    return map;
+  }, [selectedField]);
 
   return (
     <Card>
@@ -987,8 +1098,22 @@ function CampusQuotasSection({
           <div>
             <h3 className="font-display font-bold text-lg">Campus Quotas</h3>
             <p className="text-sm text-muted-foreground">
-              {localQuotas.length} campus
-              {localQuotas.length !== 1 ? "es" : ""} configured
+              {totalCapacity > 0 || rejectedCount > 0 || softFlaggedCount > 0 ? (
+                <>
+                  <span className="font-mono font-medium text-foreground">
+                    {totalFilled}/{totalCapacity}
+                  </span>{" "}
+                  registered &middot; {activeQuotas.length} active
+                  {softFlaggedCount > 0 && (
+                    <> &middot; {softFlaggedCount} flagged</>
+                  )}
+                  {rejectedCount > 0 && (
+                    <> &middot; {rejectedCount} N/A</>
+                  )}
+                </>
+              ) : (
+                "No quotas configured"
+              )}
             </p>
           </div>
         </div>
@@ -1017,6 +1142,130 @@ function CampusQuotasSection({
                 </div>
               ) : (
                 <>
+                  {/* Field Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">
+                      Linked Form Field
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Select a radio or dropdown field from your registration form. Each option becomes a campus with its own quota.
+                    </p>
+                    <select
+                      value={selectedFieldId}
+                      onChange={(e) => handleFieldChange(e.target.value)}
+                      disabled={saveConfig.isPending}
+                      className={selectClasses}
+                    >
+                      <option value="">-- Select a field --</option>
+                      {quotaFields.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.label} ({f.type}, {f.options?.length} options)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Quota Enforcement Mode */}
+                  {selectedFieldId && (
+                    <div className="rounded-lg border border-border p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium">Quota Enforcement</h4>
+                          <p className="text-xs text-muted-foreground">
+                            When should campus quotas be enforced?
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuotaEnforcement("screening");
+                            saveConfig.mutate({
+                              updatedQuotas: localQuotas,
+                              fieldId: selectedFieldId,
+                              quotaEnforcement: "screening",
+                            });
+                          }}
+                          className={cn(
+                            "rounded-lg border p-3 text-left transition-colors",
+                            quotaEnforcement === "screening"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50"
+                          )}
+                        >
+                          <p className="text-sm font-medium">During Screening</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Everyone registers freely. When you run screening, quotas are applied first-come-first-serve to accept or waitlist applicants.
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuotaEnforcement("registration");
+                            saveConfig.mutate({
+                              updatedQuotas: localQuotas,
+                              fieldId: selectedFieldId,
+                              quotaEnforcement: "registration",
+                            });
+                          }}
+                          className={cn(
+                            "rounded-lg border p-3 text-left transition-colors",
+                            quotaEnforcement === "registration"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50"
+                          )}
+                        >
+                          <p className="text-sm font-medium">During Registration</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Show fill counts on the registration form. Full campuses show a waitlist warning to applicants.
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Total Capacity Banner */}
+                  {localQuotas.length > 0 && (
+                    <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Total Capacity</p>
+                        <p className="text-xs text-muted-foreground">
+                          Sum of all campus quotas
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-display text-2xl font-bold">
+                          <span className={cn(
+                            totalFilled >= totalCapacity && "text-destructive"
+                          )}>
+                            {totalFilled}
+                          </span>
+                          <span className="text-muted-foreground font-normal">
+                            /{totalCapacity}
+                          </span>
+                        </p>
+                        {totalCapacity > 0 && (
+                          <div className="w-32 h-2 bg-muted rounded-full mt-1.5 overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                totalFilled >= totalCapacity
+                                  ? "bg-destructive"
+                                  : totalFilled >= totalCapacity * 0.8
+                                    ? "bg-yellow-500"
+                                    : "bg-primary"
+                              )}
+                              style={{
+                                width: `${Math.min(100, (totalFilled / totalCapacity) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Quotas Table */}
                   {localQuotas.length > 0 ? (
                     <div className="rounded-xl border border-border overflow-hidden">
@@ -1027,43 +1276,248 @@ function CampusQuotasSection({
                               Campus
                             </th>
                             <th className="text-left font-medium px-4 py-3 text-muted-foreground">
+                              Registered
+                            </th>
+                            <th className="text-left font-medium px-4 py-3 text-muted-foreground">
                               Quota
                             </th>
-                            <th className="text-right font-medium px-4 py-3 text-muted-foreground">
-                              Actions
+                            <th className="text-left font-medium px-4 py-3 text-muted-foreground">
+                              Fill
+                            </th>
+                            <th className="text-center font-medium px-4 py-3 text-muted-foreground">
+                              Status
                             </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {localQuotas.map((q, i) => (
-                            <motion.tr
-                              key={q.campus}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: i * 0.03 }}
-                              className="border-b last:border-b-0 hover:bg-muted/30 transition-colors"
-                            >
-                              <td className="px-4 py-3 font-medium">
-                                {q.campus}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className="font-mono">{q.quota}</span>
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                  onClick={() => handleDelete(q.campus)}
-                                  disabled={saveQuotas.isPending}
+                          {localQuotas.map((q, i) => {
+                            const isRejected = !!q.rejected;
+                            const isSoftFlagged = !!q.softFlagged && !isRejected;
+                            const filled = quotaCounts[q.campus] || 0;
+                            const pct = !isRejected && q.quota > 0 ? Math.round((filled / q.quota) * 100) : 0;
+                            const isFull = !isRejected && filled >= q.quota;
+                            const displayLabel = optionLabelMap.get(q.campus) || q.campus;
+
+                            return (
+                              <React.Fragment key={q.campus}>
+                                <motion.tr
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: i * 0.03 }}
+                                  className={cn(
+                                    "border-b hover:bg-muted/30 transition-colors",
+                                    isRejected && "bg-destructive/5",
+                                    isSoftFlagged && "bg-yellow-50/30 dark:bg-yellow-950/10"
+                                  )}
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </td>
-                            </motion.tr>
-                          ))}
+                                  <td className="px-4 py-3 font-medium">
+                                    <div className="flex items-center gap-2">
+                                      <span className={cn(isRejected && "line-through text-muted-foreground")}>
+                                        {displayLabel}
+                                      </span>
+                                      {isRejected && (
+                                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                          N/A
+                                        </Badge>
+                                      )}
+                                      {isSoftFlagged && (
+                                        <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+                                          Soft Flag
+                                        </Badge>
+                                      )}
+                                      {!isRejected && isFull && (
+                                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                          FULL
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className={cn(
+                                      "font-mono",
+                                      isRejected ? "text-muted-foreground" : isFull && "text-destructive font-medium"
+                                    )}>
+                                      {isRejected ? "—" : filled}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {isRejected ? (
+                                      <span className="text-muted-foreground text-xs">N/A</span>
+                                    ) : editingQuota?.campus === q.campus ? (
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        autoFocus
+                                        className="w-20 h-8 text-sm"
+                                        value={editingQuota.value}
+                                        onChange={(e) =>
+                                          setEditingQuota({
+                                            campus: q.campus,
+                                            value: e.target.value,
+                                          })
+                                        }
+                                        onBlur={() =>
+                                          handleQuotaUpdate(
+                                            q.campus,
+                                            parseInt(editingQuota.value, 10)
+                                          )
+                                        }
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            handleQuotaUpdate(
+                                              q.campus,
+                                              parseInt(editingQuota.value, 10)
+                                            );
+                                          }
+                                          if (e.key === "Escape") {
+                                            setEditingQuota(null);
+                                          }
+                                        }}
+                                      />
+                                    ) : (
+                                      <button
+                                        onClick={() =>
+                                          setEditingQuota({
+                                            campus: q.campus,
+                                            value: String(q.quota),
+                                          })
+                                        }
+                                        className="font-mono hover:text-primary transition-colors flex items-center gap-1.5 group/edit"
+                                        title="Click to edit quota"
+                                      >
+                                        {q.quota}
+                                        <Pencil className="h-3 w-3 text-muted-foreground group-hover/edit:text-primary transition-colors" />
+                                      </button>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {isRejected ? (
+                                      <span className="text-muted-foreground text-xs">—</span>
+                                    ) : (
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
+                                          <div
+                                            className={cn(
+                                              "h-full rounded-full transition-all",
+                                              isFull
+                                                ? "bg-destructive"
+                                                : pct >= 80
+                                                  ? "bg-yellow-500"
+                                                  : "bg-primary"
+                                            )}
+                                            style={{ width: `${Math.min(100, pct)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs text-muted-foreground font-mono">
+                                          {pct}%
+                                        </span>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <div className="inline-flex items-center rounded-lg border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetQuotaStatus(q.campus, "applicable")}
+                                        disabled={saveConfig.isPending}
+                                        className={cn(
+                                          "h-7 px-2 text-[10px] font-medium transition-colors flex items-center gap-1",
+                                          !isRejected && !isSoftFlagged
+                                            ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                                            : "hover:bg-muted text-muted-foreground"
+                                        )}
+                                        title="Applicable"
+                                      >
+                                        <CheckCircle2 className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetQuotaStatus(q.campus, "soft_flag")}
+                                        disabled={saveConfig.isPending}
+                                        className={cn(
+                                          "h-7 px-2 text-[10px] font-medium transition-colors flex items-center gap-1 border-x border-border",
+                                          isSoftFlagged
+                                            ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400"
+                                            : "hover:bg-muted text-muted-foreground"
+                                        )}
+                                        title="Soft Flag"
+                                      >
+                                        <AlertTriangle className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetQuotaStatus(q.campus, "not_applicable")}
+                                        disabled={saveConfig.isPending}
+                                        className={cn(
+                                          "h-7 px-2 text-[10px] font-medium transition-colors flex items-center gap-1",
+                                          isRejected
+                                            ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
+                                            : "hover:bg-muted text-muted-foreground"
+                                        )}
+                                        title="Not Applicable"
+                                      >
+                                        <XCircle className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </motion.tr>
+                                {/* Message row (shown when N/A or Soft Flag) */}
+                                {(isRejected || isSoftFlagged) && (
+                                  <motion.tr
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: "auto" }}
+                                    className={cn(
+                                      "border-b last:border-b-0",
+                                      isRejected ? "bg-destructive/5" : "bg-yellow-50/50 dark:bg-yellow-950/10"
+                                    )}
+                                  >
+                                    <td colSpan={5} className="px-4 py-2">
+                                      <div className="flex items-start gap-2">
+                                        <AlertTriangle className={cn(
+                                          "h-3.5 w-3.5 mt-0.5 shrink-0",
+                                          isRejected ? "text-destructive" : "text-yellow-600"
+                                        )} />
+                                        <div className="flex-1">
+                                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                            {isRejected
+                                              ? "Rejection message shown to applicants"
+                                              : "Soft flag note (visible to organizers in applications)"}
+                                          </label>
+                                          <Input
+                                            placeholder={isRejected
+                                              ? "e.g., This campus is not accepting applications at this time."
+                                              : "e.g., This campus requires additional review before acceptance."}
+                                            value={isRejected ? (q.rejectionMessage || "") : (q.softFlagMessage || "")}
+                                            onChange={(e) =>
+                                              handleMessageChange(
+                                                q.campus,
+                                                isRejected ? "rejectionMessage" : "softFlagMessage",
+                                                e.target.value
+                                              )
+                                            }
+                                            onBlur={handleMessageSave}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") handleMessageSave();
+                                            }}
+                                            className="h-8 text-xs mt-1"
+                                          />
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </motion.tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
+                    </div>
+                  ) : selectedFieldId ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mb-4" />
+                      <p className="text-sm text-muted-foreground">
+                        Loading quotas from field options...
+                      </p>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -1073,68 +1527,9 @@ function CampusQuotasSection({
                       <h4 className="font-display text-lg font-bold mb-1">
                         No campus quotas
                       </h4>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Set quotas to limit accepted participants per campus.
+                      <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+                        Link a radio or dropdown field from your registration form to set capacity limits per option.
                       </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleLoadDefaults}
-                      >
-                        Load Default Quotas
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Add Quota Row */}
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1">
-                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                        Campus Name
-                      </label>
-                      <Input
-                        placeholder="e.g., Abu Dhabi"
-                        value={newCampus}
-                        onChange={(e) => setNewCampus(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-                      />
-                    </div>
-                    <div className="w-32">
-                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                        Quota
-                      </label>
-                      <Input
-                        type="number"
-                        placeholder="50"
-                        min={1}
-                        value={newQuota}
-                        onChange={(e) => setNewQuota(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-                      />
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={handleAdd}
-                      disabled={saveQuotas.isPending}
-                      className="h-11"
-                    >
-                      {saveQuotas.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-
-                  {/* Load defaults if there are quotas already */}
-                  {localQuotas.length > 0 && (
-                    <div className="text-right">
-                      <button
-                        onClick={handleLoadDefaults}
-                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        Reset to default quotas
-                      </button>
                     </div>
                   )}
                 </>
@@ -1147,270 +1542,3 @@ function CampusQuotasSection({
   );
 }
 
-// ── Section 3: Screening Dashboard ───────────────────────
-
-function ScreeningDashboardSection({
-  hackathonId,
-  isOpen,
-  onToggle,
-  queryClient,
-}: {
-  hackathonId: string;
-  isOpen: boolean;
-  onToggle: () => void;
-  queryClient: ReturnType<typeof useQueryClient>;
-}) {
-  const [lastResult, setLastResult] =
-    React.useState<ScreeningResultSummary["data"] | null>(null);
-
-  const runScreening = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/hackathons/${hackathonId}/screen`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Screening failed");
-      }
-      return res.json() as Promise<ScreeningResultSummary>;
-    },
-    onSuccess: (data) => {
-      setLastResult(data.data);
-      queryClient.invalidateQueries({
-        queryKey: ["hackathon-applications"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["hackathon-screening-rules", hackathonId],
-      });
-      toast.success("Screening completed successfully");
-    },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
-  });
-
-  const summaryStats = lastResult
-    ? [
-        {
-          icon: CheckCircle2,
-          label: "Screened",
-          value: lastResult.screened,
-          color: undefined as "green" | "red" | "orange" | undefined,
-        },
-        {
-          icon: CheckCircle2,
-          label: "Eligible",
-          value: lastResult.eligible,
-          color: "green" as const,
-        },
-        {
-          icon: XCircle,
-          label: "Ineligible",
-          value: lastResult.ineligible,
-          color: "red" as const,
-        },
-        {
-          icon: AlertTriangle,
-          label: "Flagged",
-          value: lastResult.flagged,
-          color: "orange" as const,
-        },
-      ]
-    : [];
-
-  const colorClasses = {
-    green: "text-green-600 bg-green-100 dark:bg-green-900/30",
-    red: "text-red-600 bg-red-100 dark:bg-red-900/30",
-    orange: "text-orange-600 bg-orange-100 dark:bg-orange-900/30",
-  };
-
-  return (
-    <Card>
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between p-5 text-left"
-      >
-        <div className="flex items-center gap-3">
-          <Play className="h-5 w-5 text-muted-foreground" />
-          <div>
-            <h3 className="font-display font-bold text-lg">
-              Screening Dashboard
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              Run screening and view results
-            </p>
-          </div>
-        </div>
-        {isOpen ? (
-          <ChevronUp className="h-5 w-5 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="h-5 w-5 text-muted-foreground" />
-        )}
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <CardContent className="pt-0 pb-5 px-5 space-y-5">
-              {/* Run Button */}
-              <div className="flex items-center justify-between">
-                <div>
-                  {lastResult?.lastRunAt && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      Last run:{" "}
-                      {new Date(lastResult.lastRunAt).toLocaleString()}
-                    </div>
-                  )}
-                </div>
-                <Button
-                  onClick={() => runScreening.mutate()}
-                  disabled={runScreening.isPending}
-                >
-                  {runScreening.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Play className="mr-2 h-4 w-4" />
-                  )}
-                  {runScreening.isPending
-                    ? "Running..."
-                    : "Run Screening"}
-                </Button>
-              </div>
-
-              {/* Results */}
-              {lastResult && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  {/* Summary Banner */}
-                  <div className="rounded-xl border border-green-500/30 bg-green-50 dark:bg-green-950/20 p-4">
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                      Screening complete: {lastResult.screened} screened,{" "}
-                      {lastResult.eligible} eligible,{" "}
-                      {lastResult.ineligible} ineligible,{" "}
-                      {lastResult.flagged} flagged
-                    </p>
-                  </div>
-
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {summaryStats.map((stat) => (
-                      <Card key={stat.label}>
-                        <CardContent className="p-4 flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "h-10 w-10 rounded-lg flex items-center justify-center",
-                              stat.color
-                                ? colorClasses[stat.color]
-                                : "bg-primary/10 text-primary"
-                            )}
-                          >
-                            <stat.icon className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <p className="font-display text-2xl font-bold">
-                              {stat.value}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {stat.label}
-                            </p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-
-                  {/* Status Breakdown */}
-                  <Card>
-                    <CardContent className="p-5">
-                      <h4 className="font-display font-bold mb-4">
-                        Status Breakdown
-                      </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {[
-                          {
-                            label: "Eligible",
-                            value: lastResult.eligible,
-                            className:
-                              "text-green-600 dark:text-green-400",
-                          },
-                          {
-                            label: "Ineligible",
-                            value: lastResult.ineligible,
-                            className:
-                              "text-red-600 dark:text-red-400",
-                          },
-                          {
-                            label: "Flagged",
-                            value: lastResult.flagged,
-                            className:
-                              "text-orange-600 dark:text-orange-400",
-                          },
-                          {
-                            label: "Total Screened",
-                            value: lastResult.screened,
-                            className: "",
-                          },
-                        ].map((item) => (
-                          <div
-                            key={item.label}
-                            className="flex items-center justify-between rounded-lg border border-border p-3"
-                          >
-                            <span className="text-xs">{item.label}</span>
-                            <span
-                              className={cn(
-                                "font-mono font-bold text-sm",
-                                item.className
-                              )}
-                            >
-                              {item.value}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )}
-
-              {/* Empty state when no screening has been run */}
-              {!lastResult && !runScreening.isPending && (
-                <div className="flex flex-col items-center justify-center py-10 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mb-4">
-                    <Shield className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <h4 className="font-display text-lg font-bold mb-1">
-                    No screening results yet
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Configure your screening rules above, then run screening to
-                    see results.
-                  </p>
-                </div>
-              )}
-
-              {/* Loading state */}
-              {runScreening.isPending && (
-                <div className="flex flex-col items-center justify-center py-10 text-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-                  <p className="text-sm text-muted-foreground">
-                    Running screening against all registrations...
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </Card>
-  );
-}

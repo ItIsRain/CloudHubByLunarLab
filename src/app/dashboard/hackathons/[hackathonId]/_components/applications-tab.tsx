@@ -19,12 +19,26 @@ import {
   ClipboardList,
   Clock,
   UserCheck,
-  Play,
+  Loader2,
+  StickyNote,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  Save,
+  Megaphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -46,6 +60,15 @@ interface ApplicationsTabProps {
   hackathonId: string;
 }
 
+interface ScreeningResult {
+  ruleId: string;
+  ruleName: string;
+  ruleType: "hard" | "soft";
+  passed: boolean;
+  actualValue: unknown;
+  reason: string;
+}
+
 interface ApplicationParticipant {
   id: string;
   userId: string;
@@ -56,6 +79,11 @@ interface ApplicationParticipant {
   createdAt: string;
   formData?: Record<string, unknown>;
   completenessScore?: number;
+  eligibilityPassed?: boolean | null;
+  screeningResults?: ScreeningResult[];
+  screeningFlags?: ScreeningResult[];
+  screeningCompletedAt?: string | null;
+  internalNotes?: string | null;
   flags?: { type: string; message: string; resolved: boolean }[];
   user: {
     id: string;
@@ -197,17 +225,25 @@ function renderFormValue(field: FormField, value: unknown): React.ReactNode {
           {String(value)}
         </a>
       );
-    case "file":
+    case "file": {
+      // File value can be an object { url, originalFilename, ... } or a plain string URL
+      const fileUrl = typeof value === "object" && value !== null && "url" in value
+        ? (value as { url: string }).url
+        : String(value);
+      const fileName = typeof value === "object" && value !== null && "originalFilename" in value
+        ? (value as { originalFilename: string }).originalFilename
+        : "View file";
       return (
         <a
-          href={String(value)}
+          href={fileUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm text-primary underline hover:text-primary/80"
         >
-          View file
+          {fileName}
         </a>
       );
+    }
     case "date":
       return <span className="text-sm">{formatDate(String(value))}</span>;
     case "textarea":
@@ -295,6 +331,98 @@ function StatCard({
   );
 }
 
+// ── Internal Notes Editor ──────────────────────────────
+
+function InternalNotesEditor({
+  registrationId,
+  initialNotes,
+  onSave,
+  isSaving,
+}: {
+  registrationId: string;
+  initialNotes: string;
+  onSave: (notes: string) => void;
+  isSaving: boolean;
+}) {
+  const [notes, setNotes] = React.useState(initialNotes);
+  const [isEditing, setIsEditing] = React.useState(false);
+  const isDirty = notes !== initialNotes;
+
+  // Sync with external changes
+  React.useEffect(() => {
+    setNotes(initialNotes);
+  }, [initialNotes]);
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border/50">
+      <div className="flex items-center gap-2 mb-2">
+        <StickyNote className="h-4 w-4 text-muted-foreground" />
+        <h5 className="font-display font-bold text-sm">Internal Notes</h5>
+        <span className="text-[10px] text-muted-foreground">(visible to organizers only)</span>
+      </div>
+      {isEditing ? (
+        <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Add internal notes about this application..."
+            rows={3}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+          />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                onSave(notes);
+                setIsEditing(false);
+              }}
+              disabled={isSaving || !isDirty}
+            >
+              {isSaving ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <Save className="h-3 w-3 mr-1" />
+              )}
+              Save
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                setNotes(initialNotes);
+                setIsEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="cursor-pointer group"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsEditing(true);
+          }}
+        >
+          {notes ? (
+            <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded-lg px-3 py-2 group-hover:bg-muted transition-colors">
+              {notes}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground italic bg-muted/30 rounded-lg px-3 py-2 group-hover:bg-muted/50 transition-colors">
+              Click to add notes...
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────
 
 export function ApplicationsTab({
@@ -306,6 +434,7 @@ export function ApplicationsTab({
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [expandedRow, setExpandedRow] = React.useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
 
   // Fetch applications (participants with form_data)
   const { data: applicationsData, isLoading } = useQuery<{
@@ -324,6 +453,16 @@ export function ApplicationsTab({
     },
     enabled: !!hackathonId,
   });
+
+  // Fetch total application counts (unfiltered) for Publish button logic
+  const { data: totalCountsData } = useQuery<{ data: ApplicationParticipant[] }>({
+    queryKey: ["hackathon-applications-counts", hackathonId],
+    queryFn: () => fetchJson(`/api/hackathons/${hackathonId}/participants`),
+    enabled: !!hackathonId,
+  });
+  const totalApplications = totalCountsData?.data?.length ?? 0;
+  const totalScreened = totalCountsData?.data?.filter((app: ApplicationParticipant) => !!app.screeningCompletedAt).length ?? 0;
+  const allScreened = totalApplications > 0 && totalScreened >= totalApplications;
 
   // Update participant status mutation
   const updateStatus = useMutation({
@@ -353,17 +492,20 @@ export function ApplicationsTab({
         queryKey: ["hackathon-applications", hackathonId],
       });
       queryClient.invalidateQueries({
+        queryKey: ["hackathon-applications-counts", hackathonId],
+      });
+      queryClient.invalidateQueries({
         queryKey: ["hackathon-participants", hackathonId],
       });
     },
   });
 
-  // Run screening mutation
+  // Run screening mutation (new/unscreened only)
   const runScreening = useMutation({
     mutationFn: async () => {
       const res = await fetch(
         `/api/hackathons/${hackathonId}/screen`,
-        { method: "POST" }
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }
       );
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
@@ -371,14 +513,189 @@ export function ApplicationsTab({
       }
       return res.json();
     },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-applications", hackathonId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-applications-counts", hackathonId],
+      });
+      const d = data?.data;
+      if (d?.screened === 0) {
+        toast.info(d.message || "All applications have already been screened.");
+      } else {
+        const parts: string[] = [];
+        if (d?.accepted) parts.push(`${d.accepted} accepted`);
+        if (d?.waitlisted) parts.push(`${d.waitlisted} waitlisted`);
+        if (d?.eligible) parts.push(`${d.eligible} eligible`);
+        if (d?.ineligible) parts.push(`${d.ineligible} ineligible`);
+        if (d?.underReview) parts.push(`${d.underReview} under review`);
+        toast.success(`Screened ${d?.screened ?? 0} applications: ${parts.join(", ")}`);
+      }
+    },
+    onError: () => {
+      toast.error("Failed to run screening.");
+    },
+  });
+
+  // Publish Results mutation & dialog state
+  const [publishDialogOpen, setPublishDialogOpen] = React.useState(false);
+
+  // Fetch unpublished count for the publish dialog
+  const { data: unpublishedData, refetch: refetchUnpublished } = useQuery({
+    queryKey: ["screening-unpublished", hackathonId],
+    queryFn: async () => {
+      const res = await fetch(`/api/hackathons/${hackathonId}/screen`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to fetch unpublished count");
+      }
+      return res.json() as Promise<{
+        data: {
+          unpublished: number;
+          accepted: number;
+          waitlisted: number;
+          eligible: number;
+          ineligible: number;
+          underReview: number;
+        };
+      }>;
+    },
+    enabled: !!hackathonId,
+  });
+  const unpublishedCount = unpublishedData?.data?.unpublished ?? 0;
+  const unpublishedAccepted = unpublishedData?.data?.accepted ?? 0;
+  const unpublishedWaitlisted = unpublishedData?.data?.waitlisted ?? 0;
+  const unpublishedEligible = unpublishedData?.data?.eligible ?? 0;
+  const unpublishedIneligible = unpublishedData?.data?.ineligible ?? 0;
+  const unpublishedUnderReview = unpublishedData?.data?.underReview ?? 0;
+
+  const publishResults = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/hackathons/${hackathonId}/screen`, {
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to publish results");
+      }
+      return res.json() as Promise<{
+        data: {
+          published: number;
+          accepted: number;
+          waitlisted: number;
+          eligible: number;
+          ineligible: number;
+          underReview: number;
+          message?: string;
+        };
+      }>;
+    },
+    onSuccess: (data) => {
+      setPublishDialogOpen(false);
+      const d = data.data;
+      if (d.published === 0) {
+        toast.info(d.message || "No unpublished results to send.");
+      } else {
+        const parts: string[] = [];
+        if (d.accepted > 0) parts.push(`${d.accepted} accepted`);
+        if (d.waitlisted > 0) parts.push(`${d.waitlisted} waitlisted`);
+        if (d.eligible > 0) parts.push(`${d.eligible} eligible`);
+        if (d.ineligible > 0) parts.push(`${d.ineligible} ineligible`);
+        if (d.underReview > 0) parts.push(`${d.underReview} under review`);
+        toast.success(
+          `Published results: ${d.published} emails sent (${parts.join(", ")})`
+        );
+      }
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-applications"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-applications-counts", hackathonId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["screening-unpublished", hackathonId],
+      });
+    },
+    onError: (err: Error) => {
+      setPublishDialogOpen(false);
+      toast.error(err.message);
+    },
+  });
+
+  // Bulk status update mutation
+  const bulkUpdateStatus = useMutation({
+    mutationFn: async ({
+      registrationIds,
+      status,
+    }: {
+      registrationIds: string[];
+      status: string;
+    }) => {
+      const res = await fetch(
+        `/api/hackathons/${hackathonId}/participants`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ registrationIds, status }),
+        }
+      );
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Failed to update statuses");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-applications", hackathonId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-applications-counts", hackathonId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-participants", hackathonId],
+      });
+      setSelectedIds(new Set());
+      const count = data?.data?.updated ?? selectedIds.size;
+      toast.success(`Updated ${count} applications successfully!`);
+    },
+    onError: () => {
+      toast.error("Failed to update application statuses.");
+    },
+  });
+
+  // Update internal notes mutation
+  const updateNotes = useMutation({
+    mutationFn: async ({
+      registrationId,
+      internalNotes,
+    }: {
+      registrationId: string;
+      internalNotes: string;
+    }) => {
+      const res = await fetch(
+        `/api/hackathons/${hackathonId}/participants`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ registrationId, internalNotes }),
+        }
+      );
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Failed to update notes");
+      }
+      return res.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["hackathon-applications", hackathonId],
       });
-      toast.success("Screening completed successfully!");
+      toast.success("Notes saved!");
     },
     onError: () => {
-      toast.error("Failed to run screening.");
+      toast.error("Failed to save notes.");
     },
   });
 
@@ -435,6 +752,10 @@ export function ApplicationsTab({
   const acceptedCount = statusCounts["accepted"] || 0;
   const ineligibleCount =
     (statusCounts["ineligible"] || 0) + (statusCounts["rejected"] || 0);
+  const screenedCount = React.useMemo(
+    () => applications.filter((app) => !!app.screeningCompletedAt).length,
+    [applications]
+  );
 
   // Extract applicant name/email from form_data or user profile
   const getApplicantInfo = (app: ApplicationParticipant) => {
@@ -442,11 +763,12 @@ export function ApplicationsTab({
     let email = app.user.email;
 
     if (app.formData) {
+      // Find name/email fields by type or label (no longer relies on mappingKey)
       const nameField = hackathon.registrationFields.find(
-        (f) => f.mappingKey === "applicant_name"
+        (f) => f.type === "text" && /name/i.test(f.label)
       );
       const emailField = hackathon.registrationFields.find(
-        (f) => f.mappingKey === "applicant_email"
+        (f) => f.type === "email"
       );
       if (nameField && app.formData[nameField.id]) {
         name = String(app.formData[nameField.id]);
@@ -473,8 +795,8 @@ export function ApplicationsTab({
     }
   };
 
-  const handleRunScreening = async () => {
-    await runScreening.mutateAsync();
+  const handleRunScreening = () => {
+    runScreening.mutate();
   };
 
   const handleExport = () => {
@@ -528,6 +850,32 @@ export function ApplicationsTab({
     setExpandedRow((prev) => (prev === id ? null : id));
   };
 
+  // Bulk selection helpers
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === enrichedApplications.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(enrichedApplications.map((a) => a.id)));
+    }
+  };
+
+  const handleBulkStatusChange = async (newStatus: string) => {
+    if (selectedIds.size === 0) return;
+    await bulkUpdateStatus.mutateAsync({
+      registrationIds: Array.from(selectedIds),
+      status: newStatus,
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -553,7 +901,7 @@ export function ApplicationsTab({
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -561,11 +909,37 @@ export function ApplicationsTab({
             disabled={runScreening.isPending}
           >
             {runScreening.isPending ? (
-              <Play className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Shield className="h-4 w-4" />
             )}
             Run Screening
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-orange-500/50 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+            onClick={() => {
+              refetchUnpublished();
+              setPublishDialogOpen(true);
+            }}
+            disabled={
+              publishResults.isPending ||
+              totalApplications === 0 ||
+              !allScreened
+            }
+            title={
+              totalApplications > 0 && !allScreened
+                ? `${totalApplications - totalScreened} applicant(s) have not been screened yet`
+                : undefined
+            }
+          >
+            {publishResults.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Megaphone className="h-4 w-4" />
+            )}
+            Publish Results
           </Button>
           <Button variant="secondary" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4" />
@@ -607,17 +981,105 @@ export function ApplicationsTab({
         </select>
       </motion.div>
 
+      {/* Bulk Action Bar */}
+      <AnimatePresence>
+        {selectedIds.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
+          >
+            <span className="text-sm font-medium">
+              {selectedIds.size} selected
+            </span>
+            <div className="h-4 w-px bg-border" />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs text-green-600"
+              onClick={() => handleBulkStatusChange("accepted")}
+              disabled={bulkUpdateStatus.isPending}
+            >
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Accept
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs text-red-600"
+              onClick={() => handleBulkStatusChange("rejected")}
+              disabled={bulkUpdateStatus.isPending}
+            >
+              <XCircle className="h-3 w-3 mr-1" />
+              Reject
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs text-orange-600"
+              onClick={() => handleBulkStatusChange("waitlisted")}
+              disabled={bulkUpdateStatus.isPending}
+            >
+              <Clock className="h-3 w-3 mr-1" />
+              Waitlist
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 text-xs">
+                  More
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => handleBulkStatusChange("under_review")}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Under Review
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleBulkStatusChange("pending")}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reset to Pending
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => handleBulkStatusChange("cancelled")}
+                  className="text-red-600"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Cancel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <div className="flex-1" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear selection
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Stats Cards */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        className="grid grid-cols-2 md:grid-cols-5 gap-4"
       >
         <StatCard
           icon={ClipboardList}
           label="Total Applications"
           value={applications.length}
+        />
+        <StatCard
+          icon={Shield}
+          label={`Screened (${applications.length > 0 ? Math.round((screenedCount / applications.length) * 100) : 0}%)`}
+          value={screenedCount}
+          color="blue"
         />
         <StatCard
           icon={CheckCircle2}
@@ -659,6 +1121,21 @@ export function ApplicationsTab({
                   <table className="w-full">
                     <thead>
                       <tr className="border-b bg-muted/50">
+                        <th className="p-4 w-8" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={toggleSelectAll}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {selectedIds.size === enrichedApplications.length && enrichedApplications.length > 0 ? (
+                              <CheckSquare className="h-4 w-4 text-primary" />
+                            ) : selectedIds.size > 0 ? (
+                              <MinusSquare className="h-4 w-4 text-primary" />
+                            ) : (
+                              <Square className="h-4 w-4" />
+                            )}
+                          </button>
+                        </th>
                         <th className="text-left p-4 text-sm font-medium text-muted-foreground w-8" />
                         <th className="text-left p-4 text-sm font-medium text-muted-foreground">
                           Applicant
@@ -703,6 +1180,21 @@ export function ApplicationsTab({
                               )}
                               onClick={() => toggleExpand(app.id)}
                             >
+                              {/* Checkbox */}
+                              <td
+                                className="p-4 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSelect(app.id);
+                                }}
+                              >
+                                {selectedIds.has(app.id) ? (
+                                  <CheckSquare className="h-4 w-4 text-primary" />
+                                ) : (
+                                  <Square className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+                                )}
+                              </td>
+
                               {/* Expand indicator */}
                               <td className="p-4 w-8">
                                 {isExpanded ? (
@@ -731,18 +1223,48 @@ export function ApplicationsTab({
                                     <p className="text-xs text-muted-foreground truncate">
                                       {email}
                                     </p>
+                                    {/* Screening failure indicators */}
+                                    {app.screeningResults && app.screeningResults.length > 0 && (() => {
+                                      const hardFails = app.screeningResults.filter(r => r.ruleType === "hard" && !r.passed);
+                                      const softFails = app.screeningResults.filter(r => r.ruleType === "soft" && !r.passed);
+                                      if (hardFails.length === 0 && softFails.length === 0) return null;
+                                      return (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {hardFails.length > 0 && (
+                                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
+                                              <XCircle className="h-2.5 w-2.5" />
+                                              {hardFails.length} hard {hardFails.length === 1 ? "fail" : "fails"}
+                                            </Badge>
+                                          )}
+                                          {softFails.length > 0 && (
+                                            <Badge variant="warning" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
+                                              <AlertTriangle className="h-2.5 w-2.5" />
+                                              {softFails.length} {softFails.length === 1 ? "flag" : "flags"}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                               </td>
 
                               {/* Status */}
                               <td className="p-4 hidden md:table-cell">
-                                <Badge
-                                  variant={badgeConf.variant}
-                                  className="capitalize text-xs"
-                                >
-                                  {app.status.replace(/_/g, " ")}
-                                </Badge>
+                                <div className="flex items-center gap-1.5">
+                                  <Badge
+                                    variant={badgeConf.variant}
+                                    className="capitalize text-xs"
+                                  >
+                                    {app.status.replace(/_/g, " ")}
+                                  </Badge>
+                                  {app.screeningCompletedAt && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5 text-muted-foreground">
+                                      <Shield className="h-2.5 w-2.5" />
+                                      Screened
+                                    </Badge>
+                                  )}
+                                </div>
                               </td>
 
                               {/* Completeness */}
@@ -860,7 +1382,7 @@ export function ApplicationsTab({
                             <AnimatePresence>
                               {isExpanded && (
                                 <tr>
-                                  <td colSpan={7} className="p-0">
+                                  <td colSpan={8} className="p-0">
                                     <motion.div
                                       initial={{ opacity: 0, height: 0 }}
                                       animate={{ opacity: 1, height: "auto" }}
@@ -929,6 +1451,71 @@ export function ApplicationsTab({
                                             </p>
                                           </div>
                                         )}
+
+                                        {/* Screening Results Breakdown */}
+                                        {app.screeningResults && app.screeningResults.length > 0 && (() => {
+                                          const hardFails = app.screeningResults.filter(r => r.ruleType === "hard" && !r.passed);
+                                          const softFails = app.screeningResults.filter(r => r.ruleType === "soft" && !r.passed);
+                                          const allPassed = hardFails.length === 0 && softFails.length === 0;
+                                          return (
+                                            <div className="mt-4 pt-4 border-t border-border/50">
+                                              <div className="flex items-center gap-2 mb-3">
+                                                <Shield className="h-4 w-4 text-muted-foreground" />
+                                                <h5 className="font-display font-bold text-sm">Screening Results</h5>
+                                                {allPassed ? (
+                                                  <Badge variant="success" className="text-xs ml-auto">All Passed</Badge>
+                                                ) : (
+                                                  <Badge variant="destructive" className="text-xs ml-auto">
+                                                    {hardFails.length + softFails.length} {hardFails.length + softFails.length === 1 ? "issue" : "issues"}
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                              {!allPassed && (
+                                                <div className="space-y-2">
+                                                  {hardFails.map((r) => (
+                                                    <div key={r.ruleId} className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 px-3 py-2">
+                                                      <XCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                                                      <div className="min-w-0">
+                                                        <p className="text-xs font-medium text-red-700 dark:text-red-400">
+                                                          Hard Rule Failed: {r.ruleName}
+                                                        </p>
+                                                        <p className="text-xs text-red-600/80 dark:text-red-400/70 mt-0.5">
+                                                          {r.reason}
+                                                        </p>
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                  {softFails.map((r) => (
+                                                    <div key={r.ruleId} className="flex items-start gap-2 rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-900/50 px-3 py-2">
+                                                      <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                                                      <div className="min-w-0">
+                                                        <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400">
+                                                          Soft Flag: {r.ruleName}
+                                                        </p>
+                                                        <p className="text-xs text-yellow-600/80 dark:text-yellow-400/70 mt-0.5">
+                                                          {r.reason}
+                                                        </p>
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
+
+                                        {/* Internal Notes */}
+                                        <InternalNotesEditor
+                                          registrationId={app.id}
+                                          initialNotes={app.internalNotes || ""}
+                                          onSave={(notes) =>
+                                            updateNotes.mutate({
+                                              registrationId: app.id,
+                                              internalNotes: notes,
+                                            })
+                                          }
+                                          isSaving={updateNotes.isPending}
+                                        />
 
                                         {/* Quick actions in expanded view */}
                                         {statusActions.length > 0 && (
@@ -1009,6 +1596,91 @@ export function ApplicationsTab({
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Publish Screening Results Dialog */}
+      <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-display">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              Publish Screening Results
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 pt-2">
+                <p className="text-sm text-muted-foreground">
+                  This will send email notifications to{" "}
+                  <strong className="text-foreground">
+                    {unpublishedCount} applicant{unpublishedCount !== 1 ? "s" : ""}
+                  </strong>{" "}
+                  with their screening results:
+                </p>
+
+                <div className="grid grid-cols-5 gap-2">
+                  <div className="rounded-lg border border-green-500/30 bg-green-50 dark:bg-green-950/20 p-2.5 text-center">
+                    <p className="font-mono text-lg font-bold text-green-600 dark:text-green-400">
+                      {unpublishedAccepted}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Accepted</p>
+                  </div>
+                  <div className="rounded-lg border border-orange-500/30 bg-orange-50 dark:bg-orange-950/20 p-2.5 text-center">
+                    <p className="font-mono text-lg font-bold text-orange-600 dark:text-orange-400">
+                      {unpublishedWaitlisted}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Waitlisted</p>
+                  </div>
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/20 p-2.5 text-center">
+                    <p className="font-mono text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                      {unpublishedEligible}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Eligible</p>
+                  </div>
+                  <div className="rounded-lg border border-red-500/30 bg-red-50 dark:bg-red-950/20 p-2.5 text-center">
+                    <p className="font-mono text-lg font-bold text-red-600 dark:text-red-400">
+                      {unpublishedIneligible}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Ineligible</p>
+                  </div>
+                  <div className="rounded-lg border border-yellow-500/30 bg-yellow-50 dark:bg-yellow-950/20 p-2.5 text-center">
+                    <p className="font-mono text-lg font-bold text-yellow-600 dark:text-yellow-400">
+                      {unpublishedUnderReview}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Under Review</p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-orange-500/20 bg-orange-50 dark:bg-orange-950/20 p-3">
+                  <p className="text-sm text-orange-700 dark:text-orange-400">
+                    <strong>Warning:</strong> This action cannot be undone. Once
+                    published, applicants will receive an email and in-app
+                    notification.
+                  </p>
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="ghost"
+              onClick={() => setPublishDialogOpen(false)}
+              disabled={publishResults.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-gradient-to-r from-orange-500 to-red-500 text-white hover:from-orange-600 hover:to-red-600"
+              onClick={() => publishResults.mutate()}
+              disabled={publishResults.isPending || unpublishedCount === 0}
+            >
+              {publishResults.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Megaphone className="mr-2 h-4 w-4" />
+              )}
+              {publishResults.isPending ? "Publishing..." : "Publish Results"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

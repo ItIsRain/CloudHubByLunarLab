@@ -24,12 +24,14 @@ import {
   HelpCircle,
   ClipboardList,
   Shield,
+  Layers,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useHackathon } from "@/hooks/use-hackathons";
+import { useAuthStore } from "@/store/auth-store";
 import { toast } from "sonner";
 
 import { OverviewTab } from "./_components/overview-tab";
@@ -50,6 +52,7 @@ import { FAQTab } from "./_components/faq-tab";
 const ApplicationsTab = dynamic(() => import("./_components/applications-tab").then(m => m.ApplicationsTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 const ScreeningTab = dynamic(() => import("./_components/screening-tab").then(m => m.ScreeningTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 const FormBuilderTab = dynamic(() => import("./_components/form-builder-tab"), { loading: () => <div className="shimmer rounded-xl h-96" /> });
+const PhasesTab = dynamic(() => import("./_components/phases-tab").then(m => m.PhasesTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 
 const statusConfig: Record<
   string,
@@ -71,6 +74,7 @@ const tabs = [
   { value: "form-builder", label: "Form Builder", icon: FileText },
   { value: "applications", label: "Applications", icon: ClipboardList },
   { value: "screening", label: "Screening", icon: Shield },
+  { value: "phases", label: "Phases", icon: Layers },
   { value: "participants", label: "Participants", icon: UserCheck },
   { value: "teams", label: "Teams", icon: UsersRound },
   { value: "submissions", label: "Submissions", icon: Inbox },
@@ -91,6 +95,19 @@ function HackathonDashboardContent() {
   const hackathonId = params.hackathonId as string;
   const { data: hackathonData, isLoading } = useHackathon(hackathonId);
   const hackathon = hackathonData?.data;
+  const { user, isLoading: authLoading } = useAuthStore();
+
+  const isOwner = hackathon && user && hackathon.organizerId === user.id;
+  const isAdmin = user?.roles?.includes("admin");
+  const hasAccess = isOwner || isAdmin;
+
+  // Redirect unauthorized users
+  React.useEffect(() => {
+    if (!isLoading && !authLoading && hackathon && user && !hasAccess) {
+      toast.error("You don't have permission to manage this hackathon.");
+      router.replace("/dashboard/hackathons");
+    }
+  }, [isLoading, authLoading, hackathon, user, hasAccess, router]);
 
   const currentTab = searchParams.get("tab") || "overview";
 
@@ -104,7 +121,7 @@ function HackathonDashboardContent() {
     router.replace(url.pathname + url.search, { scroll: false });
   };
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <>
         <Navbar />
@@ -115,6 +132,37 @@ function HackathonDashboardContent() {
             <div className="shimmer rounded-xl h-12 w-full" />
             <div className="shimmer rounded-xl h-96 w-full" />
           </div>
+        </main>
+      </>
+    );
+  }
+
+  if (hackathon && !hasAccess) {
+    return (
+      <>
+        <Navbar />
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center py-20 text-center"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4">
+              <Shield className="h-8 w-8 text-destructive" />
+            </div>
+            <h2 className="font-display text-2xl font-bold mb-2">
+              Access Denied
+            </h2>
+            <p className="text-muted-foreground mb-6">
+              You don&apos;t have permission to manage this hackathon.
+            </p>
+            <Link href="/dashboard/hackathons">
+              <Button variant="outline">
+                <ArrowLeft className="h-4 w-4" />
+                Back to My Hackathons
+              </Button>
+            </Link>
+          </motion.div>
         </main>
       </>
     );
@@ -249,6 +297,9 @@ function HackathonDashboardContent() {
             </TabsContent>
             <TabsContent value="screening">
               <ScreeningTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="phases">
+              <PhasesTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
             <TabsContent value="participants">
               <ParticipantsTab hackathon={hackathon} hackathonId={hackathonId} />

@@ -92,14 +92,6 @@ const fieldTypeIconMap: Record<FormFieldType, React.ReactNode> = {
   paragraph: <Text className="h-3.5 w-3.5" />,
 };
 
-const mappingKeyOptions: { value: NonNullable<FormField["mappingKey"]>; label: string }[] = [
-  { value: "applicant_name", label: "Applicant Name" },
-  { value: "applicant_email", label: "Applicant Email" },
-  { value: "applicant_phone", label: "Applicant Phone" },
-  { value: "startup_name", label: "Startup Name" },
-  { value: "campus", label: "Campus" },
-  { value: "sector", label: "Sector" },
-];
 
 const allowedFileTypePresets = [
   { label: "PDF", value: "application/pdf" },
@@ -158,7 +150,6 @@ function getContactInfoFields(sectionId: string, startOrder: number): FormField[
       required: true,
       sectionId,
       order: startOrder,
-      mappingKey: "applicant_name",
     },
     {
       id: generateFieldId(),
@@ -168,7 +159,6 @@ function getContactInfoFields(sectionId: string, startOrder: number): FormField[
       required: true,
       sectionId,
       order: startOrder + 1,
-      mappingKey: "applicant_email",
     },
     {
       id: generateFieldId(),
@@ -178,7 +168,6 @@ function getContactInfoFields(sectionId: string, startOrder: number): FormField[
       required: false,
       sectionId,
       order: startOrder + 2,
-      mappingKey: "applicant_phone",
     },
   ];
 }
@@ -193,7 +182,6 @@ function getStartupDetailsFields(sectionId: string, startOrder: number): FormFie
       required: true,
       sectionId,
       order: startOrder,
-      mappingKey: "startup_name",
     },
     {
       id: generateFieldId(),
@@ -203,7 +191,6 @@ function getStartupDetailsFields(sectionId: string, startOrder: number): FormFie
       required: true,
       sectionId,
       order: startOrder + 1,
-      mappingKey: "sector",
       options: [
         { label: "FinTech", value: "fintech" },
         { label: "HealthTech", value: "healthtech" },
@@ -223,7 +210,6 @@ function getStartupDetailsFields(sectionId: string, startOrder: number): FormFie
       required: true,
       sectionId,
       order: startOrder + 2,
-      mappingKey: "campus",
       options: [
         { label: "Abu Dhabi", value: "abu_dhabi" },
         { label: "Al Ain", value: "al_ain" },
@@ -1007,11 +993,6 @@ function FieldEditor({
             Required
           </span>
         )}
-        {field.mappingKey && (
-          <span className="text-[10px] font-medium text-accent-foreground bg-accent/20 rounded px-1.5 py-0.5">
-            {field.mappingKey}
-          </span>
-        )}
         <div className="flex items-center gap-0.5 shrink-0">
           <button
             type="button"
@@ -1312,33 +1293,6 @@ function FieldEditor({
                   </div>
                 </div>
               )}
-
-              {/* Mapping key */}
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Mapping Key (for screening)
-                </label>
-                <select
-                  value={field.mappingKey || ""}
-                  onChange={(e) =>
-                    onUpdate({
-                      mappingKey: (e.target.value || undefined) as FormField["mappingKey"],
-                    })
-                  }
-                  className={selectClasses}
-                >
-                  <option value="">None</option>
-                  {mappingKeyOptions.map((mk) => (
-                    <option key={mk.value} value={mk.value}>
-                      {mk.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-muted-foreground">
-                  Maps this field to a screening attribute for automated
-                  eligibility checks.
-                </p>
-              </div>
 
               {/* Conditional logic */}
               <ConditionalLogicEditor

@@ -235,7 +235,8 @@ export interface FAQItem {
 }
 
 export interface HackathonScreeningConfig {
-  quotas?: { campus: string; quota: number }[];
+  quotaFieldId?: string;
+  quotas?: { campus: string; quota: number; rejected?: boolean; rejectionMessage?: string; softFlagged?: boolean; softFlagMessage?: string }[];
   detectDuplicates?: boolean;
 }
 
@@ -659,13 +660,13 @@ export interface FormField {
   validation?: FormFieldValidation;
   sectionId?: string;
   order: number;
+  /** @deprecated Used by competitions only. Hackathon form builder no longer sets this. */
+  mappingKey?: "applicant_name" | "applicant_email" | "applicant_phone" | "startup_name" | "sector" | "campus";
   conditionalOn?: {
     fieldId: string;
     operator: "equals" | "not_equals" | "contains" | "is_not_empty";
     value?: string;
   };
-  // Mapping hints for screening
-  mappingKey?: "applicant_name" | "applicant_email" | "applicant_phone" | "startup_name" | "campus" | "sector";
 }
 
 export interface FormSection {
@@ -920,4 +921,108 @@ export interface TeamSuggestion {
   sharedSkills: string[];
   complementarySkills: string[];
   sharedInterests: string[];
+}
+
+// ── Competition Phase Types ───────────────────────────────
+
+export type PhaseType = "bootcamp" | "final" | "custom";
+export type PhaseStatus = "draft" | "active" | "scoring" | "calibration" | "completed";
+export type PhaseReviewerStatus = "invited" | "accepted" | "declined";
+export type PhaseRecommendation = "recommend" | "do_not_recommend";
+export type PhaseDecisionType = "advance" | "do_not_advance" | "borderline";
+
+export type CriteriaEvaluationType = "stars" | "scale" | "rubric";
+
+export interface PhaseScoringCriteria {
+  id: string;
+  name: string;
+  description?: string;
+  evaluationType: CriteriaEvaluationType;
+  maxScore: number;
+  weight: number; // percentage weight of total grade (all criteria weights should sum to 100)
+}
+
+export interface CompetitionPhase {
+  id: string;
+  hackathonId: string;
+  name: string;
+  description?: string;
+  phaseType: PhaseType;
+  campusFilter?: string | null;
+  scoringCriteria: PhaseScoringCriteria[];
+  scoringScaleMax: number;
+  requireRecommendation: boolean;
+  reviewerCount: number;
+  isWeighted: boolean;
+  blindReview: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
+  location?: string | null;
+  sortOrder: number;
+  status: PhaseStatus;
+  createdAt: string;
+  updatedAt: string;
+  // Populated on fetch
+  reviewers?: PhaseReviewer[];
+  scoreCount?: number;
+  assignmentCount?: number;
+  applicantCount?: number;
+}
+
+export interface PhaseReviewer {
+  id: string;
+  phaseId: string;
+  userId: string;
+  name: string;
+  email: string;
+  status: PhaseReviewerStatus;
+  invitedAt: string;
+  acceptedAt?: string | null;
+}
+
+export interface ReviewerAssignment {
+  id: string;
+  phaseId: string;
+  reviewerId: string;
+  registrationId: string;
+  assignedAt: string;
+  // Populated on fetch
+  reviewer?: PhaseReviewer;
+  applicantName?: string;
+  applicantEmail?: string;
+}
+
+export interface PhaseScore {
+  id: string;
+  phaseId: string;
+  reviewerId: string;
+  registrationId: string;
+  criteriaScores: { criteriaId: string; score: number; feedback?: string }[];
+  totalScore: number;
+  recommendation?: PhaseRecommendation | null;
+  overallFeedback?: string | null;
+  flagged: boolean;
+  submittedAt: string;
+  updatedAt: string;
+  // Populated on fetch
+  reviewerName?: string;
+  applicantName?: string;
+}
+
+export interface PhaseDecision {
+  id: string;
+  phaseId: string;
+  registrationId: string;
+  decision: PhaseDecisionType;
+  recommendationCount: number;
+  totalReviewers: number;
+  averageScore?: number | null;
+  decidedBy?: string | null;
+  rationale?: string | null;
+  isOverride: boolean;
+  createdAt: string;
+  updatedAt: string;
+  // Populated on fetch
+  applicantName?: string;
+  applicantEmail?: string;
 }
