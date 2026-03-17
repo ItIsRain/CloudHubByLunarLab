@@ -93,7 +93,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Organizer sees all scores; reviewer sees only their own (blind review)
+    // Fetch phase config to check blind review setting
+    const { data: phaseConfig } = await supabase
+      .from("competition_phases")
+      .select("blind_review")
+      .eq("id", phaseId)
+      .single();
+
+    const isBlindReview = phaseConfig?.blind_review === true;
+
+    // Organizer sees all scores with full applicant info;
+    // reviewer sees only their own scores, and applicant identity
+    // is stripped when blind review is enabled on the phase.
     let query = supabase
       .from("phase_scores")
       .select(`
@@ -127,7 +138,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Failed to fetch scores" }, { status: 400 });
     }
 
-    return NextResponse.json({ data: scores || [] });
+    // Strip applicant identifying info for non-organizer reviewers during blind review
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let responseData: any[] = scores || [];
+    if (!isOrganizer && isBlindReview) {
+      responseData = responseData.map((score) => {
+        const reg = score.registration as Record<string, unknown> | null;
+        return {
+          ...score,
+          registration: reg
+            ? { id: reg.id, applicant: null }
+            : null,
+        };
+      });
+    }
+
+    return NextResponse.json({ data: responseData });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -301,6 +327,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       criteriaMap.set(c.id, c);
     }
 
+    // Reject score submissions when no scoring criteria are configured
+    if (criteriaMap.size === 0) {
+      return NextResponse.json(
+        { error: "This phase has no scoring criteria configured. Please configure criteria before submitting scores." },
+        { status: 400 }
+      );
+    }
+
+    // Validate all defined criteria are present in the submission
+    if (criteriaMap.size > 0) {
+      const submittedIds = new Set(criteriaScores.map((cs) => cs.criteriaId));
+      const missingCriteria = [...criteriaMap.values()].filter((c) => !submittedIds.has(c.id));
+      if (missingCriteria.length > 0) {
+        return NextResponse.json(
+          { error: `Missing scores for criteria: ${missingCriteria.map((c) => c.name).join(", ")}` },
+          { status: 400 }
+        );
+      }
+      // Reject unknown criteriaIds that don't match any defined criteria
+      const unknownIds = criteriaScores.filter((cs) => !criteriaMap.has(cs.criteriaId));
+      if (unknownIds.length > 0) {
+        return NextResponse.json(
+          { error: `Unknown criteria IDs: ${unknownIds.map((cs) => cs.criteriaId).join(", ")}` },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate criteria scores against per-criterion maxScore
     for (const cs of criteriaScores) {
       if (!cs.criteriaId || typeof cs.score !== "number") {
@@ -327,15 +381,37 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Validate recommendation value matches DB CHECK constraint
+    if (recommendation !== undefined && recommendation !== null) {
+      const validRecommendations = ["recommend", "do_not_recommend"];
+      if (!validRecommendations.includes(recommendation)) {
+        return NextResponse.json(
+          { error: `recommendation must be one of: ${validRecommendations.join(", ")}` },
+          { status: 400 }
+        );
+      }
+    }
+
     // Calculate total_score as weighted percentage (0-100)
     const totalScore = calculateTotalScore(
       criteriaScores,
-      phaseData.scoring_criteria || []
+      phaseData.scoring_criteria || [],
+      phaseData.is_weighted ?? false
     );
 
     const now = new Date().toISOString();
 
+    // Check if a score already exists (for submitted_at preservation on re-submission)
+    const { data: existingScore } = await supabase
+      .from("phase_scores")
+      .select("id, submitted_at")
+      .eq("phase_id", phaseId)
+      .eq("reviewer_id", auth.userId)
+      .eq("registration_id", registrationId)
+      .maybeSingle();
+
     // Upsert using the unique constraint (phase_id, reviewer_id, registration_id)
+    // Preserve original submitted_at on re-submission; only update updated_at
     const { data: score, error } = await supabase
       .from("phase_scores")
       .upsert(
@@ -348,7 +424,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           recommendation: recommendation || null,
           overall_feedback: overallFeedback || null,
           flagged: flagged ?? false,
-          submitted_at: now,
+          submitted_at: existingScore?.submitted_at ?? now,
           updated_at: now,
         },
         { onConflict: "phase_id,reviewer_id,registration_id" }
@@ -380,7 +456,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
  */
 function calculateTotalScore(
   criteriaScores: CriteriaScore[],
-  scoringCriteria: ScoringCriteria[]
+  scoringCriteria: ScoringCriteria[],
+  isWeighted: boolean
 ): number {
   if (criteriaScores.length === 0) return 0;
 
@@ -389,14 +466,28 @@ function calculateTotalScore(
     criteriaMap.set(c.id, c);
   }
 
-  let totalScore = 0;
-  for (const cs of criteriaScores) {
-    const def = criteriaMap.get(cs.criteriaId);
-    if (def && def.maxScore > 0) {
-      // Normalized score (0-1) * weight (percentage)
-      totalScore += (cs.score / def.maxScore) * (def.weight || 0);
+  if (isWeighted) {
+    // Weighted: totalScore = Σ (score / maxScore * weight)
+    let totalScore = 0;
+    for (const cs of criteriaScores) {
+      const def = criteriaMap.get(cs.criteriaId);
+      if (def && def.maxScore > 0) {
+        totalScore += (cs.score / def.maxScore) * (def.weight || 0);
+      }
     }
+    return Math.round(totalScore * 100) / 100;
+  } else {
+    // Non-weighted: simple average of normalized scores scaled to 100
+    let sum = 0;
+    let count = 0;
+    for (const cs of criteriaScores) {
+      const def = criteriaMap.get(cs.criteriaId);
+      if (def && def.maxScore > 0) {
+        sum += cs.score / def.maxScore;
+        count++;
+      }
+    }
+    if (count === 0) return 0;
+    return Math.round((sum / count) * 100 * 100) / 100;
   }
-
-  return Math.round(totalScore * 100) / 100;
 }

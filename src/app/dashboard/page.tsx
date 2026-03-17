@@ -184,12 +184,12 @@ function PlanUsageCard() {
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const hasRole = useAuthStore((s) => s.hasRole);
-  const firstName = user?.name?.split(" ")[0] || "there";
-  const canCreate = hasRole("organizer") || hasRole("admin");
+  const [mounted, setMounted] = React.useState(false);
+  const firstName = mounted ? (user?.name?.split(" ")[0] || "there") : "there";
+  const canCreate = mounted && (hasRole("organizer") || hasRole("admin"));
   const quickActions = canCreate
     ? [...organizerActions, ...commonActions]
     : commonActions;
-  const [mounted, setMounted] = React.useState(false);
   const [greeting, setGreeting] = React.useState("Hello");
   const [dateStr, setDateStr] = React.useState("");
 

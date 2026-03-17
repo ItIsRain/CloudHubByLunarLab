@@ -284,7 +284,7 @@ export default function HackathonDetailPage() {
                   ) : (hackathon.status === "published" || hackathon.status === "registration-open") && (
                     isRejected ? (
                       <Badge variant="destructive" className="w-full justify-center whitespace-nowrap px-4 py-2 text-sm">
-                        Application {registrationStatus === "ineligible" ? "Ineligible" : "Rejected"}
+                        Application {registrationStatus === "ineligible" ? "Ineligible" : registrationStatus === "declined" ? "Declined" : "Rejected"}
                       </Badge>
                     ) : isRegistered ? (
                       <div className="flex items-center gap-2">

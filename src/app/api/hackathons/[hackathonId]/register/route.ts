@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canRegister, getPhaseMessage } from "@/lib/hackathon-phases";
 import { fireWebhooks } from "@/lib/webhook-delivery";
@@ -117,18 +118,25 @@ export async function POST(
       .eq("id", hackathonId)
       .single();
 
-    const hasFormFields = Array.isArray(hackathonInfo?.registration_fields) &&
+    if (!hackathonInfo) {
+      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+    }
+
+    const hasFormFields = Array.isArray(hackathonInfo.registration_fields) &&
       hackathonInfo.registration_fields.length > 0;
     let initialStatus = hasFormFields && Object.keys(formData).length > 0
       ? "pending"
       : "confirmed";
 
     // Check if applicant selected a full quota option → auto-waitlist
+    // ONLY enforce quotas at registration time when mode is "registration".
+    // In "screening" mode, everyone registers as "pending" and screening decides.
     const screeningConfig = (hackathonInfo?.screening_config as Record<string, unknown>) || {};
+    const quotaEnforcement = (screeningConfig.quotaEnforcement as string) || "screening";
     const quotaFieldId = screeningConfig.quotaFieldId as string | undefined;
     const quotaEntries = (screeningConfig.quotas as { campus: string; quota: number; rejected?: boolean }[]) || [];
 
-    if (quotaFieldId && Object.keys(formData).length > 0) {
+    if (quotaEnforcement === "registration" && quotaFieldId && Object.keys(formData).length > 0) {
       const selectedValue = String(formData[quotaFieldId] || "");
       if (selectedValue) {
         const quotaEntry = quotaEntries.find((q) => q.campus === selectedValue);
@@ -211,7 +219,7 @@ export async function POST(
         hackathonName: hackOrg.name,
         registrationId: data?.id,
         userId: user.id,
-        status: "confirmed",
+        status: data?.status || initialStatus,
       });
     }
 
@@ -272,7 +280,17 @@ export async function DELETE(
       return NextResponse.json({ error: "Registration already cancelled" }, { status: 409 });
     }
 
-    const wasAccepted = currentReg.status === "accepted" || currentReg.status === "approved";
+    // Block cancellation from terminal rejection statuses — prevents
+    // rejected→cancelled→re-register bypass of the rejection decision.
+    const nonCancellableStatuses = ["rejected", "ineligible", "declined"];
+    if (nonCancellableStatuses.includes(currentReg.status)) {
+      return NextResponse.json(
+        { error: `Cannot cancel a registration with status "${currentReg.status}"` },
+        { status: 400 }
+      );
+    }
+
+    const wasAccepted = currentReg.status === "accepted" || currentReg.status === "approved" || currentReg.status === "confirmed";
 
     // Soft-delete: mark as cancelled
     const { error } = await supabase
@@ -300,17 +318,25 @@ export async function DELETE(
     }
 
     // Automatic waitlist backfill: if the departing user was accepted,
-    // promote the next waitlisted person from the same campus (FCFS by created_at)
+    // promote the next waitlisted person from the same campus (FCFS by created_at).
+    // Only auto-promote in "registration" enforcement mode; in "screening" mode
+    // the slot stays open for the next screening run to handle.
     let promotedUser: { id: string; email: string; name: string } | null = null;
+    const cancelScreeningConfig = (hackInfo?.screening_config as Record<string, unknown>) || {};
+    const cancelQuotaEnforcement = (cancelScreeningConfig.quotaEnforcement as string) || "screening";
 
-    if (wasAccepted && hackInfo) {
+    if (wasAccepted && hackInfo && cancelQuotaEnforcement === "registration") {
+      // Use admin client for backfill: the server client's RLS policies prevent
+      // User A from updating User B's registration row. The admin client bypasses
+      // both RLS and the restrict_registration_self_update trigger.
+      const adminClient = getSupabaseAdminClient();
       const screeningConfig = (hackInfo.screening_config as Record<string, unknown>) || {};
       const quotaFieldId = screeningConfig.quotaFieldId as string | undefined;
       const leavingFormData = (currentReg.form_data as Record<string, unknown>) || {};
       const leavingCampus = quotaFieldId ? String(leavingFormData[quotaFieldId] || "") : "";
 
       // Find waitlisted registrations for this hackathon, ordered by created_at (FCFS)
-      const { data: waitlisted } = await supabase
+      const { data: waitlisted } = await adminClient
         .from("hackathon_registrations")
         .select("id, user_id, form_data, created_at")
         .eq("hackathon_id", hackathonId)
@@ -327,15 +353,15 @@ export async function DELETE(
           : waitlisted[0];
 
         if (nextInLine) {
-          // Promote to accepted
-          const { error: promoteError } = await supabase
+          // Promote to accepted via admin client (bypasses RLS)
+          const { error: promoteError } = await adminClient
             .from("hackathon_registrations")
             .update({ status: "accepted" })
             .eq("id", nextInLine.id);
 
           if (!promoteError) {
             // Fetch promoted user's profile for email
-            const { data: profile } = await supabase
+            const { data: profile } = await adminClient
               .from("profiles")
               .select("email, full_name, display_name")
               .eq("id", nextInLine.user_id)
@@ -354,13 +380,24 @@ export async function DELETE(
               }).catch(() => { /* non-critical */ });
 
               // Create in-app notification for the promoted user
-              await supabase.from("notifications").insert({
+              adminClient.from("notifications").insert({
                 user_id: nextInLine.user_id,
-                type: "hackathon_update",
+                type: "hackathon-update",
                 title: `You've been accepted to ${hackInfo.name}!`,
                 message: "A spot opened up and you've been moved from the waitlist. You're now an accepted participant!",
                 link: `/hackathons/${hackathonId}`,
               }).then(() => {}, () => {});
+
+              // Fire webhook for the waitlist promotion
+              fireWebhooks(hackInfo.organizer_id as string, "hackathon.participant.status_changed", {
+                hackathonId,
+                hackathonName: hackInfo.name,
+                registrationId: nextInLine.id,
+                userId: nextInLine.user_id,
+                previousStatus: "waitlisted",
+                newStatus: "accepted",
+                source: "waitlist_backfill",
+              });
             }
           }
         }

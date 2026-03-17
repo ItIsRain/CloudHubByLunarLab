@@ -146,6 +146,44 @@ export async function POST(
       );
     }
 
+    // Limit total rules to prevent abuse
+    if (rules.length > 100) {
+      return NextResponse.json(
+        { error: "Maximum 100 screening rules allowed" },
+        { status: 400 }
+      );
+    }
+
+    // Validate each rule structure
+    const validOperators = new Set([
+      "equals", "not_equals", "contains", "not_contains",
+      "greater_than", "less_than", "greater_equal", "less_equal",
+      "in", "not_in", "is_empty", "is_not_empty", "is_true", "is_false",
+    ]);
+    const validRuleTypes = new Set(["hard", "soft"]);
+
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      if (!r || typeof r !== "object") {
+        return NextResponse.json({ error: `Rule at index ${i} is invalid` }, { status: 400 });
+      }
+      if (!r.id || typeof r.id !== "string") {
+        return NextResponse.json({ error: `Rule at index ${i} is missing a valid id` }, { status: 400 });
+      }
+      if (!r.name || typeof r.name !== "string" || r.name.length > 200) {
+        return NextResponse.json({ error: `Rule at index ${i} has invalid name (max 200 chars)` }, { status: 400 });
+      }
+      if (!r.fieldId || typeof r.fieldId !== "string") {
+        return NextResponse.json({ error: `Rule at index ${i} is missing fieldId` }, { status: 400 });
+      }
+      if (!validOperators.has(r.operator)) {
+        return NextResponse.json({ error: `Rule at index ${i} has invalid operator "${r.operator}"` }, { status: 400 });
+      }
+      if (!validRuleTypes.has(r.ruleType)) {
+        return NextResponse.json({ error: `Rule at index ${i} has invalid ruleType "${r.ruleType}"` }, { status: 400 });
+      }
+    }
+
     const { data, error } = await supabase
       .from("hackathons")
       .update({ screening_rules: rules })
@@ -232,6 +270,34 @@ export async function PATCH(
         { error: "config must be an object" },
         { status: 400 }
       );
+    }
+
+    if (config.quotaEnforcement && !["screening", "registration"].includes(config.quotaEnforcement)) {
+      return NextResponse.json(
+        { error: "quotaEnforcement must be 'screening' or 'registration'" },
+        { status: 400 }
+      );
+    }
+
+    // Validate quotas array
+    if (config.quotas && Array.isArray(config.quotas)) {
+      if (config.quotas.length > 200) {
+        return NextResponse.json({ error: "Maximum 200 quota entries allowed" }, { status: 400 });
+      }
+      const seenCampuses = new Set<string>();
+      for (let i = 0; i < config.quotas.length; i++) {
+        const q = config.quotas[i] as Record<string, unknown>;
+        if (!q.campus || typeof q.campus !== "string") {
+          return NextResponse.json({ error: `Quota at index ${i} is missing campus name` }, { status: 400 });
+        }
+        if (typeof q.quota !== "number" || q.quota < 0 || !Number.isInteger(q.quota)) {
+          return NextResponse.json({ error: `Quota at index ${i} must have a non-negative integer quota` }, { status: 400 });
+        }
+        if (seenCampuses.has(q.campus)) {
+          return NextResponse.json({ error: `Duplicate campus "${q.campus}" at index ${i}` }, { status: 400 });
+        }
+        seenCampuses.add(q.campus);
+      }
     }
 
     const { data, error } = await supabase

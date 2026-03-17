@@ -141,16 +141,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Verify phase belongs to this hackathon
+    // Verify phase belongs to this hackathon and check phase status
     const { data: phase } = await supabase
       .from("competition_phases")
-      .select("id")
+      .select("id, status, reviewer_count, require_recommendation, scoring_scale_max")
       .eq("id", phaseId)
       .eq("hackathon_id", hackathonId)
       .maybeSingle();
 
     if (!phase) {
       return NextResponse.json({ error: "Phase not found in this hackathon" }, { status: 404 });
+    }
+
+    const phaseConfig = phase as {
+      id: string;
+      status: string;
+      reviewer_count: number | null;
+      require_recommendation: boolean | null;
+      scoring_scale_max: number | null;
+    };
+
+    // Only allow decisions when phase is in scoring or completed status
+    const phaseStatus = phaseConfig.status;
+    if (phaseStatus !== "scoring" && phaseStatus !== "completed") {
+      return NextResponse.json(
+        { error: `Cannot run decisions when phase status is '${phaseStatus}'. Phase must be 'scoring' or 'completed'.` },
+        { status: 400 }
+      );
     }
 
     let body: { registrationId?: string; decision?: string; rationale?: string } = {};
@@ -206,7 +223,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const scoreRows = (scores || []) as ScoreRow[];
       const recommendCount = scoreRows.filter(
-        (s) => s.recommendation === "recommend" || s.recommendation === "advance"
+        (s) => s.recommendation === "recommend"
       ).length;
       const totalReviewers = scoreRows.length;
       const avgScore =
@@ -275,6 +292,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 3. Apply majority rule for each registration
     const now = new Date().toISOString();
+    const useRecommendations = phaseConfig.require_recommendation === true;
     const decisionsToUpsert: {
       phase_id: string;
       registration_id: string;
@@ -294,10 +312,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     for (const [regId, scores] of scoresByRegistration) {
       const totalReviewers = scores.length;
-      const recommendCount = scores.filter(
-        (s) => s.recommendation === "recommend" || s.recommendation === "advance"
-      ).length;
-
       const avgScore =
         totalReviewers > 0
           ? Math.round(
@@ -307,36 +321,52 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             ) / 100
           : 0;
 
-      // Majority rule logic
       let computedDecision: string;
       let decisionRationale: string;
+      let recommendCount: number;
 
-      if (recommendCount === totalReviewers) {
-        // All recommend -> advance
-        computedDecision = "advance";
-        decisionRationale = `All ${totalReviewers} reviewer(s) recommended advancement`;
-        advancedCount++;
-      } else if (recommendCount > totalReviewers / 2) {
-        // Majority recommend -> advance
-        computedDecision = "advance";
-        decisionRationale = `Majority (${recommendCount}/${totalReviewers}) recommended advancement`;
-        advancedCount++;
-      } else if (recommendCount === 1 && totalReviewers > 1) {
-        // 1 out of N recommend -> borderline
-        computedDecision = "borderline";
-        decisionRationale = `Only ${recommendCount}/${totalReviewers} recommended advancement`;
-        borderlineCount++;
-      } else if (recommendCount === 0) {
-        // 0 recommend -> do_not_advance
-        computedDecision = "do_not_advance";
-        decisionRationale = `No reviewers (0/${totalReviewers}) recommended advancement`;
-        doNotAdvanceCount++;
+      if (useRecommendations) {
+        // Recommendation-based majority rule
+        recommendCount = scores.filter(
+          (s) => s.recommendation === "recommend"
+        ).length;
+
+        if (recommendCount === totalReviewers) {
+          computedDecision = "advance";
+          decisionRationale = `All ${totalReviewers} reviewer(s) recommended advancement`;
+        } else if (recommendCount > totalReviewers / 2) {
+          computedDecision = "advance";
+          decisionRationale = `Majority (${recommendCount}/${totalReviewers}) recommended advancement`;
+        } else if (recommendCount === 1 && totalReviewers > 1) {
+          computedDecision = "borderline";
+          decisionRationale = `Only ${recommendCount}/${totalReviewers} recommended advancement`;
+        } else if (recommendCount === 0) {
+          computedDecision = "do_not_advance";
+          decisionRationale = `No reviewers (0/${totalReviewers}) recommended advancement`;
+        } else {
+          computedDecision = "borderline";
+          decisionRationale = `Split decision (${recommendCount}/${totalReviewers}) recommended advancement`;
+        }
       } else {
-        // Exactly half (even split) -> borderline
-        computedDecision = "borderline";
-        decisionRationale = `Split decision (${recommendCount}/${totalReviewers}) recommended advancement`;
-        borderlineCount++;
+        // Score-based decision when recommendations are not required.
+        // Thresholds: >=70% → advance, 40-70% → borderline, <40% → do_not_advance
+        recommendCount = 0;
+
+        if (avgScore >= 70) {
+          computedDecision = "advance";
+          decisionRationale = `Average score ${avgScore}/100 meets advancement threshold (≥70)`;
+        } else if (avgScore >= 40) {
+          computedDecision = "borderline";
+          decisionRationale = `Average score ${avgScore}/100 is in borderline range (40-70)`;
+        } else {
+          computedDecision = "do_not_advance";
+          decisionRationale = `Average score ${avgScore}/100 below threshold (<40)`;
+        }
       }
+
+      if (computedDecision === "advance") advancedCount++;
+      else if (computedDecision === "borderline") borderlineCount++;
+      else doNotAdvanceCount++;
 
       decisionsToUpsert.push({
         phase_id: phaseId,
@@ -352,23 +382,62 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    // 4. Bulk upsert decisions
-    if (decisionsToUpsert.length > 0) {
+    // 4. Bulk upsert decisions — but preserve manual overrides
+    // First, fetch existing overrides so we don't clobber them
+    const registrationIds = decisionsToUpsert.map((d) => d.registration_id);
+    const { data: existingOverrides } = await supabase
+      .from("phase_decisions")
+      .select("registration_id")
+      .eq("phase_id", phaseId)
+      .eq("is_override", true)
+      .in("registration_id", registrationIds);
+
+    const overrideSet = new Set((existingOverrides || []).map((o) => o.registration_id));
+    const filteredDecisions = decisionsToUpsert.filter(
+      (d) => !overrideSet.has(d.registration_id)
+    );
+
+    if (filteredDecisions.length > 0) {
       const { error: upsertError } = await supabase
         .from("phase_decisions")
-        .upsert(decisionsToUpsert, { onConflict: "phase_id,registration_id" });
+        .upsert(filteredDecisions, { onConflict: "phase_id,registration_id" });
 
       if (upsertError) {
         return NextResponse.json({ error: "Failed to save decisions" }, { status: 400 });
       }
     }
 
+    // Recount from only the decisions that were actually written (excludes overrides)
+    let computedAdvanced = 0;
+    let computedBorderline = 0;
+    let computedDoNotAdvance = 0;
+    for (const d of filteredDecisions) {
+      if (d.decision === "advance") computedAdvanced++;
+      else if (d.decision === "borderline") computedBorderline++;
+      else if (d.decision === "do_not_advance") computedDoNotAdvance++;
+    }
+
+    // Quorum warning: flag registrations where fewer reviewers scored than expected
+    const expectedReviewers = phaseConfig.reviewer_count || 0;
+    let belowQuorum = 0;
+    if (expectedReviewers > 0) {
+      for (const [, scores] of scoresByRegistration) {
+        if (scores.length < expectedReviewers) belowQuorum++;
+      }
+    }
+
     return NextResponse.json({
       data: {
         total: decisionsToUpsert.length,
-        advanced: advancedCount,
-        borderline: borderlineCount,
-        doNotAdvance: doNotAdvanceCount,
+        computed: filteredDecisions.length,
+        overridesPreserved: overrideSet.size,
+        advanced: computedAdvanced,
+        borderline: computedBorderline,
+        doNotAdvance: computedDoNotAdvance,
+        ...(belowQuorum > 0 ? {
+          warning: `${belowQuorum} registration(s) had fewer than ${expectedReviewers} reviewer scores. Decisions may be based on incomplete data.`,
+          belowQuorum,
+        } : {}),
       },
     });
   } catch (err) {
@@ -417,16 +486,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Verify phase belongs to this hackathon
+    // Verify phase belongs to this hackathon and check phase status
     const { data: phase } = await supabase
       .from("competition_phases")
-      .select("id")
+      .select("id, status")
       .eq("id", phaseId)
       .eq("hackathon_id", hackathonId)
       .maybeSingle();
 
     if (!phase) {
       return NextResponse.json({ error: "Phase not found in this hackathon" }, { status: 404 });
+    }
+
+    // Overrides allowed during scoring, completed, or calibration phases
+    const patchPhaseStatus = (phase as { status: string }).status;
+    if (patchPhaseStatus !== "scoring" && patchPhaseStatus !== "completed" && patchPhaseStatus !== "calibration") {
+      return NextResponse.json(
+        { error: `Cannot override decisions when phase status is '${patchPhaseStatus}'.` },
+        { status: 400 }
+      );
     }
 
     const body = await request.json();

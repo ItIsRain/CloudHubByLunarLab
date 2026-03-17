@@ -123,11 +123,25 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
   }
 
-  // Validate status transitions
+  // Validate status transitions — enforce directional constraints
   if (updateData.status) {
     const validStatuses = ["draft", "published", "closed", "archived"];
     if (!validStatuses.includes(updateData.status as string)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+    // Directional transition map: which statuses can each status transition FROM
+    const formTransitions: Record<string, string[]> = {
+      draft: ["published", "closed"],      // can revert from published/closed
+      published: ["draft"],                 // can only publish from draft
+      closed: ["published"],                // can only close from published
+      archived: ["closed"],                 // can only archive from closed
+    };
+    const allowedFrom = formTransitions[updateData.status as string];
+    if (allowedFrom && !allowedFrom.includes(existing.status as string)) {
+      return NextResponse.json(
+        { error: `Cannot transition form from "${existing.status}" to "${updateData.status}". Allowed from: ${allowedFrom.join(", ")}` },
+        { status: 400 }
+      );
     }
   }
 

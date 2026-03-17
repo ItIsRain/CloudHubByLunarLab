@@ -9,7 +9,8 @@ const API_SECRET = process.env.CLOUDINARY_API_SECRET!;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 const ALLOWED_TYPES = new Set([
-  "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+  "image/jpeg", "image/png", "image/gif", "image/webp",
+  // SVG intentionally excluded — can contain executable JavaScript
   "application/pdf",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -20,6 +21,15 @@ const ALLOWED_TYPES = new Set([
   "text/plain", "text/csv",
   "application/zip",
   "video/mp4", "video/webm",
+]);
+
+const ALLOWED_FOLDERS = new Set([
+  "cloudhub/uploads",
+  "cloudhub/applications",
+  "cloudhub/avatars",
+  "cloudhub/events",
+  "cloudhub/hackathons",
+  "cloudhub/blog",
 ]);
 
 export async function POST(request: NextRequest) {
@@ -38,8 +48,11 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
-    const folder = (formData.get("folder") as string) || "cloudhub/uploads";
+    const rawFolder = (formData.get("folder") as string) || "cloudhub/uploads";
     const context = (formData.get("context") as string) || "";
+
+    // Validate folder against allowlist to prevent path traversal
+    const folder = ALLOWED_FOLDERS.has(rawFolder) ? rawFolder : "cloudhub/uploads";
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });

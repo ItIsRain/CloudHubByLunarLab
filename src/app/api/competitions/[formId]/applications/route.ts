@@ -236,6 +236,23 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: insertErr.message }, { status: 500 });
   }
 
+  // Post-insert recheck for max_applications to handle race conditions.
+  // If two concurrent requests both passed the pre-check, the second insert
+  // may have pushed us over the limit. Roll back the losing insert.
+  if (form.max_applications && !isDraft) {
+    const { count: postCount } = await admin
+      .from("competition_applications")
+      .select("id", { count: "exact", head: true })
+      .eq("form_id", formId)
+      .neq("status", "draft");
+
+    if ((postCount || 0) > form.max_applications) {
+      // We exceeded the limit — delete this application and return error
+      await admin.from("competition_applications").delete().eq("id", application.id);
+      return NextResponse.json({ error: "Maximum number of applications reached" }, { status: 400 });
+    }
+  }
+
   // If submitted (not draft), run screening + duplicate detection in background
   if (!isDraft) {
     void runPostSubmitScreening(admin, formId, application.id as string, applicationData, fields);
@@ -316,7 +333,7 @@ async function runPostSubmitScreening(
         .select("id, applicant_email, applicant_phone, startup_name, data")
         .eq("form_id", formId)
         .neq("id", applicationId)
-        .neq("status", "draft");
+        .not("status", "in", '("draft","withdrawn")');
 
       if (otherApps && otherApps.length > 0) {
         const duplicates = detectDuplicates(

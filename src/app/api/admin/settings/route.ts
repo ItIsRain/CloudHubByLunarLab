@@ -108,6 +108,19 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // Allowlist of valid setting keys to prevent arbitrary data injection
+    const ALLOWED_KEYS = new Set([
+      "branding", "theme", "features", "integrations", "notifications",
+      "email", "billing", "registration", "moderation", "analytics",
+      "seo", "social", "maintenance", "limits", "security",
+    ]);
+    if (!ALLOWED_KEYS.has(key)) {
+      return NextResponse.json(
+        { error: `Unknown setting key "${key}". Allowed keys: ${[...ALLOWED_KEYS].join(", ")}` },
+        { status: 400 }
+      );
+    }
+
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return NextResponse.json(
         { error: "Missing or invalid 'value' (must be a JSON object)" },

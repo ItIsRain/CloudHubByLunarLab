@@ -14,6 +14,13 @@ import {
   XCircle,
   MinusCircle,
   AlertTriangle,
+  Trophy,
+  Zap,
+  Star,
+  Plus,
+  Search,
+  Check,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +43,7 @@ import type {
   PhaseScore,
   PhaseDecision,
   PhaseDecisionType,
+  AwardCategory,
 } from "@/lib/types";
 import {
   usePhaseReviewers,
@@ -49,6 +57,12 @@ import {
   useRunDecisions,
   useOverrideDecision,
 } from "@/hooks/use-phases";
+import {
+  usePhaseFinalists,
+  useAutoSelectFinalists,
+  useManualSelectFinalists,
+} from "@/hooks/use-phase-scoring";
+import { useHackathonParticipants } from "@/hooks/use-hackathon-participants";
 
 // ── Shared Styles ──────────────────────────────────────────
 
@@ -719,6 +733,558 @@ export function DecisionsSection({
               </AnimatePresence>
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════
+// FinalistsSection — Cross-phase finalist selection
+// ═════════════════════════════════════════════════════════════
+
+interface FinalistsSectionProps {
+  hackathonId: string;
+  phase: CompetitionPhase;
+}
+
+export function FinalistsSection({
+  hackathonId,
+  phase,
+}: FinalistsSectionProps) {
+  const { data: finalistsData, isLoading } = usePhaseFinalists(
+    hackathonId,
+    phase.id
+  );
+  const autoSelect = useAutoSelectFinalists();
+  const manualSelect = useManualSelectFinalists();
+
+  const finalists = finalistsData?.data ?? [];
+  const hasSourcePhases =
+    phase.sourcePhaseIds && phase.sourcePhaseIds.length > 0;
+
+  const [topN, setTopN] = React.useState(15);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [manualOpen, setManualOpen] = React.useState(false);
+
+  const handleAutoSelect = async () => {
+    try {
+      await autoSelect.mutateAsync({
+        hackathonId,
+        phaseId: phase.id,
+        topN,
+      });
+      toast.success(`Top ${topN} finalists selected successfully.`);
+      setConfirmOpen(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to auto-select finalists"
+      );
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Trophy className="h-4 w-4 text-primary" />
+        <h4 className="font-display font-semibold text-base">Finalists</h4>
+        <Badge variant="muted" className="ml-auto">
+          {finalists.length} finalist{finalists.length !== 1 ? "s" : ""}
+        </Badge>
+      </div>
+
+      {/* Selection Controls */}
+      <div className="flex flex-wrap items-center gap-3">
+        {hasSourcePhases && (
+          <>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Select top</label>
+              <Input
+                type="number"
+                min={1}
+                max={500}
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value) || 15)}
+                className="w-20"
+              />
+              <span className="text-sm text-muted-foreground">
+                from {phase.sourcePhaseIds!.length} source phase
+                {phase.sourcePhaseIds!.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOpen(true)}
+              disabled={autoSelect.isPending}
+            >
+              {autoSelect.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Zap className="h-4 w-4 mr-2" />
+              )}
+              Auto-Select
+            </Button>
+          </>
+        )}
+        <Button
+          variant="outline"
+          onClick={() => setManualOpen(true)}
+        >
+          <UserCheck className="h-4 w-4 mr-2" />
+          Manual Select
+        </Button>
+      </div>
+
+      {!hasSourcePhases && finalists.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border p-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            Configure source phases to enable auto-select, or use Manual Select
+            to pick applicants directly.
+          </p>
+        </div>
+      )}
+
+      {/* Auto-Select Confirm Dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Auto-Select Top {topN} Finalists?</DialogTitle>
+            <DialogDescription>
+              This will aggregate scores from all source phases, rank
+              applicants by average score, and select the top {topN}.
+              Existing finalists will be replaced.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 rounded-lg bg-warning/10 p-3 text-sm text-warning">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Existing finalists for this phase will be overwritten.
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAutoSelect}
+              disabled={autoSelect.isPending}
+            >
+              {autoSelect.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              )}
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Select Dialog */}
+      <ManualFinalistDialog
+        open={manualOpen}
+        onOpenChange={setManualOpen}
+        hackathonId={hackathonId}
+        phase={phase}
+        existingFinalistRegIds={new Set(finalists.map((f) => f.registrationId))}
+        manualSelect={manualSelect}
+      />
+
+      {/* Finalists Table */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : finalists.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">
+          No finalists selected yet.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="pb-2 font-medium text-muted-foreground">Rank</th>
+                <th className="pb-2 font-medium text-muted-foreground">Applicant</th>
+                <th className="pb-2 font-medium text-muted-foreground">Source</th>
+                <th className="pb-2 font-medium text-muted-foreground">Score</th>
+                <th className="pb-2 font-medium text-muted-foreground">Award</th>
+              </tr>
+            </thead>
+            <tbody>
+              <AnimatePresence>
+                {finalists.map((f) => (
+                  <motion.tr
+                    key={f.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="border-b last:border-0"
+                  >
+                    <td className="py-2.5 pr-4 font-mono font-bold text-muted-foreground">
+                      #{f.rank || "-"}
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <div>
+                        <p className="font-medium">{f.applicantName}</p>
+                        <p className="text-xs text-muted-foreground">{f.applicantEmail}</p>
+                      </div>
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      {f.sourcePhaseName ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          {f.sourceCampus || f.sourcePhaseName}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-4 font-mono">
+                      {f.sourceScore != null ? f.sourceScore.toFixed(2) : "-"}
+                    </td>
+                    <td className="py-2.5">
+                      {f.awardLabel ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <Star className="h-3 w-3" />
+                          {f.awardLabel}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════
+// ManualFinalistDialog — Checkbox table of applicants
+// ═════════════════════════════════════════════════════════════
+
+interface ManualFinalistDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  hackathonId: string;
+  phase: CompetitionPhase;
+  existingFinalistRegIds: Set<string>;
+  manualSelect: ReturnType<typeof useManualSelectFinalists>;
+}
+
+function ManualFinalistDialog({
+  open,
+  onOpenChange,
+  hackathonId,
+  phase,
+  existingFinalistRegIds,
+  manualSelect,
+}: ManualFinalistDialogProps) {
+  const { data: participantsData, isLoading } = useHackathonParticipants(
+    open ? hackathonId : undefined
+  );
+  const participants = participantsData?.data ?? [];
+
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = React.useState("");
+
+  // Reset selection when dialog opens
+  React.useEffect(() => {
+    if (open) {
+      setSelected(new Set());
+      setSearchQuery("");
+    }
+  }, [open]);
+
+  // Filter: show only accepted/confirmed/eligible participants, exclude already-finalists
+  const eligible = React.useMemo(() => {
+    const validStatuses = new Set(["accepted", "confirmed", "eligible", "pending"]);
+    return participants.filter((p) => {
+      if (!validStatuses.has(p.status)) return false;
+      if (existingFinalistRegIds.has(p.id)) return false;
+      return true;
+    });
+  }, [participants, existingFinalistRegIds]);
+
+  const filtered = React.useMemo(() => {
+    if (!searchQuery.trim()) return eligible;
+    const q = searchQuery.toLowerCase();
+    return eligible.filter((p) => {
+      const name = (p.user?.name || "").toLowerCase();
+      const email = (p.user?.email || "").toLowerCase();
+      return name.includes(q) || email.includes(q);
+    });
+  }, [eligible, searchQuery]);
+
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((p) => p.id)));
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (selected.size === 0) {
+      toast.error("Select at least one applicant.");
+      return;
+    }
+
+    const selections = Array.from(selected).map((regId, idx) => ({
+      registrationId: regId,
+      rank: (existingFinalistRegIds.size) + idx + 1,
+    }));
+
+    try {
+      await manualSelect.mutateAsync({
+        hackathonId,
+        phaseId: phase.id,
+        selections,
+      });
+      toast.success(`${selections.length} finalist${selections.length !== 1 ? "s" : ""} added.`);
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to add finalists"
+      );
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Manual Finalist Selection</DialogTitle>
+          <DialogDescription>
+            Select applicants to add as finalists for{" "}
+            <span className="font-medium text-foreground">{phase.name}</span>.
+            Already-selected finalists are excluded.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        {/* Selection stats */}
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-muted-foreground">
+            {eligible.length} eligible applicant{eligible.length !== 1 ? "s" : ""}
+          </span>
+          {selected.size > 0 && (
+            <Badge variant="default" className="gap-1">
+              <Check className="h-3 w-3" />
+              {selected.size} selected
+            </Badge>
+          )}
+        </div>
+
+        {/* Applicant Table */}
+        <div className="flex-1 overflow-y-auto min-h-0 border rounded-lg">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+              <Users className="h-8 w-8 text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">
+                {eligible.length === 0
+                  ? "No eligible applicants found. Make sure participants are accepted or confirmed."
+                  : "No applicants match your search."}
+              </p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-background border-b">
+                <tr className="text-left">
+                  <th className="p-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && selected.size === filtered.length}
+                      onChange={toggleAll}
+                      className="rounded border-border"
+                    />
+                  </th>
+                  <th className="p-3 font-medium text-muted-foreground">Applicant</th>
+                  <th className="p-3 font-medium text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((p) => {
+                  const isSelected = selected.has(p.id);
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => toggleOne(p.id)}
+                      className={cn(
+                        "border-b last:border-0 cursor-pointer transition-colors",
+                        isSelected
+                          ? "bg-primary/5"
+                          : "hover:bg-muted/30"
+                      )}
+                    >
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleOne(p.id)}
+                          className="rounded border-border"
+                        />
+                      </td>
+                      <td className="p-3">
+                        <div>
+                          <p className="font-medium">
+                            {p.user?.name || "Unknown"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {p.user?.email || ""}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <Badge variant="outline" className="text-[10px] capitalize">
+                          {p.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={manualSelect.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={manualSelect.isPending || selected.size === 0}
+          >
+            {manualSelect.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <UserCheck className="h-4 w-4 mr-2" />
+            )}
+            Add {selected.size || ""} Finalist{selected.size !== 1 ? "s" : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════
+// AwardCategoriesEditor — Manage award categories for a phase
+// ═════════════════════════════════════════════════════════════
+
+interface AwardCategoriesEditorProps {
+  categories: AwardCategory[];
+  onChange: (categories: AwardCategory[]) => void;
+}
+
+export function AwardCategoriesEditor({
+  categories,
+  onChange,
+}: AwardCategoriesEditorProps) {
+  const handleAdd = () => {
+    onChange([
+      ...categories,
+      { id: crypto.randomUUID(), name: "", type: "sector", description: "" },
+    ]);
+  };
+
+  const handleRemove = (id: string) => {
+    onChange(categories.filter((c) => c.id !== id));
+  };
+
+  const handleUpdate = (id: string, field: keyof AwardCategory, value: string) => {
+    onChange(categories.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Trophy className="h-4 w-4 text-primary" />
+          <h4 className="font-display font-semibold text-sm">Award Categories</h4>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={handleAdd}>
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Add Category
+        </Button>
+      </div>
+
+      {categories.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-3">
+          No award categories configured. Add categories like &quot;Health Sector
+          Winner&quot; or &quot;Innovation Award&quot;.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {categories.map((cat) => (
+            <Card key={cat.id} className="p-3">
+              <div className="flex gap-3 items-start">
+                <div className="flex-1 space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Category name"
+                      value={cat.name}
+                      onChange={(e) => handleUpdate(cat.id, "name", e.target.value)}
+                      className="flex-1"
+                    />
+                    <select
+                      className={cn(selectClasses, "w-32")}
+                      value={cat.type}
+                      onChange={(e) => handleUpdate(cat.id, "type", e.target.value)}
+                    >
+                      <option value="sector">Sector</option>
+                      <option value="special">Special</option>
+                    </select>
+                  </div>
+                  <Input
+                    placeholder="Description (optional)"
+                    value={cat.description || ""}
+                    onChange={(e) => handleUpdate(cat.id, "description", e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive shrink-0"
+                  onClick={() => handleRemove(cat.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
     </div>

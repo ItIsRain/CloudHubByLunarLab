@@ -98,9 +98,22 @@ export function checkRateLimit(
 
 /**
  * Extract the client IP from a NextRequest.
+ *
+ * Prefer x-real-ip (set by trusted reverse proxy). If unavailable, use the
+ * LAST value in x-forwarded-for — the rightmost entry is the one appended by
+ * the trusted proxy and cannot be spoofed by the client (the client can only
+ * prepend values to the left).
  */
 export function getClientIp(request: Request): string {
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+
   const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return request.headers.get("x-real-ip") || "unknown";
+  if (forwarded) {
+    const parts = forwarded.split(",").map((s) => s.trim()).filter(Boolean);
+    // Use the rightmost entry (last proxy-appended value)
+    return parts[parts.length - 1] || "unknown";
+  }
+
+  return "unknown";
 }

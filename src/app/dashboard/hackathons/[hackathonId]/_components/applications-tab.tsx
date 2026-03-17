@@ -109,6 +109,7 @@ const statusBadgeConfig: Record<
   accepted: { variant: "success" },
   waitlisted: { variant: "warning" },
   rejected: { variant: "destructive" },
+  declined: { variant: "destructive" },
   cancelled: { variant: "muted" },
 };
 
@@ -1599,7 +1600,7 @@ export function ApplicationsTab({
 
       {/* Publish Screening Results Dialog */}
       <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-display">
               <AlertTriangle className="h-5 w-5 text-orange-500" />

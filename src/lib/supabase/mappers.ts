@@ -954,6 +954,8 @@ export function dbRowToCompetitionPhase(row: Record<string, unknown>): Competiti
     location: (row.location as string) || null,
     sortOrder: (row.sort_order as number) || 0,
     status: (row.status as PhaseStatus) || "draft",
+    awardCategories: (row.award_categories as CompetitionPhase["awardCategories"]) || [],
+    sourcePhaseIds: (row.source_phase_ids as string[]) || [],
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -1022,5 +1024,7 @@ export function phaseFormToDbRow(phase: Partial<CompetitionPhase>): Record<strin
   if (phase.location !== undefined) row.location = phase.location;
   if (phase.sortOrder !== undefined) row.sort_order = phase.sortOrder;
   if (phase.status !== undefined) row.status = phase.status;
+  if (phase.awardCategories !== undefined) row.award_categories = phase.awardCategories;
+  if (phase.sourcePhaseIds !== undefined) row.source_phase_ids = phase.sourcePhaseIds;
   return row;
 }

@@ -295,6 +295,49 @@ export async function PATCH(
       return NextResponse.json({ error: "judging_end must be after judging_start" }, { status: 400 });
     }
 
+    // Validate registration_fields (if provided)
+    if (updates.registration_fields !== undefined) {
+      if (!Array.isArray(updates.registration_fields)) {
+        return NextResponse.json({ error: "registration_fields must be an array" }, { status: 400 });
+      }
+      if ((updates.registration_fields as unknown[]).length > 200) {
+        return NextResponse.json({ error: "Maximum 200 registration fields allowed" }, { status: 400 });
+      }
+      const validFieldTypes = new Set([
+        "text", "textarea", "email", "phone", "url", "number", "date",
+        "select", "multi_select", "radio", "checkbox", "file", "heading", "paragraph",
+      ]);
+      const fieldIds = new Set<string>();
+      for (const f of updates.registration_fields as Record<string, unknown>[]) {
+        if (!f || typeof f !== "object") {
+          return NextResponse.json({ error: "Each registration field must be an object" }, { status: 400 });
+        }
+        if (!f.id || typeof f.id !== "string") {
+          return NextResponse.json({ error: "Each registration field must have a string id" }, { status: 400 });
+        }
+        if (fieldIds.has(f.id as string)) {
+          return NextResponse.json({ error: `Duplicate field id "${f.id}"` }, { status: 400 });
+        }
+        fieldIds.add(f.id as string);
+        if (!f.type || !validFieldTypes.has(f.type as string)) {
+          return NextResponse.json({ error: `Invalid field type "${f.type}" for field "${f.id}"` }, { status: 400 });
+        }
+        if (f.label && typeof f.label === "string" && (f.label as string).length > 500) {
+          return NextResponse.json({ error: `Field label too long for "${f.id}" (max 500 chars)` }, { status: 400 });
+        }
+      }
+    }
+
+    // Validate registration_sections (if provided)
+    if (updates.registration_sections !== undefined) {
+      if (!Array.isArray(updates.registration_sections)) {
+        return NextResponse.json({ error: "registration_sections must be an array" }, { status: 400 });
+      }
+      if ((updates.registration_sections as unknown[]).length > 50) {
+        return NextResponse.json({ error: "Maximum 50 registration sections allowed" }, { status: 400 });
+      }
+    }
+
     // Prevent publishing without required dates
     const targetStatus = updates.status as string | undefined;
     if (targetStatus && targetStatus !== "draft") {

@@ -42,9 +42,6 @@ interface QuotaStatus {
   quotas: Record<string, number>;
   fills: Record<string, number>;
   rejected: Record<string, boolean>;
-  rejectionMessages: Record<string, string>;
-  softFlagged: Record<string, boolean>;
-  softFlagMessages: Record<string, string>;
   quotaEnforcement?: string;
 }
 
@@ -432,15 +429,14 @@ function RegistrationField({
         >
           <option value="">{field.placeholder || "Select..."}</option>
           {(field.options || []).map((opt) => {
-            const showFills = isQuotaField && quotaStatus?.quotaEnforcement !== "screening";
+            const showFills = isQuotaField && quotaStatus?.quotaEnforcement === "registration";
             const optRejected = isQuotaField && quotaStatus?.rejected?.[opt.value];
-            const optSoftFlagged = isQuotaField && quotaStatus?.softFlagged?.[opt.value];
             const optFull = showFills && !optRejected &&
               quotaStatus &&
               quotaStatus.quotas[opt.value] !== undefined &&
               (quotaStatus.fills[opt.value] || 0) >= quotaStatus.quotas[opt.value];
             const disabled = !!optRejected;
-            const suffix = optRejected ? " (Not applicable)" : optFull ? " (Waitlisted)" : optSoftFlagged ? " (Review required)" : "";
+            const suffix = optRejected ? " (Not applicable)" : optFull ? " (Waitlisted)" : "";
             return (
               <option key={opt.value} value={opt.value} disabled={disabled}>
                 {opt.label}{suffix}
@@ -487,15 +483,13 @@ function RegistrationField({
       {field.type === "radio" && (
         <div className="space-y-2">
           {(field.options || []).map((opt) => {
-            const showFills = isQuotaField && quotaStatus?.quotaEnforcement !== "screening";
+            const showFills = isQuotaField && quotaStatus?.quotaEnforcement === "registration";
             const optRejected = isQuotaField && quotaStatus?.rejected?.[opt.value];
-            const optSoftFlagged = isQuotaField && quotaStatus?.softFlagged?.[opt.value];
             const optFull = showFills && !optRejected &&
               quotaStatus &&
               quotaStatus.quotas[opt.value] !== undefined &&
               (quotaStatus.fills[opt.value] || 0) >= quotaStatus.quotas[opt.value];
             const disabled = !!optRejected;
-            const rejectionMsg = optRejected && quotaStatus?.rejectionMessages?.[opt.value];
 
             return (
               <label
@@ -506,8 +500,7 @@ function RegistrationField({
                     ? "opacity-60 cursor-not-allowed border-border bg-muted/30"
                     : "cursor-pointer hover:border-primary/30",
                   value === opt.value && !disabled && "border-primary bg-primary/5",
-                  optFull && !disabled && "border-yellow-300 dark:border-yellow-800",
-                  optSoftFlagged && !disabled && "border-yellow-300 dark:border-yellow-800"
+                  optFull && !disabled && "border-yellow-300 dark:border-yellow-800"
                 )}
               >
                 <input
@@ -523,9 +516,6 @@ function RegistrationField({
                   <span className={cn("text-sm", disabled && "text-muted-foreground")}>
                     {opt.label}
                   </span>
-                  {optRejected && rejectionMsg && (
-                    <p className="text-[11px] text-destructive mt-0.5">{rejectionMsg}</p>
-                  )}
                   {optFull && value === opt.value && (
                     <p className="text-[11px] text-yellow-600 dark:text-yellow-400 mt-0.5">
                       This option is at capacity — you will be placed on the waitlist
@@ -535,11 +525,6 @@ function RegistrationField({
                 {optRejected && (
                   <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">
                     Not applicable
-                  </Badge>
-                )}
-                {optSoftFlagged && !optRejected && !optFull && (
-                  <Badge variant="warning" className="text-[10px] px-1.5 py-0 shrink-0">
-                    Review required
                   </Badge>
                 )}
                 {optFull && (

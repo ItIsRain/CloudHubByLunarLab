@@ -42,14 +42,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!hackathon) {
       return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
     }
-    if (hackathon.organizer_id !== auth.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     // Verify phase belongs to this hackathon
     const { data: phase } = await supabase
       .from("competition_phases")
-      .select("id")
+      .select("id, blind_review")
       .eq("id", phaseId)
       .eq("hackathon_id", hackathonId)
       .maybeSingle();
@@ -58,8 +54,33 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Phase not found in this hackathon" }, { status: 404 });
     }
 
-    // Join with profiles for applicant info and phase_reviewers for reviewer info
-    const { data: assignments, error } = await supabase
+    const isOrganizer = hackathon.organizer_id === auth.userId;
+    const url = new URL(request.url);
+    const isMineQuery = url.searchParams.get("mine") === "true";
+
+    // Reviewers can fetch their own assignments with ?mine=true
+    if (!isOrganizer && !isMineQuery) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!isOrganizer) {
+      // Verify the caller is an accepted reviewer
+      const { data: reviewerRecord } = await supabase
+        .from("phase_reviewers")
+        .select("id, status")
+        .eq("phase_id", phaseId)
+        .eq("user_id", auth.userId)
+        .maybeSingle();
+
+      if (!reviewerRecord || reviewerRecord.status !== "accepted") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
+    const isBlindReview = phase.blind_review === true;
+
+    // Build query — reviewer sees only their own assignments
+    let query = supabase
       .from("reviewer_assignments")
       .select(`
         id,
@@ -85,11 +106,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .eq("phase_id", phaseId)
       .order("assigned_at", { ascending: false });
 
+    if (!isOrganizer) {
+      query = query.eq("reviewer_id", auth.userId);
+    }
+
+    const { data: assignments, error } = await query;
+
     if (error) {
       return NextResponse.json({ error: "Failed to fetch assignments" }, { status: 400 });
     }
 
-    return NextResponse.json({ data: assignments || [] });
+    // Strip applicant identity for blind review (reviewer only)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let responseData: any[] = assignments || [];
+    if (!isOrganizer && isBlindReview) {
+      responseData = responseData.map((a: Record<string, unknown>) => ({
+        ...a,
+        registration: a.registration
+          ? { ...(a.registration as Record<string, unknown>), applicant: null, form_data: null }
+          : null,
+      }));
+    }
+
+    return NextResponse.json({ data: responseData });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -146,6 +185,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!phase) {
       return NextResponse.json({ error: "Phase not found" }, { status: 404 });
+    }
+
+    // Only allow assignments when phase is active or scoring
+    const assignPhaseStatus = (phase as { status: string }).status;
+    if (assignPhaseStatus !== "active" && assignPhaseStatus !== "scoring") {
+      return NextResponse.json(
+        { error: `Cannot create assignments when phase status is '${assignPhaseStatus}'. Phase must be 'active' or 'scoring'.` },
+        { status: 400 }
+      );
     }
 
     const reviewerCount = (phase.reviewer_count as number) || 2;

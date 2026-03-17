@@ -10,6 +10,9 @@ import {
   Star,
   ArrowRight,
   BarChart3,
+  Layers,
+  CheckCircle2,
+  Mail,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,15 +20,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
 import { useHackathons } from "@/hooks/use-hackathons";
+import { useMyReviewerPhases } from "@/hooks/use-phase-scoring";
 import { useAuthStore } from "@/store/auth-store";
 
 export default function JudgeDashboardPage() {
   const user = useAuthStore((state) => state.user);
   const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons();
+  const { data: reviewerPhasesData, isLoading: phasesLoading } = useMyReviewerPhases();
   const hackathons = hackathonsData?.data || [];
   const assignedHackathons = hackathons.filter(
     (h) => h.status === "judging" || h.status === "submission"
   );
+  const reviewerPhases = reviewerPhasesData?.data || [];
+  const acceptedPhases = reviewerPhases.filter((p) => p.reviewerStatus === "accepted");
+  const invitedPhases = reviewerPhases.filter((p) => p.reviewerStatus === "invited");
 
   const stats = [
     { label: "Assigned Hackathons", value: assignedHackathons.length, icon: ClipboardCheck, color: "text-blue-500" },
@@ -122,6 +130,125 @@ export default function JudgeDashboardPage() {
               </CardContent>
             </Card>
           </motion.div>
+
+          {/* Phase Reviewer Assignments */}
+          {(acceptedPhases.length > 0 || invitedPhases.length > 0) && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="mt-8"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-display text-xl font-bold flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-primary" />
+                  Your Review Phases
+                </h2>
+                <Badge variant="default" dot pulse>
+                  {acceptedPhases.length} active
+                </Badge>
+              </div>
+
+              {/* Pending Invitations */}
+              {invitedPhases.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  {invitedPhases.map((p) => (
+                    <motion.div
+                      key={p.reviewerId}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                    >
+                      <Card className="border-primary/20 bg-primary/5">
+                        <CardContent className="p-4 flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                              <Mail className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">
+                                {p.hackathonName} — {p.phaseName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Pending invitation
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant="warning">Invited</Badge>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
+              {/* Active Phases */}
+              <div className="grid gap-4 md:grid-cols-2">
+                {acceptedPhases.map((p, i) => {
+                  const canScore = p.phaseStatus === "scoring" || p.phaseStatus === "active";
+                  return (
+                    <motion.div
+                      key={p.reviewerId}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 + i * 0.05 }}
+                    >
+                      <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5">
+                        <CardContent className="p-6">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">
+                                {p.hackathonName}
+                              </p>
+                              <h3 className="font-display text-lg font-bold group-hover:text-primary transition-colors truncate">
+                                {p.phaseName}
+                              </h3>
+                              {p.campusFilter && (
+                                <Badge variant="outline" className="mt-1 text-[10px]">
+                                  {p.campusFilter}
+                                </Badge>
+                              )}
+                            </div>
+                            <Badge
+                              variant={canScore ? "success" : "secondary"}
+                              dot={canScore}
+                            >
+                              {p.phaseStatus}
+                            </Badge>
+                          </div>
+                          {p.hackathonTagline && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                              {p.hackathonTagline}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                            <span className="text-xs text-green-600 dark:text-green-400 font-medium">Accepted</span>
+                          </div>
+                          <div className="mt-4">
+                            <Button
+                              asChild={canScore}
+                              size="sm"
+                              className="w-full"
+                              disabled={!canScore}
+                            >
+                              {canScore ? (
+                                <Link href={`/judge/${p.hackathonId}/phases/${p.phaseId}/quick-score`}>
+                                  Start Scoring
+                                  <ArrowRight className="ml-2 h-4 w-4" />
+                                </Link>
+                              ) : (
+                                <>Scoring Not Open</>
+                              )}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
 
           {/* Assigned Hackathons */}
           <motion.div

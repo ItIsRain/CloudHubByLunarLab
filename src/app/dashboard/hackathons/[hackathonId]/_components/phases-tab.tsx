@@ -42,6 +42,7 @@ import type {
   CriteriaEvaluationType,
   PhaseType,
   PhaseStatus,
+  AwardCategory,
 } from "@/lib/types";
 import {
   usePhases,
@@ -54,6 +55,8 @@ import {
   AssignmentsSection,
   ScoringOverview,
   DecisionsSection,
+  FinalistsSection,
+  AwardCategoriesEditor,
 } from "./phase-sections";
 
 // ── Style Constants ────────────────────────────────────────
@@ -219,6 +222,7 @@ export function PhasesTab({ hackathon, hackathonId }: PhasesTabProps) {
         hackathonId={hackathonId}
         hackathon={hackathon}
         editingPhase={editingPhase}
+        phases={phases}
       />
     </div>
   );
@@ -465,6 +469,14 @@ function PhaseCard({ hackathonId, hackathon, phase, onEdit }: PhaseCardProps) {
                 <>
                   <hr className="border-border" />
                   <DecisionsSection hackathonId={hackathonId} phase={phase} />
+                </>
+              )}
+
+              {/* Finalists (for phases with source phases — cross-phase selection) */}
+              {(phase.sourcePhaseIds && phase.sourcePhaseIds.length > 0) && (
+                <>
+                  <hr className="border-border" />
+                  <FinalistsSection hackathonId={hackathonId} phase={phase} />
                 </>
               )}
             </div>
@@ -817,6 +829,7 @@ interface CreatePhaseDialogProps {
   hackathonId: string;
   hackathon: Hackathon;
   editingPhase: CompetitionPhase | null;
+  phases: CompetitionPhase[];
 }
 
 interface PhaseFormState {
@@ -827,6 +840,8 @@ interface PhaseFormState {
   startDate: string;
   endDate: string;
   location: string;
+  awardCategories: AwardCategory[];
+  sourcePhaseIds: string[];
 }
 
 const defaultFormState: PhaseFormState = {
@@ -837,6 +852,8 @@ const defaultFormState: PhaseFormState = {
   startDate: "",
   endDate: "",
   location: "",
+  awardCategories: [],
+  sourcePhaseIds: [],
 };
 
 function toDatetimeLocal(iso: string | null | undefined): string {
@@ -857,6 +874,7 @@ function CreatePhaseDialog({
   hackathonId,
   hackathon,
   editingPhase,
+  phases,
 }: CreatePhaseDialogProps) {
   const createPhase = useCreatePhase(hackathonId);
   const updatePhase = useUpdatePhase(hackathonId, editingPhase?.id ?? "");
@@ -879,6 +897,8 @@ function CreatePhaseDialog({
         startDate: toDatetimeLocal(editingPhase.startDate),
         endDate: toDatetimeLocal(editingPhase.endDate),
         location: editingPhase.location ?? "",
+        awardCategories: editingPhase.awardCategories ?? [],
+        sourcePhaseIds: editingPhase.sourcePhaseIds ?? [],
       });
     } else if (open) {
       setForm(defaultFormState);
@@ -906,6 +926,8 @@ function CreatePhaseDialog({
       startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
       endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
       location: form.location.trim() || null,
+      awardCategories: form.awardCategories.length > 0 ? form.awardCategories : undefined,
+      sourcePhaseIds: form.sourcePhaseIds.length > 0 ? form.sourcePhaseIds : undefined,
     };
 
     try {
@@ -1037,6 +1059,65 @@ function CreatePhaseDialog({
               onChange={(e) => updateField("location", e.target.value)}
             />
           </div>
+
+          {/* Source Phases (for finalist selection) */}
+          {phases.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Source Phases</label>
+              <p className="text-xs text-muted-foreground">
+                Select phases whose scores will feed into finalist selection for this phase.
+              </p>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto rounded-lg border border-border/50 p-2">
+                {phases
+                  .filter((p) => !editingPhase || p.id !== editingPhase.id)
+                  .map((p) => {
+                    const checked = form.sourcePhaseIds.includes(p.id);
+                    return (
+                      <label
+                        key={p.id}
+                        className={cn(
+                          "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors",
+                          checked
+                            ? "bg-primary/10 text-primary"
+                            : "hover:bg-muted/50"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setForm((prev) => ({
+                              ...prev,
+                              sourcePhaseIds: checked
+                                ? prev.sourcePhaseIds.filter((id) => id !== p.id)
+                                : [...prev.sourcePhaseIds, p.id],
+                            }));
+                          }}
+                          className="rounded border-border"
+                        />
+                        <span className="truncate">{p.name}</span>
+                        {p.campusFilter && (
+                          <Badge variant="outline" className="text-[10px] ml-auto shrink-0">
+                            {p.campusFilter}
+                          </Badge>
+                        )}
+                      </label>
+                    );
+                  })}
+                {phases.filter((p) => !editingPhase || p.id !== editingPhase.id).length === 0 && (
+                  <p className="text-xs text-muted-foreground py-2 text-center">
+                    No other phases available
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Award Categories */}
+          <AwardCategoriesEditor
+            categories={form.awardCategories}
+            onChange={(cats) => updateField("awardCategories", cats)}
+          />
 
           <p className="text-xs text-muted-foreground">
             After creating the phase, you can configure judging criteria,

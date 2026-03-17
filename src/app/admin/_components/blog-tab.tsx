@@ -39,6 +39,7 @@ import { fetchJson } from "@/lib/fetch-json";
 import { toast } from "sonner";
 import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { ImageUpload } from "@/components/forms/image-upload";
+import { SafeHtml } from "@/components/ui/safe-html";
 import { BlogAnalytics } from "./blog-analytics";
 
 // ---------------------------------------------------------------------------
@@ -371,11 +372,9 @@ function BlogPostEditor({
                       ))}
                   </div>
                 )}
-                <div
+                <SafeHtml
+                  content={form.content || "<p>No content yet...</p>"}
                   className="prose prose-sm dark:prose-invert max-w-none [&_img]:rounded-lg [&_img]:mx-auto [&_img]:my-4 [&_iframe]:rounded-lg [&_iframe]:mx-auto [&_iframe]:my-4"
-                  dangerouslySetInnerHTML={{
-                    __html: form.content || "<p>No content yet...</p>",
-                  }}
                 />
               </CardContent>
             </Card>

@@ -226,30 +226,48 @@ function evaluateOperator(
   actual: unknown,
   expected: unknown
 ): boolean {
+  // Normalize null/undefined to empty string for consistent string comparisons
+  const actualStr = String(actual ?? "").toLowerCase().trim();
+  const expectedStr = String(expected ?? "").toLowerCase().trim();
+
   switch (operator) {
     case "equals":
-      return String(actual).toLowerCase().trim() === String(expected).toLowerCase().trim();
+      return actualStr === expectedStr;
     case "not_equals":
-      return String(actual ?? "").toLowerCase().trim() !== String(expected).toLowerCase().trim();
+      return actualStr !== expectedStr;
     case "contains":
-      return String(actual).toLowerCase().includes(String(expected).toLowerCase());
+      return actualStr.includes(expectedStr);
     case "not_contains":
-      return !String(actual).toLowerCase().includes(String(expected).toLowerCase());
-    case "greater_than":
-      return Number(actual) > Number(expected);
-    case "less_than":
-      return Number(actual) < Number(expected);
-    case "greater_equal":
-      return Number(actual) >= Number(expected);
-    case "less_equal":
-      return Number(actual) <= Number(expected);
+      return !actualStr.includes(expectedStr);
+    case "greater_than": {
+      // Guard: non-numeric values should NOT trigger numeric comparisons.
+      // Number(null)===0, Number([])===0, Number("  ")===0 all cause false matches.
+      if (!isNumericValue(actual)) return false;
+      const numA = Number(actual), numE = Number(expected);
+      return !isNaN(numA) && !isNaN(numE) && numA > numE;
+    }
+    case "less_than": {
+      if (!isNumericValue(actual)) return false;
+      const numA = Number(actual), numE = Number(expected);
+      return !isNaN(numA) && !isNaN(numE) && numA < numE;
+    }
+    case "greater_equal": {
+      if (!isNumericValue(actual)) return false;
+      const numA = Number(actual), numE = Number(expected);
+      return !isNaN(numA) && !isNaN(numE) && numA >= numE;
+    }
+    case "less_equal": {
+      if (!isNumericValue(actual)) return false;
+      const numA = Number(actual), numE = Number(expected);
+      return !isNaN(numA) && !isNaN(numE) && numA <= numE;
+    }
     case "in": {
       const list = Array.isArray(expected) ? expected : [expected];
       const lowerList = list.map((v) => String(v).toLowerCase().trim());
       if (Array.isArray(actual)) {
         return actual.some((v) => lowerList.includes(String(v).toLowerCase().trim()));
       }
-      return lowerList.includes(String(actual).toLowerCase().trim());
+      return lowerList.includes(actualStr);
     }
     case "not_in": {
       const list2 = Array.isArray(expected) ? expected : [expected];
@@ -257,16 +275,23 @@ function evaluateOperator(
       if (Array.isArray(actual)) {
         return !actual.some((v) => lowerList2.includes(String(v).toLowerCase().trim()));
       }
-      return !lowerList2.includes(String(actual).toLowerCase().trim());
+      return !lowerList2.includes(actualStr);
     }
     case "is_empty":
-      return !actual || (typeof actual === "string" && actual.trim() === "") || (Array.isArray(actual) && actual.length === 0);
+      return actual === null || actual === undefined || (typeof actual === "string" && actual.trim() === "") || (Array.isArray(actual) && actual.length === 0);
     case "is_not_empty":
-      return !!actual && !(typeof actual === "string" && actual.trim() === "") && !(Array.isArray(actual) && actual.length === 0);
-    case "is_true":
-      return actual === true || actual === "true" || actual === "yes" || actual === "Yes";
-    case "is_false":
-      return actual === false || actual === "false" || actual === "no" || actual === "No" || !actual;
+      return actual !== null && actual !== undefined && !(typeof actual === "string" && actual.trim() === "") && !(Array.isArray(actual) && actual.length === 0);
+    case "is_true": {
+      if (actual === true) return true;
+      const trueStr = typeof actual === "string" ? actual.toLowerCase().trim() : "";
+      return trueStr === "true" || trueStr === "yes";
+    }
+    case "is_false": {
+      // Only match explicit boolean false values — not falsy values like 0 or ""
+      if (actual === false) return true;
+      const falseStr = typeof actual === "string" ? actual.toLowerCase().trim() : "";
+      return falseStr === "false" || falseStr === "no";
+    }
     default:
       return false;
   }
@@ -291,6 +316,20 @@ function describeCondition(operator: ScreeningOperator, value: unknown): string 
     case "is_false": return "is false/no";
     default: return String(value);
   }
+}
+
+/**
+ * Check if a value is genuinely numeric (not null, undefined, empty, whitespace,
+ * or an array — all of which JavaScript's Number() silently coerces to 0).
+ */
+function isNumericValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "number") return true;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed !== "" && !isNaN(Number(trimmed));
+  }
+  return false; // arrays, objects, booleans — not numeric
 }
 
 function isFieldFilled(value: unknown): boolean {

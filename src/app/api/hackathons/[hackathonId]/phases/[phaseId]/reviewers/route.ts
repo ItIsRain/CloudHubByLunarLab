@@ -3,6 +3,8 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
+import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 type RouteParams = { params: Promise<{ hackathonId: string; phaseId: string }> };
 
@@ -101,10 +103,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller is the hackathon organizer
+    // Rate limit: 20 reviewer invites per organizer per 15 minutes
+    const rl = checkRateLimit(auth.userId, { namespace: "phase-reviewer-invite", limit: 20, windowMs: 15 * 60 * 1000 });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many invitations sent. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
+
+    // Verify caller is the hackathon organizer and get hackathon details
     const { data: hackathon } = await supabase
       .from("hackathons")
-      .select("organizer_id")
+      .select("organizer_id, name")
       .eq("id", hackathonId)
       .single();
 
@@ -118,7 +129,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Verify phase belongs to this hackathon
     const { data: phase } = await supabase
       .from("competition_phases")
-      .select("id")
+      .select("id, name")
       .eq("id", phaseId)
       .eq("hackathon_id", hackathonId)
       .maybeSingle();
@@ -134,19 +145,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       email: string;
     };
 
-    if (!userId || !name || !email) {
+    if (!name || !email) {
       return NextResponse.json(
-        { error: "userId, name, and email are required" },
+        { error: "name and email are required" },
         { status: 400 }
       );
     }
 
-    if (typeof userId !== "string" || !UUID_RE.test(userId)) {
-      return NextResponse.json(
-        { error: "userId must be a valid UUID" },
-        { status: 400 }
-      );
-    }
+    // userId is optional — generate a placeholder if not provided (reviewer may not have an account yet)
+    const resolvedUserId = userId && UUID_RE.test(userId) ? userId : crypto.randomUUID();
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -161,30 +168,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Check for duplicates (unique phase_id + user_id)
-    const { data: existing } = await supabase
+    // Check for duplicates by email within this phase (more reliable than user_id for external invitees)
+    const { data: existingByEmail } = await supabase
       .from("phase_reviewers")
       .select("id")
       .eq("phase_id", phaseId)
-      .eq("user_id", userId)
+      .eq("email", email.toLowerCase().trim())
       .maybeSingle();
 
-    if (existing) {
+    if (existingByEmail) {
       return NextResponse.json(
-        { error: "This user is already a reviewer for this phase" },
+        { error: "A reviewer with this email is already invited to this phase" },
         { status: 409 }
       );
     }
+
+    const invitationToken = crypto.randomUUID();
 
     const { data: reviewer, error } = await supabase
       .from("phase_reviewers")
       .insert({
         phase_id: phaseId,
-        user_id: userId,
+        user_id: resolvedUserId,
         name,
         email: email.toLowerCase().trim(),
         status: "invited",
         invited_at: new Date().toISOString(),
+        invitation_token: invitationToken,
       })
       .select("*")
       .single();
@@ -192,6 +202,43 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (error) {
       return NextResponse.json({ error: "Failed to add reviewer" }, { status: 400 });
     }
+
+    // Send invitation email (fire-and-forget)
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const acceptUrl = `${siteUrl}/judge/${hackathonId}/phases/${phaseId}/quick-score?reviewerToken=${invitationToken}`;
+    const hackathonName = hackathon.name as string;
+    const phaseName = phase.name as string;
+
+    sendEmail({
+      to: email.toLowerCase().trim(),
+      subject: `You're Invited to Review — ${hackathonName} (${phaseName})`,
+      html: emailWrapper(`
+        <div style="padding:28px 32px;">
+          <p style="color:#e4e4e7;font-size:15px;line-height:1.7;margin:0 0 16px;">
+            Hi <strong style="color:#ffffff;">${escapeHtml(name)}</strong>,
+          </p>
+          <p style="color:#e4e4e7;font-size:15px;line-height:1.7;margin:0 0 16px;">
+            You've been invited to serve as a reviewer for the
+            <strong style="color:#e8440a;">${escapeHtml(phaseName)}</strong> phase of
+            <strong style="color:#ffffff;">${escapeHtml(hackathonName)}</strong>.
+          </p>
+          <div style="padding:14px 18px;background:#1a1a20;border-radius:10px;border:1px solid #27272a;margin:0 0 20px;">
+            <p style="margin:0;color:#a1a1aa;font-size:13px;line-height:1.6;">
+              As a reviewer, you'll evaluate applicant pitches using a structured scoring criteria.
+              Your scores and recommendations will help determine which applicants advance.
+            </p>
+          </div>
+          <div style="text-align:center;padding:8px 0;">
+            <a href="${acceptUrl}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#e8440a,#ff5722);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;letter-spacing:0.2px;">
+              Accept &amp; Start Reviewing
+            </a>
+          </div>
+          <p style="color:#71717a;font-size:12px;line-height:1.5;margin:20px 0 0;text-align:center;">
+            Or copy this link: <a href="${acceptUrl}" style="color:#a1a1aa;text-decoration:underline;word-break:break-all;">${acceptUrl}</a>
+          </p>
+        </div>
+      `),
+    }).catch((e) => console.error("Failed to send reviewer invitation email:", e));
 
     return NextResponse.json({ data: reviewer }, { status: 201 });
   } catch (err) {

@@ -47,8 +47,14 @@ const statusBadgeConfig: Record<
 > = {
   approved: { variant: "success" },
   confirmed: { variant: "success" },
+  accepted: { variant: "success" },
+  eligible: { variant: "success" },
   pending: { variant: "warning" },
+  under_review: { variant: "warning" },
+  waitlisted: { variant: "warning" },
   rejected: { variant: "destructive" },
+  declined: { variant: "destructive" },
+  ineligible: { variant: "destructive" },
   cancelled: { variant: "muted" },
 };
 
@@ -78,7 +84,52 @@ function getStatusActions(status: string) {
     });
   }
 
-  if (status === "approved" || status === "confirmed") {
+  if (status === "under_review") {
+    actions.push({
+      label: "Mark Eligible",
+      icon: CheckCircle2,
+      targetStatus: "eligible",
+      className: "text-green-600",
+    });
+    actions.push({
+      label: "Mark Ineligible",
+      icon: XCircle,
+      targetStatus: "ineligible",
+      className: "text-red-600",
+    });
+  }
+
+  if (status === "eligible") {
+    actions.push({
+      label: "Accept",
+      icon: CheckCircle2,
+      targetStatus: "accepted",
+      className: "text-green-600",
+    });
+    actions.push({
+      label: "Waitlist",
+      icon: RotateCcw,
+      targetStatus: "waitlisted",
+      className: "text-yellow-600",
+    });
+  }
+
+  if (status === "waitlisted") {
+    actions.push({
+      label: "Accept",
+      icon: CheckCircle2,
+      targetStatus: "accepted",
+      className: "text-green-600",
+    });
+    actions.push({
+      label: "Reject",
+      icon: XCircle,
+      targetStatus: "rejected",
+      className: "text-red-600",
+    });
+  }
+
+  if (status === "accepted" || status === "approved" || status === "confirmed") {
     actions.push({
       label: "Cancel Registration",
       icon: Ban,
@@ -87,11 +138,20 @@ function getStatusActions(status: string) {
     });
   }
 
-  if (status === "rejected") {
+  if (status === "rejected" || status === "declined") {
     actions.push({
       label: "Re-approve",
       icon: RotateCcw,
       targetStatus: "approved",
+      className: "text-green-600",
+    });
+  }
+
+  if (status === "ineligible") {
+    actions.push({
+      label: "Override to Eligible",
+      icon: ShieldCheck,
+      targetStatus: "eligible",
       className: "text-green-600",
     });
   }
@@ -265,10 +325,16 @@ export function ParticipantsTab({
           className={selectClasses}
         >
           <option value="all">All Statuses</option>
-          <option value="approved">Approved</option>
           <option value="pending">Pending</option>
+          <option value="under_review">Under Review</option>
+          <option value="eligible">Eligible</option>
+          <option value="ineligible">Ineligible</option>
+          <option value="accepted">Accepted</option>
+          <option value="approved">Approved</option>
+          <option value="waitlisted">Waitlisted</option>
           <option value="confirmed">Confirmed</option>
           <option value="rejected">Rejected</option>
+          <option value="declined">Declined</option>
           <option value="cancelled">Cancelled</option>
         </select>
       </motion.div>

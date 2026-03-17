@@ -200,6 +200,23 @@ export function useUpdateApplication() {
   });
 }
 
+// ── My draft/existing application for a form ────────────
+
+/**
+ * Fetches the current user's application for a specific form (if any).
+ * Returns the first non-withdrawn application.
+ */
+export function useMyApplication(formId: string | undefined) {
+  return useQuery<ApplicationsResponse>({
+    queryKey: ["my-application", formId],
+    queryFn: () =>
+      fetchJson<ApplicationsResponse>(
+        `/api/competitions/${formId}/applications`
+      ),
+    enabled: !!formId,
+  });
+}
+
 // ── Screening ───────────────────────────────────────────
 
 export function useScreeningDashboard(formId: string | undefined) {

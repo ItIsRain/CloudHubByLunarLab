@@ -236,6 +236,7 @@ export interface FAQItem {
 
 export interface HackathonScreeningConfig {
   quotaFieldId?: string;
+  quotaEnforcement?: "screening" | "registration";
   quotas?: { campus: string; quota: number; rejected?: boolean; rejectionMessage?: string; softFlagged?: boolean; softFlagMessage?: string }[];
   detectDuplicates?: boolean;
 }
@@ -376,7 +377,7 @@ export interface HackathonParticipant {
   userId: string;
   user: User;
   hackathonId: string;
-  status: "pending" | "confirmed" | "approved" | "rejected" | "cancelled";
+  status: "pending" | "confirmed" | "under_review" | "eligible" | "ineligible" | "accepted" | "waitlisted" | "approved" | "rejected" | "cancelled" | "declined";
   teamName?: string;
   trackName?: string;
   createdAt: string;
@@ -960,6 +961,8 @@ export interface CompetitionPhase {
   location?: string | null;
   sortOrder: number;
   status: PhaseStatus;
+  awardCategories?: AwardCategory[];
+  sourcePhaseIds?: string[];
   createdAt: string;
   updatedAt: string;
   // Populated on fetch
@@ -967,6 +970,30 @@ export interface CompetitionPhase {
   scoreCount?: number;
   assignmentCount?: number;
   applicantCount?: number;
+}
+
+export interface AwardCategory {
+  id: string;
+  name: string;
+  type: "sector" | "special";
+  description?: string;
+}
+
+export interface PhaseFinalist {
+  id: string;
+  phaseId: string;
+  registrationId: string;
+  sourcePhaseId?: string | null;
+  sourceScore?: number | null;
+  rank?: number | null;
+  awardCategoryId?: string | null;
+  awardLabel?: string | null;
+  selectedAt: string;
+  selectedBy?: string | null;
+  // Populated on fetch
+  applicantName?: string;
+  applicantEmail?: string;
+  teamName?: string;
 }
 
 export interface PhaseReviewer {

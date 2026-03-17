@@ -39,6 +39,7 @@ import {
 import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { ImageUpload } from "@/components/forms/image-upload";
 import type { BlogPost } from "@/lib/types";
+import { SafeHtml } from "@/components/ui/safe-html";
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   draft: { label: "Draft", color: "bg-yellow-500/10 text-yellow-600", icon: FileText },
@@ -500,9 +501,9 @@ function BlogEditorDialog({
               {excerpt && (
                 <p className="text-lg text-muted-foreground mb-6">{excerpt}</p>
               )}
-              <div
+              <SafeHtml
+                content={content || "<p>No content yet...</p>"}
                 className="prose prose-sm dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: content || "<p>No content yet...</p>" }}
               />
             </CardContent>
           </Card>

@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { useBlogPost, useBlogPosts } from "@/hooks/use-blog";
+import { SafeHtml } from "@/components/ui/safe-html";
 import { useBlogEngagement } from "@/hooks/use-blog-engagement";
 import { buildBlogPostJsonLd, buildBreadcrumbJsonLd, SITE_URL } from "@/lib/seo";
 
@@ -293,9 +294,9 @@ export default function BlogPostPage() {
 
             {/* Post Content */}
             <div className="mt-8 max-w-none text-foreground/90 leading-relaxed text-[16px]">
-              <div
+              <SafeHtml
+                content={post.content}
                 className="prose dark:prose-invert max-w-none font-body [&_p]:mb-4 [&_p]:leading-relaxed [&_h1]:mt-8 [&_h1]:mb-4 [&_h2]:mt-8 [&_h2]:mb-3 [&_h3]:mt-6 [&_h3]:mb-2 [&_ul]:mb-4 [&_ol]:mb-4 [&_li]:mb-1 [&_blockquote]:my-4 [&_pre]:my-4 [&_hr]:my-6 [&_img]:rounded-lg [&_img]:mx-auto [&_img]:my-4 [&_iframe]:rounded-lg [&_iframe]:mx-auto [&_iframe]:my-4"
-                dangerouslySetInnerHTML={{ __html: post.content }}
               />
             </div>
 

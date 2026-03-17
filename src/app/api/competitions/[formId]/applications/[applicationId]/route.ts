@@ -3,6 +3,14 @@ import { authenticateRequest } from "@/lib/api-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToApplication } from "@/lib/supabase/mappers";
 import { writeAuditLog } from "@/lib/audit";
+import {
+  sendApplicationAcceptedEmail,
+  sendApplicationRejectedEmail,
+  sendApplicationWaitlistedEmail,
+  sendApplicationUnderReviewEmail,
+  sendApplicationEligibleEmail,
+  sendApplicationIneligibleEmail,
+} from "@/lib/resend";
 
 interface Params {
   params: Promise<{ formId: string; applicationId: string }>;
@@ -76,7 +84,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { data: existing } = await admin
     .from("competition_applications")
-    .select("*, form:competition_forms!form_id(organizer_id, allow_edit_after_submit)")
+    .select("*, form:competition_forms!form_id(organizer_id, allow_edit_after_submit, fields, name)")
     .eq("id", applicationId)
     .eq("form_id", formId)
     .single();
@@ -124,8 +132,28 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       if (body.campus !== undefined) updateData.campus = body.campus;
       if (body.sector !== undefined) updateData.sector = body.sector;
 
-      // Submit draft
+      // Submit draft — validate required fields before allowing submission
       if (body.status === "submitted") {
+        const formFields = ((form as Record<string, unknown>).fields as { id: string; label: string; required?: boolean; type?: string }[]) || [];
+        const appData = (body.data ?? existing.data ?? {}) as Record<string, unknown>;
+        const missingFields: string[] = [];
+        for (const field of formFields) {
+          if (!field.required) continue;
+          if (field.type === "heading" || field.type === "paragraph") continue;
+          const value = appData[field.id];
+          const isEmpty = value === null || value === undefined ||
+            (typeof value === "string" && value.trim() === "") ||
+            (Array.isArray(value) && value.length === 0);
+          if (isEmpty) {
+            missingFields.push(field.label || field.id);
+          }
+        }
+        if (missingFields.length > 0) {
+          return NextResponse.json(
+            { error: `Required fields are missing: ${missingFields.join(", ")}` },
+            { status: 400 }
+          );
+        }
         updateData.status = "submitted";
         updateData.submitted_at = new Date().toISOString();
       }
@@ -185,6 +213,53 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     oldValues: { status: existing.status },
     newValues: updateData,
   });
+
+  // Send email/notification when status changes (organizer or system action)
+  const newStatus = updateData.status as string | undefined;
+  if (newStatus && newStatus !== existing.status) {
+    const applicantEmail = (existing.applicant_email || (data as Record<string, unknown>).applicant_email) as string | null;
+    const applicantName = ((existing.applicant_name || (data as Record<string, unknown>).applicant_name) as string) || "Applicant";
+    const formName = ((form as Record<string, unknown>).name as string) || "the competition";
+
+    if (applicantEmail) {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+      const emailParams = { to: applicantEmail, applicantName, hackathonName: formName, hackathonId: formId, linkUrl: `${siteUrl}/apply/${formId}` };
+      const emailSenders: Record<string, () => Promise<unknown>> = {
+        accepted: () => sendApplicationAcceptedEmail(emailParams),
+        rejected: () => sendApplicationRejectedEmail(emailParams),
+        waitlisted: () => sendApplicationWaitlistedEmail(emailParams),
+        under_review: () => sendApplicationUnderReviewEmail(emailParams),
+        eligible: () => sendApplicationEligibleEmail(emailParams),
+        ineligible: () => sendApplicationIneligibleEmail(emailParams),
+      };
+      const sender = emailSenders[newStatus];
+      if (sender) sender().catch((e) => console.error(`Failed to send ${newStatus} email:`, e));
+    }
+
+    // In-app notification for the applicant
+    if (existing.applicant_id) {
+      const notifMessages: Record<string, { title: string; message: string }> = {
+        accepted: { title: "Application Accepted", message: `Your application for ${formName} has been accepted!` },
+        rejected: { title: "Application Update", message: `Your application for ${formName} was not accepted.` },
+        waitlisted: { title: "Application Waitlisted", message: `Your application for ${formName} has been waitlisted.` },
+        under_review: { title: "Application Under Review", message: `Your application for ${formName} is being reviewed.` },
+        eligible: { title: "Application Eligible", message: `Your application for ${formName} has passed screening.` },
+        ineligible: { title: "Application Ineligible", message: `Your application for ${formName} did not meet eligibility criteria.` },
+      };
+      const notif = notifMessages[newStatus];
+      if (notif) {
+        admin.from("notifications").insert({
+          user_id: existing.applicant_id,
+          type: "hackathon-update",
+          title: notif.title,
+          message: notif.message,
+          link: `/apply/${formId}`,
+        }).then(({ error: notifErr }) => {
+          if (notifErr) console.error("Failed to insert notification:", notifErr);
+        });
+      }
+    }
+  }
 
   return NextResponse.json({ data: dbRowToApplication(data as Record<string, unknown>) });
 }

@@ -5,14 +5,6 @@ import { profileToPublicUser } from "@/lib/supabase/mappers";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 import { UUID_RE } from "@/lib/constants";
-import {
-  sendApplicationAcceptedEmail,
-  sendApplicationRejectedEmail,
-  sendApplicationWaitlistedEmail,
-  sendApplicationUnderReviewEmail,
-  sendApplicationEligibleEmail,
-  sendApplicationIneligibleEmail,
-} from "@/lib/resend";
 
 export async function GET(
   request: NextRequest,
@@ -240,6 +232,9 @@ export async function PATCH(
 
     // ── Notes-only update ─────────────────────────────────
     if (registrationId && internalNotes !== undefined && !status) {
+      if (!UUID_RE.test(registrationId)) {
+        return NextResponse.json({ error: "Invalid registration ID format" }, { status: 400 });
+      }
       const { data: noteData, error: noteErr } = await supabase
         .from("hackathon_registrations")
         .update({ internal_notes: internalNotes })
@@ -267,6 +262,16 @@ export async function PATCH(
       );
     }
 
+    // Validate all IDs are UUIDs to prevent injection
+    if (ids.some((id) => !UUID_RE.test(id))) {
+      return NextResponse.json({ error: "Invalid registration ID format" }, { status: 400 });
+    }
+
+    // Limit bulk operations
+    if (ids.length > 500) {
+      return NextResponse.json({ error: "Maximum 500 registrations per bulk update" }, { status: 400 });
+    }
+
     const validStatuses = [
       "pending", "confirmed", "under_review", "eligible", "ineligible",
       "accepted", "waitlisted", "rejected", "cancelled", "approved", "declined",
@@ -277,6 +282,22 @@ export async function PATCH(
         { status: 400 }
       );
     }
+
+    // Validate status transitions — prevent nonsensical moves while keeping organizer flexibility
+    // Each key lists the statuses that CAN transition TO it
+    const allowedTransitions: Record<string, string[]> = {
+      pending: ["under_review", "eligible", "ineligible", "accepted", "rejected", "cancelled", "approved"],
+      confirmed: ["accepted", "approved", "waitlisted", "cancelled"],
+      under_review: ["pending", "eligible"],
+      eligible: ["under_review", "pending"],
+      ineligible: ["pending", "under_review", "eligible"],
+      accepted: ["eligible", "under_review", "pending", "waitlisted", "confirmed"],
+      approved: ["pending", "under_review", "eligible"],
+      waitlisted: ["eligible", "under_review", "pending", "accepted"],
+      rejected: ["pending", "under_review", "eligible", "ineligible"],
+      declined: ["accepted", "approved", "confirmed"],
+      cancelled: ["accepted", "approved", "confirmed", "pending", "eligible", "waitlisted", "under_review"],
+    };
 
     // Fetch current statuses so we only notify on actual change
     const { data: currentRegs } = await supabase
@@ -294,6 +315,95 @@ export async function PATCH(
         email: profile?.email,
         name: profile?.name,
       });
+    }
+
+    // Validate transitions — collect any invalid ones
+    const validFromStatuses = allowedTransitions[status];
+    if (validFromStatuses) {
+      const invalidTransitions: string[] = [];
+      for (const [regId, prev] of previousStatusMap) {
+        if (prev.status === status) continue; // no-op, skip
+        if (!validFromStatuses.includes(prev.status)) {
+          invalidTransitions.push(`${regId.slice(0, 8)}… (${prev.status} → ${status})`);
+        }
+      }
+      if (invalidTransitions.length > 0 && invalidTransitions.length === ids.length) {
+        return NextResponse.json(
+          { error: `Invalid status transition: ${invalidTransitions[0]}. Cannot move from "${previousStatusMap.values().next().value?.status}" to "${status}".` },
+          { status: 400 }
+        );
+      }
+      // For bulk ops, filter out invalid ones and proceed with valid transitions
+      if (invalidTransitions.length > 0) {
+        const validIds = ids.filter((id) => {
+          const prev = previousStatusMap.get(id);
+          return !prev || prev.status === status || validFromStatuses.includes(prev.status);
+        });
+        if (validIds.length === 0) {
+          return NextResponse.json({ error: "No valid status transitions in this batch" }, { status: 400 });
+        }
+        // Update only valid IDs
+        const { data, error } = await supabase
+          .from("hackathon_registrations")
+          .update({ status })
+          .eq("hackathon_id", hackathonId)
+          .in("id", validIds)
+          .select("id, user_id, hackathon_id, status, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)");
+
+        if (error) {
+          return NextResponse.json({ error: "Failed to update status" }, { status: 400 });
+        }
+
+        // Send notifications/emails/webhooks for successfully updated registrations
+        const hackathonName = hackathon.name || "the hackathon";
+        const notifiableStatuses = ["cancelled", "rejected", "approved", "accepted", "waitlisted", "ineligible", "eligible", "under_review", "declined"];
+        const partialMessages: Record<string, { title: string; message: string }> = {
+          cancelled: { title: "Registration Cancelled", message: `Your registration for ${hackathonName} has been cancelled by the organizer.` },
+          rejected: { title: "Application Rejected", message: `Your application for ${hackathonName} has been rejected.` },
+          approved: { title: "Registration Approved", message: `Your registration for ${hackathonName} has been approved! You're all set to participate.` },
+          accepted: { title: "Application Accepted", message: `Congratulations! Your application for ${hackathonName} has been accepted!` },
+          waitlisted: { title: "Application Waitlisted", message: `Your application for ${hackathonName} has been placed on the waitlist.` },
+          eligible: { title: "Application Eligible", message: `Your application for ${hackathonName} has passed screening and is eligible for selection.` },
+          ineligible: { title: "Application Ineligible", message: `Your application for ${hackathonName} did not meet the eligibility criteria.` },
+          under_review: { title: "Application Under Review", message: `Your application for ${hackathonName} is being reviewed by the organizers.` },
+          declined: { title: "Application Declined", message: `Your application for ${hackathonName} has been declined.` },
+        };
+
+        for (const reg of data || []) {
+          const prev = previousStatusMap.get(reg.id);
+          const statusChanged = prev && prev.status !== status;
+          if (statusChanged && notifiableStatuses.includes(status)) {
+            const notif = partialMessages[status];
+            if (notif) {
+              supabase.from("notifications").insert({
+                user_id: reg.user_id,
+                type: "hackathon-update",
+                title: notif.title,
+                message: notif.message,
+                link: `/hackathons/${hackathonId}`,
+              }).then(({ error: notifErr }) => {
+                if (notifErr) console.error("Failed to insert notification:", notifErr);
+              });
+            }
+            // Fire webhook
+            fireWebhooks(auth.userId, "hackathon.participant.status_changed", {
+              hackathonId,
+              hackathonName: hackathon.name,
+              registrationId: reg.id,
+              userId: reg.user_id,
+              status: reg.status,
+            });
+          }
+        }
+
+        return NextResponse.json({
+          data: {
+            updated: data?.length || 0,
+            skipped: invalidTransitions.length,
+            status,
+          },
+        });
+      }
     }
 
     // Perform the bulk update
@@ -316,7 +426,7 @@ export async function PATCH(
     }
 
     // Send notifications + emails only for registrations whose status actually changed
-    const notifiableStatuses = ["cancelled", "rejected", "approved", "accepted", "waitlisted", "ineligible", "eligible"];
+    const notifiableStatuses = ["cancelled", "rejected", "approved", "accepted", "waitlisted", "ineligible", "eligible", "under_review", "declined"];
     const hackathonName = hackathon.name || "the hackathon";
     const messages: Record<string, { title: string; message: string }> = {
       cancelled: {
@@ -347,6 +457,14 @@ export async function PATCH(
         title: "Application Ineligible",
         message: `Your application for ${hackathonName} did not meet the eligibility criteria.`,
       },
+      under_review: {
+        title: "Application Under Review",
+        message: `Your application for ${hackathonName} is being reviewed by the organizers.`,
+      },
+      declined: {
+        title: "Application Declined",
+        message: `Your application for ${hackathonName} has been declined.`,
+      },
     };
 
     for (const reg of data) {
@@ -367,27 +485,10 @@ export async function PATCH(
           });
         }
 
-        // Send email (fire-and-forget)
-        const userEmail = prev.email;
-        const userName = prev.name || "Applicant";
-        if (userEmail) {
-          const emailParams = { to: userEmail, applicantName: userName, hackathonName, hackathonId };
-          const emailSenders: Record<string, () => Promise<unknown>> = {
-            accepted: () => sendApplicationAcceptedEmail(emailParams),
-            approved: () => sendApplicationAcceptedEmail(emailParams),
-            rejected: () => sendApplicationRejectedEmail(emailParams),
-            waitlisted: () => sendApplicationWaitlistedEmail(emailParams),
-            under_review: () => sendApplicationUnderReviewEmail(emailParams),
-            eligible: () => sendApplicationEligibleEmail(emailParams),
-            ineligible: () => sendApplicationIneligibleEmail(emailParams),
-          };
-          const sender = emailSenders[status];
-          if (sender) sender().catch((e) => console.error(`Failed to send ${status} email:`, e));
-        }
       }
 
-      // Fire webhook per registration
-      fireWebhooks(auth.userId, "hackathon.participant.status_changed", {
+      // Fire webhook per registration only if status actually changed
+      if (statusChanged) fireWebhooks(auth.userId, "hackathon.participant.status_changed", {
         hackathonId,
         hackathonName: hackathon.name,
         registrationId: reg.id,

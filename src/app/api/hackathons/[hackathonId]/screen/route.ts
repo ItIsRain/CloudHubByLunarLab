@@ -11,6 +11,7 @@ import {
   sendApplicationIneligibleEmail,
   sendApplicationUnderReviewEmail,
 } from "@/lib/resend";
+import { fireWebhooks } from "@/lib/webhook-delivery";
 import type { ScreeningRule, FormField } from "@/lib/types";
 
 // ── GET: Fetch count of unpublished screened registrations ──
@@ -186,8 +187,13 @@ export async function POST(
       .not("form_data", "is", null);
 
     if (force) {
-      // Retrigger: re-screen all non-cancelled/non-declined registrations
-      regQuery = regQuery.not("status", "in", '("cancelled","declined")');
+      // Retrigger: re-screen all non-cancelled/non-declined registrations.
+      // Skip registrations that were manually overridden by the organizer
+      // (results_published_at is set but screening_completed_at was cleared during
+      // a prior force run — these were manually changed after screening).
+      // We identify manual overrides as registrations whose status was changed
+      // AFTER screening was last completed (or has no screening timestamp at all).
+      regQuery = regQuery.not("status", "in", '("cancelled","declined","rejected")');
     } else {
       // First run: only screen applications that haven't been screened yet
       regQuery = regQuery.is("screening_completed_at", null)
@@ -295,18 +301,56 @@ export async function POST(
       // Group eligible applicants by campus field value
       const campusGroups = new Map<string, EvalResult[]>();
       const noQuotaGroup: EvalResult[] = []; // applicants whose campus has no quota entry
+      const rejectedCampusGroup: EvalResult[] = []; // applicants from N/A (rejected) campuses
 
       for (const er of passedHard) {
         const formData = er.reg.form_data as Record<string, unknown>;
         const campusValue = String(formData[quotaFieldId!] || "");
         const quotaEntry = configQuotas.find((q) => q.campus === campusValue && !q.rejected);
+        const rejectedEntry = configQuotas.find((q) => q.campus === campusValue && q.rejected);
 
         if (campusValue && quotaEntry) {
           const group = campusGroups.get(campusValue) || [];
           group.push(er);
           campusGroups.set(campusValue, group);
+        } else if (campusValue && rejectedEntry) {
+          // Campus is explicitly marked as N/A — auto-reject
+          rejectedCampusGroup.push(er);
         } else {
           noQuotaGroup.push(er);
+        }
+      }
+
+      // Applicants from rejected/N/A campus options are ineligible
+      for (const er of rejectedCampusGroup) {
+        finalResults.push({
+          reg: er.reg,
+          status: "ineligible",
+          eligibilityPassed: false,
+          evaluation: er.evaluation,
+          completenessScore: er.completenessScore,
+        });
+      }
+
+      // Pre-fetch already-accepted registrations for ALL campuses in one query
+      // (eliminates N+1 — previously ran once per campus group)
+      const alreadyAcceptedByCampus = new Map<string, number>();
+      if (!force) {
+        const { data: existingAccepted } = await supabase
+          .from("hackathon_registrations")
+          .select("form_data")
+          .eq("hackathon_id", hackathonId)
+          .eq("status", "accepted")
+          .not("screening_completed_at", "is", null);
+
+        if (existingAccepted) {
+          for (const r of existingAccepted) {
+            const fd = r.form_data as Record<string, unknown> | null;
+            const cv = fd ? String(fd[quotaFieldId!] || "") : "";
+            if (cv) {
+              alreadyAcceptedByCampus.set(cv, (alreadyAcceptedByCampus.get(cv) || 0) + 1);
+            }
+          }
         }
       }
 
@@ -318,38 +362,22 @@ export async function POST(
 
         const quotaEntry = configQuotas.find((q) => q.campus === campusValue && !q.rejected);
         const quota = quotaEntry?.quota ?? 0;
+        const alreadyAccepted = alreadyAcceptedByCampus.get(campusValue) || 0;
 
-        // Also count already-accepted registrations for this campus (from previous screening runs)
-        // to handle incremental screening correctly
-        let alreadyAccepted = 0;
-        if (!force) {
-          const { data: existingAccepted } = await supabase
-            .from("hackathon_registrations")
-            .select("form_data")
-            .eq("hackathon_id", hackathonId)
-            .eq("status", "accepted")
-            .not("screening_completed_at", "is", null);
-
-          if (existingAccepted) {
-            for (const r of existingAccepted) {
-              const fd = r.form_data as Record<string, unknown> | null;
-              if (fd && String(fd[quotaFieldId!] || "") === campusValue) {
-                alreadyAccepted++;
-              }
-            }
-          }
-        }
+        // Track accepted slots separately — soft-flagged applicants go to
+        // under_review without consuming a quota slot
+        let acceptedSlots = alreadyAccepted;
 
         for (let i = 0; i < group.length; i++) {
           const er = group[i];
           const hasSoftFlags = er.evaluation.softFlags.length > 0;
-          const slotIndex = alreadyAccepted + i;
 
           let status: string;
           if (hasSoftFlags) {
-            status = "under_review"; // organizer must review
-          } else if (slotIndex < quota) {
+            status = "under_review"; // organizer must review — does NOT consume quota slot
+          } else if (acceptedSlots < quota) {
             status = "accepted";
+            acceptedSlots++;
           } else {
             status = "waitlisted";
           }
@@ -416,15 +444,29 @@ export async function POST(
           completeness_score: fr.completenessScore,
           screening_completed_at: new Date().toISOString(),
           screening_flags: fr.evaluation.softFlags,
-          ...(force ? { results_published_at: null } : {}),
+          // On force retrigger, clear results_published_at so PATCH /screen can re-publish later.
+          // But if publishResults is also true, we'll set it inline below — don't clear.
+          ...(force && !publishResults ? { results_published_at: null } : {}),
         })
         .eq("id", fr.reg.id);
 
+      // Fire webhook for every status change (regardless of publish setting)
+      const previousStatus = fr.reg.status as string;
+      const statusChanged = previousStatus !== fr.status;
+      if (statusChanged) {
+        fireWebhooks(auth.userId, "hackathon.participant.status_changed", {
+          hackathonId,
+          hackathonName: hackathon.name,
+          registrationId: fr.reg.id,
+          userId: fr.reg.user_id,
+          previousStatus,
+          newStatus: fr.status,
+          source: "screening",
+        });
+      }
+
       // Send emails/notifications if publishResults is true
       if (publishResults) {
-        const previousStatus = fr.reg.status as string;
-        const statusChanged = previousStatus !== fr.status;
-
         if (statusChanged) {
           const userProfile = fr.reg.user as { email?: string; name?: string } | null;
           const userEmail = userProfile?.email;
@@ -577,6 +619,11 @@ export async function PATCH(
     let ineligibleCount = 0;
     let underReviewCount = 0;
 
+    // Build email tasks and notifications — send in controlled batches to avoid
+    // overwhelming Resend's rate limits (max ~10 concurrent requests)
+    const EMAIL_BATCH_SIZE = 10;
+    const emailTasks: (() => Promise<unknown>)[] = [];
+
     for (const reg of registrations) {
       const status = reg.status as string;
       const userProfile = reg.user as { email?: string; name?: string } | null;
@@ -589,7 +636,7 @@ export async function PATCH(
       else if (status === "ineligible") ineligibleCount++;
       else if (status === "under_review") underReviewCount++;
 
-      // Send email
+      // Queue email for batched sending
       if (userEmail) {
         const emailParams = {
           to: userEmail,
@@ -598,28 +645,25 @@ export async function PATCH(
           hackathonId,
         };
 
-        if (status === "accepted") {
-          sendApplicationAcceptedEmail(emailParams).catch((e) =>
-            console.error("Failed to send accepted email:", e)
-          );
-        } else if (status === "waitlisted") {
-          sendApplicationWaitlistedEmail(emailParams).catch((e) =>
-            console.error("Failed to send waitlisted email:", e)
-          );
-        } else if (status === "eligible") {
-          sendApplicationEligibleEmail(emailParams).catch((e) =>
-            console.error("Failed to send eligible email:", e)
-          );
-        } else if (status === "ineligible") {
-          sendApplicationIneligibleEmail(emailParams).catch((e) =>
-            console.error("Failed to send ineligible email:", e)
-          );
-        } else if (status === "under_review") {
-          sendApplicationUnderReviewEmail(emailParams).catch((e) =>
-            console.error("Failed to send under-review email:", e)
-          );
-        }
+        const emailSenders: Record<string, () => Promise<unknown>> = {
+          accepted: () => sendApplicationAcceptedEmail(emailParams),
+          waitlisted: () => sendApplicationWaitlistedEmail(emailParams),
+          eligible: () => sendApplicationEligibleEmail(emailParams),
+          ineligible: () => sendApplicationIneligibleEmail(emailParams),
+          under_review: () => sendApplicationUnderReviewEmail(emailParams),
+        };
+        const sender = emailSenders[status];
+        if (sender) emailTasks.push(sender);
       }
+
+      // Fire webhook for published result
+      fireWebhooks(hackathon.organizer_id as string, "hackathon.participant.status_changed", {
+        hackathonId,
+        registrationId: reg.id,
+        userId: reg.user_id,
+        status,
+        source: "screening_publish",
+      });
 
       // Create in-app notification
       const notifMessages: Record<string, { title: string; message: string }> = {
@@ -659,6 +703,12 @@ export async function PATCH(
             if (notifErr) console.error("Failed to insert notification:", notifErr);
           });
       }
+    }
+
+    // Send emails in batches to respect Resend rate limits
+    for (let i = 0; i < emailTasks.length; i += EMAIL_BATCH_SIZE) {
+      const batch = emailTasks.slice(i, i + EMAIL_BATCH_SIZE);
+      await Promise.allSettled(batch.map((fn) => fn()));
     }
 
     return NextResponse.json({
