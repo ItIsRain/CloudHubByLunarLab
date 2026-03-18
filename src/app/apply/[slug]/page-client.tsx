@@ -9,12 +9,10 @@ import {
   ArrowLeft,
   Clock,
   CheckCircle2,
-  Send,
   Save,
   Loader2,
   AlertTriangle,
   Eye,
-  Pencil,
   CloudOff,
   Cloud,
 } from "lucide-react";
@@ -25,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { DynamicFormRenderer } from "@/components/forms/dynamic-form-renderer";
+import { ApplicationPreviewDialog } from "@/components/dialogs/application-preview-dialog";
 import {
   useCompetitionForm,
   useSubmitApplication,
@@ -583,27 +582,6 @@ export default function ApplyPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              {/* Preview / Edit toggle */}
-              {previewMode && (
-                <div className="mb-4 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-blue-400">
-                    <Eye className="h-4 w-4" />
-                    <span className="font-medium">Preview Mode</span>
-                    <span className="text-muted-foreground">
-                      — Review your answers before submitting
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPreviewMode(false)}
-                  >
-                    <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                    Edit
-                  </Button>
-                </div>
-              )}
-
               <Card>
                 <CardContent className="p-6 sm:p-8">
                   <DynamicFormRenderer
@@ -612,91 +590,47 @@ export default function ApplyPage() {
                     values={values}
                     onChange={handleChange}
                     errors={formErrors}
-                    readOnly={previewMode}
                   />
 
                   {/* Action buttons */}
                   <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
-                    {previewMode ? (
-                      <>
+                    <div className="flex items-center gap-2">
+                      {!isEditingSubmitted && (
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => setPreviewMode(false)}
+                          onClick={handleSaveDraft}
+                          disabled={isPending || isSaving}
                         >
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Back to Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={handleSubmit}
-                          disabled={isPending}
-                        >
-                          {isPending ? (
+                          {isSaving ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           ) : (
-                            <Send className="mr-2 h-4 w-4" />
+                            <Save className="mr-2 h-4 w-4" />
                           )}
-                          {isEditingSubmitted
-                            ? "Save Changes"
-                            : "Confirm & Submit"}
+                          Save Draft
                         </Button>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2">
-                          {!isEditingSubmitted && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleSaveDraft}
-                              disabled={isPending || isSaving}
-                            >
-                              {isSaving ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : (
-                                <Save className="mr-2 h-4 w-4" />
-                              )}
-                              Save Draft
-                            </Button>
-                          )}
-                        </div>
+                      )}
+                    </div>
 
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              if (validate()) {
-                                setPreviewMode(true);
-                              } else {
-                                toast.error(
-                                  "Please fill in all required fields before previewing."
-                                );
-                              }
-                            }}
-                            disabled={isPending}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            Preview
-                          </Button>
-                          <Button
-                            type="button"
-                            onClick={handleSubmit}
-                            disabled={isPending}
-                          >
-                            {isPending ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Send className="mr-2 h-4 w-4" />
-                            )}
-                            {isEditingSubmitted
-                              ? "Save Changes"
-                              : "Submit Application"}
-                          </Button>
-                        </div>
-                      </>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          if (validate()) {
+                            setPreviewMode(true);
+                          } else {
+                            toast.error(
+                              "Please fill in all required fields before previewing."
+                            );
+                          }
+                        }}
+                        disabled={isPending}
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Review &amp; Submit
+                      </Button>
+                    </div>
                   </div>
 
                   {(submitMutation.isError || updateMutation.isError) && (
@@ -707,6 +641,20 @@ export default function ApplyPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Application Preview Dialog */}
+              <ApplicationPreviewDialog
+                open={previewMode}
+                onOpenChange={setPreviewMode}
+                fields={form.fields}
+                sections={form.sections}
+                values={values}
+                onSubmit={handleSubmit}
+                onBackToEdit={() => setPreviewMode(false)}
+                isSubmitting={isPending}
+                submitLabel={isEditingSubmitted ? "Save Changes" : "Submit Application"}
+                competitionName={form.competitionName}
+              />
             </motion.div>
           )}
         </div>

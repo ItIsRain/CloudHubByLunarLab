@@ -276,4 +276,127 @@ export function useMyReviewerPhases() {
   });
 }
 
-export type { CriteriaScore, ScoringCriteria, PhaseConfig, ReviewerAssignment, PhaseScore, ReviewerPhase };
+// ── Judge score history (all hackathons) ─────────────
+
+interface ScoreHistoryPhase {
+  reviewerId: string;
+  reviewerStatus: string;
+  invitedAt: string;
+  acceptedAt: string | null;
+  phaseId: string;
+  phaseName: string;
+  phaseType: string | null;
+  phaseStatus: string;
+  campusFilter: string | null;
+  blindReview: boolean;
+  scoringCriteria: ScoringCriteria[];
+  hackathonId: string;
+  hackathonName: string;
+  hackathonTagline: string | null;
+  hackathonStatus: string;
+  hackathonBanner: string | null;
+  totalAssigned: number;
+  totalScored: number;
+  averageScore: number | null;
+  scores: PhaseScore[];
+}
+
+interface ScoreHistoryStats {
+  hackathonCount: number;
+  scoreCount: number;
+  averageScore: number;
+}
+
+interface ScoreHistoryResponse {
+  data: {
+    phases: ScoreHistoryPhase[];
+    stats: ScoreHistoryStats;
+  };
+}
+
+export function useJudgeScoreHistory() {
+  return useQuery<ScoreHistoryResponse>({
+    queryKey: ["judge-score-history"],
+    queryFn: () => fetchJson<ScoreHistoryResponse>("/api/judge/scores"),
+  });
+}
+
+// ── Score Review Dashboard (organizer aggregate view) ──
+
+interface ScoreReviewPhase {
+  id: string;
+  name: string;
+  phase_type: string;
+  status: string;
+  scoring_scale_max: number | null;
+  require_recommendation: boolean | null;
+  is_weighted: boolean | null;
+  scoring_criteria: ScoringCriteria[] | null;
+  sort_order: number;
+}
+
+interface ScoreReviewRegistration {
+  id: string;
+  user_id: string;
+  status: string;
+  applicant: { id: string; name: string; email: string; avatar: string | null } | null;
+}
+
+interface ScoreReviewScore {
+  id: string;
+  phase_id: string;
+  reviewer_id: string;
+  registration_id: string;
+  criteria_scores: CriteriaScore[];
+  total_score: number;
+  recommendation: string | null;
+  overall_feedback: string | null;
+  flagged: boolean;
+  submitted_at: string;
+}
+
+interface ScoreReviewDecision {
+  id: string;
+  phase_id: string;
+  registration_id: string;
+  decision: string;
+  recommendation_count: number;
+  total_reviewers: number;
+  average_score: number | null;
+  is_override: boolean;
+  rationale: string | null;
+}
+
+interface ScoreReviewData {
+  phases: ScoreReviewPhase[];
+  registrations: ScoreReviewRegistration[];
+  scores: ScoreReviewScore[];
+  decisions: ScoreReviewDecision[];
+}
+
+export function useScoreReview(hackathonId: string | undefined) {
+  return useQuery<{ data: ScoreReviewData }>({
+    queryKey: ["score-review", hackathonId],
+    queryFn: () =>
+      fetchJson<{ data: ScoreReviewData }>(
+        `/api/hackathons/${hackathonId}/score-review`
+      ),
+    enabled: !!hackathonId,
+  });
+}
+
+export type {
+  CriteriaScore,
+  ScoringCriteria,
+  PhaseConfig,
+  ReviewerAssignment,
+  PhaseScore,
+  ReviewerPhase,
+  ScoreHistoryPhase,
+  ScoreHistoryStats,
+  ScoreReviewPhase,
+  ScoreReviewRegistration,
+  ScoreReviewScore,
+  ScoreReviewDecision,
+  ScoreReviewData,
+};

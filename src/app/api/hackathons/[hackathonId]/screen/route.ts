@@ -6,6 +6,7 @@ import { evaluateAllRules, calculateCompletenessScore } from "@/lib/screening-en
 import { UUID_RE } from "@/lib/constants";
 import {
   sendApplicationAcceptedEmail,
+  sendApplicationRejectedEmail,
   sendApplicationWaitlistedEmail,
   sendApplicationEligibleEmail,
   sendApplicationIneligibleEmail,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/resend";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 import type { ScreeningRule, FormField } from "@/lib/types";
+import { checkHackathonAccess, canManage } from "@/lib/check-hackathon-access";
 
 // ── GET: Fetch count of unpublished screened registrations ──
 
@@ -43,17 +45,9 @@ export async function GET(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller is the hackathon organizer
-    const { data: hackathon } = await supabase
-      .from("hackathons")
-      .select("organizer_id")
-      .eq("id", hackathonId)
-      .single();
-
-    if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
-    }
-    if (hackathon.organizer_id !== auth.userId) {
+    // Verify caller has access (owner/admin can run screening)
+    const getAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!getAccess.hasAccess || !canManage(getAccess.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -64,7 +58,7 @@ export async function GET(
       .eq("hackathon_id", hackathonId)
       .not("screening_completed_at", "is", null)
       .is("results_published_at", null)
-      .in("status", ["accepted", "waitlisted", "eligible", "ineligible", "under_review"]);
+      .in("status", ["accepted", "approved", "waitlisted", "eligible", "ineligible", "under_review", "rejected"]);
 
     if (regError) {
       return NextResponse.json({ error: "Failed to fetch registrations" }, { status: 400 });
@@ -76,14 +70,16 @@ export async function GET(
     let underReview = 0;
     let accepted = 0;
     let waitlisted = 0;
+    let rejected = 0;
 
     for (const reg of regs) {
       const status = reg.status as string;
       if (status === "eligible") eligible++;
       else if (status === "ineligible") ineligible++;
       else if (status === "under_review") underReview++;
-      else if (status === "accepted") accepted++;
+      else if (status === "accepted" || status === "approved") accepted++;
       else if (status === "waitlisted") waitlisted++;
+      else if (status === "rejected") rejected++;
     }
 
     return NextResponse.json({
@@ -94,6 +90,7 @@ export async function GET(
         eligible,
         ineligible,
         underReview,
+        rejected,
       },
     });
   } catch (err) {
@@ -137,7 +134,12 @@ export async function POST(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller is the hackathon organizer
+    // Verify caller has access (owner/admin can run screening)
+    const postAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!postAccess.hasAccess || !canManage(postAccess.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { data: hackathon } = await supabase
       .from("hackathons")
       .select("organizer_id, name, registration_fields, screening_rules, screening_config")
@@ -146,10 +148,6 @@ export async function POST(
 
     if (!hackathon) {
       return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
-    }
-
-    if (hackathon.organizer_id !== auth.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const rules = (hackathon.screening_rules as ScreeningRule[]) || [];
@@ -285,11 +283,11 @@ export async function POST(
     }
     const finalResults: FinalResult[] = [];
 
-    // Failed hard rules → ineligible
+    // Failed hard rules → rejected
     for (const er of failedHard) {
       finalResults.push({
         reg: er.reg,
-        status: "ineligible",
+        status: "rejected",
         eligibilityPassed: false,
         evaluation: er.evaluation,
         completenessScore: er.completenessScore,
@@ -354,11 +352,14 @@ export async function POST(
         }
       }
 
-      // Sort each campus group by created_at ASC (first-come-first-serve)
+      // Sort each campus group by created_at ASC (FCFS), with completeness score as tiebreaker
       for (const [campusValue, group] of campusGroups) {
-        group.sort((a, b) =>
-          new Date(a.reg.created_at || "").getTime() - new Date(b.reg.created_at || "").getTime()
-        );
+        group.sort((a, b) => {
+          const timeDiff = new Date(a.reg.created_at || "").getTime() - new Date(b.reg.created_at || "").getTime();
+          if (timeDiff !== 0) return timeDiff;
+          // Higher completeness score wins when timestamps match
+          return (b.completenessScore ?? 0) - (a.completenessScore ?? 0);
+        });
 
         const quotaEntry = configQuotas.find((q) => q.campus === campusValue && !q.rejected);
         const quota = quotaEntry?.quota ?? 0;
@@ -568,7 +569,12 @@ export async function PATCH(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller is the hackathon organizer
+    // Verify caller has access (owner/admin can publish screening results)
+    const patchAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!patchAccess.hasAccess || !canManage(patchAccess.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { data: hackathon } = await supabase
       .from("hackathons")
       .select("organizer_id, name")
@@ -578,20 +584,29 @@ export async function PATCH(
     if (!hackathon) {
       return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
     }
-    if (hackathon.organizer_id !== auth.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+
+    // Check if this is a force re-send (resend to already-published registrations)
+    let forceResend = false;
+    try {
+      const body = await request.json();
+      forceResend = body?.force === true;
+    } catch { /* no body */ }
 
     // Atomically claim unpublished screened registrations by setting results_published_at
     // in the same UPDATE query. This prevents race conditions where concurrent requests
     // could pick up the same registrations.
-    const { data: registrations, error: regError } = await supabase
+    let regQuery = supabase
       .from("hackathon_registrations")
       .update({ results_published_at: new Date().toISOString() })
       .eq("hackathon_id", hackathonId)
       .not("screening_completed_at", "is", null)
-      .is("results_published_at", null)
-      .in("status", ["accepted", "waitlisted", "eligible", "ineligible", "under_review"])
+      .in("status", ["accepted", "approved", "waitlisted", "eligible", "ineligible", "under_review", "rejected"]);
+
+    if (!forceResend) {
+      regQuery = regQuery.is("results_published_at", null);
+    }
+
+    const { data: registrations, error: regError } = await regQuery
       .select("id, user_id, status, user:profiles!hackathon_registrations_user_id_fkey(email, name)");
 
     if (regError) {
@@ -607,6 +622,7 @@ export async function PATCH(
           eligible: 0,
           ineligible: 0,
           underReview: 0,
+          rejected: 0,
           message: "No unpublished screening results found.",
         },
       });
@@ -618,6 +634,7 @@ export async function PATCH(
     let eligibleCount = 0;
     let ineligibleCount = 0;
     let underReviewCount = 0;
+    let rejectedCount = 0;
 
     // Build email tasks and notifications — send in controlled batches to avoid
     // overwhelming Resend's rate limits (max ~10 concurrent requests)
@@ -630,11 +647,12 @@ export async function PATCH(
       const userEmail = userProfile?.email;
       const userName = userProfile?.name || "Applicant";
 
-      if (status === "accepted") acceptedCount++;
+      if (status === "accepted" || status === "approved") acceptedCount++;
       else if (status === "waitlisted") waitlistedCount++;
       else if (status === "eligible") eligibleCount++;
       else if (status === "ineligible") ineligibleCount++;
       else if (status === "under_review") underReviewCount++;
+      else if (status === "rejected") rejectedCount++;
 
       // Queue email for batched sending
       if (userEmail) {
@@ -647,6 +665,8 @@ export async function PATCH(
 
         const emailSenders: Record<string, () => Promise<unknown>> = {
           accepted: () => sendApplicationAcceptedEmail(emailParams),
+          approved: () => sendApplicationAcceptedEmail(emailParams),
+          rejected: () => sendApplicationRejectedEmail(emailParams),
           waitlisted: () => sendApplicationWaitlistedEmail(emailParams),
           eligible: () => sendApplicationEligibleEmail(emailParams),
           ineligible: () => sendApplicationIneligibleEmail(emailParams),
@@ -670,6 +690,10 @@ export async function PATCH(
         accepted: {
           title: "Application Accepted",
           message: `Congratulations! Your application for ${hackathonName} has been accepted.`,
+        },
+        rejected: {
+          title: "Application Rejected",
+          message: `Your application for ${hackathonName} has been rejected.`,
         },
         waitlisted: {
           title: "Application Waitlisted",
@@ -719,6 +743,8 @@ export async function PATCH(
         eligible: eligibleCount,
         ineligible: ineligibleCount,
         underReview: underReviewCount,
+        rejected: rejectedCount,
+        forced: forceResend,
       },
     });
   } catch (err) {

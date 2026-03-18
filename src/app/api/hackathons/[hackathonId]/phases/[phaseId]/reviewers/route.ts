@@ -62,15 +62,36 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const { data: reviewers, error } = await supabase
       .from("phase_reviewers")
-      .select("id, phase_id, user_id, name, email, status, invited_at, accepted_at, user:profiles!phase_reviewers_user_id_fkey(id, name, email, avatar_url)")
+      .select("id, phase_id, user_id, name, email, status, invited_at, accepted_at")
       .eq("phase_id", phaseId)
       .order("invited_at", { ascending: false });
 
     if (error) {
+      console.error("Failed to fetch reviewers:", error);
       return NextResponse.json({ error: "Failed to fetch reviewers" }, { status: 400 });
     }
 
-    return NextResponse.json({ data: reviewers || [] });
+    // Enrich with profile data for reviewers who have accounts
+    const userIds = (reviewers || []).map((r) => r.user_id).filter(Boolean);
+    let profileMap: Record<string, { id: string; name: string; email: string; avatar_url: string | null }> = {};
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email, avatar_url")
+        .in("id", userIds);
+      if (profiles) {
+        for (const p of profiles) {
+          profileMap[p.id] = p as { id: string; name: string; email: string; avatar_url: string | null };
+        }
+      }
+    }
+
+    const enrichedReviewers = (reviewers || []).map((r) => ({
+      ...r,
+      user: profileMap[r.user_id] || null,
+    }));
+
+    return NextResponse.json({ data: enrichedReviewers });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -152,13 +173,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // userId is optional — generate a placeholder if not provided (reviewer may not have an account yet)
-    const resolvedUserId = userId && UUID_RE.test(userId) ? userId : crypto.randomUUID();
-
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
+    }
+
+    // Resolve user_id: look up by email in profiles, fallback to provided userId, or generate placeholder
+    let resolvedUserId: string;
+    if (userId && UUID_RE.test(userId)) {
+      resolvedUserId = userId;
+    } else {
+      // Try to find an existing profile by email
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", email.toLowerCase().trim())
+        .maybeSingle();
+      resolvedUserId = profile?.id || crypto.randomUUID();
     }
 
     if (typeof name !== "string" || name.length > 200) {
@@ -200,6 +232,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) {
+      console.error("Failed to add reviewer:", error);
       return NextResponse.json({ error: "Failed to add reviewer" }, { status: 400 });
     }
 

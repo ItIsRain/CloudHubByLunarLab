@@ -139,6 +139,8 @@ export function dbRowToHackathon(
     teamCount: liveTeamCount ?? ((row.team_count as number) || 0),
     submissionCount: liveSubmissionCount ?? ((row.submission_count as number) || 0),
     totalPrizePool: (row.total_prize_pool as number) || 0,
+    rsvpDeadline: (row.rsvp_deadline as string) || undefined,
+    registrationEditableUntil: (row.registration_editable_until as string) || undefined,
     isFeatured: (row.is_featured as boolean) || false,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,

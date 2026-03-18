@@ -5,6 +5,7 @@ import { profileToPublicUser } from "@/lib/supabase/mappers";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 import { UUID_RE } from "@/lib/constants";
+import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
 
 export async function GET(
   request: NextRequest,
@@ -36,17 +37,9 @@ export async function GET(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify user is the hackathon organizer
-    const { data: hackathonCheck } = await supabase
-      .from("hackathons")
-      .select("organizer_id")
-      .eq("id", hackathonId)
-      .single();
-
-    if (!hackathonCheck) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
-    }
-    if (hackathonCheck.organizer_id !== auth.userId) {
+    // Verify user has access (any collaborator role can view participants)
+    const getAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!getAccess.hasAccess) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -65,7 +58,7 @@ export async function GET(
     // Fetch registrations, teams, and tracks in parallel
     let regQuery = supabase
       .from("hackathon_registrations")
-      .select("id, user_id, hackathon_id, status, form_data, completeness_score, eligibility_passed, screening_completed_at, screening_results, screening_flags, internal_notes, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)", { count: "exact" })
+      .select("id, user_id, hackathon_id, status, form_data, completeness_score, eligibility_passed, screening_completed_at, screening_results, screening_flags, internal_notes, results_published_at, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)", { count: "exact" })
       .eq("hackathon_id", hackathonId)
       .order("created_at", { ascending: false });
 
@@ -134,6 +127,7 @@ export async function GET(
           screeningResults: (reg.screening_results as unknown[]) || [],
           screeningFlags: (reg.screening_flags as unknown[]) || [],
           internalNotes: (reg.internal_notes as string) || null,
+          resultsPublishedAt: reg.results_published_at as string | null,
         };
       }
     );
@@ -205,7 +199,12 @@ export async function PATCH(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller is the hackathon organizer (include name for notifications)
+    // Verify caller has access (owner/admin/editor can modify participants)
+    const patchAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!patchAccess.hasAccess || !canEdit(patchAccess.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { data: hackathon } = await supabase
       .from("hackathons")
       .select("organizer_id, name")
@@ -218,17 +217,23 @@ export async function PATCH(
         { status: 404 }
       );
     }
-    if (hackathon.organizer_id !== auth.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     const body = await request.json();
-    const { registrationId, registrationIds, status, internalNotes } = body as {
+    const { registrationId, registrationIds, status, internalNotes, reason } = body as {
       registrationId?: string;
       registrationIds?: string[];
       status?: string;
       internalNotes?: string;
+      reason?: string;
     };
+
+    // Validate optional reason field
+    if (reason !== undefined && (typeof reason !== "string" || reason.length > 2000)) {
+      return NextResponse.json(
+        { error: "reason must be a string of at most 2000 characters" },
+        { status: 400 }
+      );
+    }
 
     // ── Notes-only update ─────────────────────────────────
     if (registrationId && internalNotes !== undefined && !status) {
@@ -290,11 +295,11 @@ export async function PATCH(
       confirmed: ["accepted", "approved", "waitlisted", "cancelled"],
       under_review: ["pending", "eligible"],
       eligible: ["under_review", "pending"],
-      ineligible: ["pending", "under_review", "eligible"],
-      accepted: ["eligible", "under_review", "pending", "waitlisted", "confirmed"],
-      approved: ["pending", "under_review", "eligible"],
+      ineligible: ["pending", "under_review", "eligible", "accepted"],
+      accepted: ["eligible", "under_review", "pending", "waitlisted", "confirmed", "declined", "rejected", "ineligible"],
+      approved: ["pending", "under_review", "eligible", "declined"],
       waitlisted: ["eligible", "under_review", "pending", "accepted"],
-      rejected: ["pending", "under_review", "eligible", "ineligible"],
+      rejected: ["pending", "under_review", "eligible", "ineligible", "accepted"],
       declined: ["accepted", "approved", "confirmed"],
       cancelled: ["accepted", "approved", "confirmed", "pending", "eligible", "waitlisted", "under_review"],
     };
@@ -394,6 +399,27 @@ export async function PATCH(
               status: reg.status,
             });
           }
+        }
+
+        // Audit log: insert screening_overrides for status changes (fire-and-forget)
+        const partialOverrideRecords = (data || [])
+          .filter((reg) => {
+            const prev = previousStatusMap.get(reg.id);
+            return prev && prev.status !== status;
+          })
+          .map((reg) => ({
+            hackathon_id: hackathonId,
+            registration_id: reg.id,
+            previous_status: previousStatusMap.get(reg.id)!.status,
+            new_status: status,
+            overridden_by: auth.userId,
+            reason: reason || null,
+          }));
+        if (partialOverrideRecords.length > 0) {
+          supabase
+            .from("screening_overrides")
+            .insert(partialOverrideRecords)
+            .then(() => {}, () => {});
         }
 
         return NextResponse.json({
@@ -497,6 +523,27 @@ export async function PATCH(
       });
     }
 
+    // Audit log: insert screening_overrides for status changes (fire-and-forget)
+    const overrideRecords = (data || [])
+      .filter((reg) => {
+        const prev = previousStatusMap.get(reg.id);
+        return prev && prev.status !== status;
+      })
+      .map((reg) => ({
+        hackathon_id: hackathonId,
+        registration_id: reg.id,
+        previous_status: previousStatusMap.get(reg.id)!.status,
+        new_status: status,
+        overridden_by: auth.userId,
+        reason: reason || null,
+      }));
+    if (overrideRecords.length > 0) {
+      supabase
+        .from("screening_overrides")
+        .insert(overrideRecords)
+        .then(() => {}, () => {});
+    }
+
     // Return single item for single-update backwards compatibility, array for bulk
     if (ids.length === 1 && data.length === 1) {
       const d = data[0];
@@ -519,6 +566,87 @@ export async function PATCH(
         status,
       },
     });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ hackathonId: string }> }
+) {
+  try {
+    const { hackathonId } = await params;
+
+    if (!UUID_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
+
+    const auth = await authenticateRequest(request);
+
+    if (auth.type === "unauthenticated") {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    if (auth.type === "api_key") {
+      const scopeError = assertScope(auth, "/api/hackathons");
+      if (scopeError) {
+        return NextResponse.json({ error: scopeError }, { status: 403 });
+      }
+    }
+
+    const supabase =
+      auth.type === "api_key"
+        ? getSupabaseAdminClient()
+        : await getSupabaseServerClient();
+
+    // Verify caller has access (owner/admin/editor can delete cancelled registrations)
+    const delAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!delAccess.hasAccess || !canEdit(delAccess.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const registrationId = searchParams.get("registrationId");
+
+    if (!registrationId || !UUID_RE.test(registrationId)) {
+      return NextResponse.json({ error: "Valid registrationId query parameter is required" }, { status: 400 });
+    }
+
+    // Only allow deleting cancelled registrations
+    const { data: reg } = await supabase
+      .from("hackathon_registrations")
+      .select("id, status")
+      .eq("id", registrationId)
+      .eq("hackathon_id", hackathonId)
+      .single();
+
+    if (!reg) {
+      return NextResponse.json({ error: "Registration not found" }, { status: 404 });
+    }
+
+    if (reg.status !== "cancelled") {
+      return NextResponse.json(
+        { error: "Only cancelled registrations can be deleted" },
+        { status: 400 }
+      );
+    }
+
+    const { error: deleteError } = await supabase
+      .from("hackathon_registrations")
+      .delete()
+      .eq("id", registrationId)
+      .eq("hackathon_id", hackathonId);
+
+    if (deleteError) {
+      return NextResponse.json({ error: "Failed to delete registration" }, { status: 400 });
+    }
+
+    return NextResponse.json({ data: { deleted: true, id: registrationId } });
   } catch (err) {
     console.error(err);
     return NextResponse.json(

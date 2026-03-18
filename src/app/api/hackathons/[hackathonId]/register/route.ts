@@ -3,8 +3,10 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canRegister, getPhaseMessage } from "@/lib/hackathon-phases";
+import { calculateCompletenessScore } from "@/lib/screening-engine";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 import { sendApplicationAcceptedEmail } from "@/lib/resend";
+import type { FormField } from "@/lib/types";
 
 export async function GET(
   _request: NextRequest,
@@ -25,7 +27,7 @@ export async function GET(
 
     const { data, error } = await supabase
       .from("hackathon_registrations")
-      .select("id, status, created_at")
+      .select("id, status, created_at, form_data, is_draft, rsvp_status")
       .eq("hackathon_id", hackathonId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -40,6 +42,7 @@ export async function GET(
     return NextResponse.json({
       registered: !!data && activeStatuses.includes(data.status),
       rejected: !!data && rejectedStatuses.includes(data.status),
+      isDraft: !!data && data.status === "draft",
       registration: data,
     });
   } catch (err) {
@@ -68,16 +71,36 @@ export async function POST(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Parse optional form_data from request body
+    // Parse optional form_data and consent from request body
     let formData: Record<string, unknown> = {};
+    let consent: { dataProcessing?: boolean; marketing?: boolean; thirdParty?: boolean } | undefined;
     try {
       const body = await request.json();
       if (body && typeof body.formData === "object" && body.formData !== null) {
         formData = body.formData as Record<string, unknown>;
       }
+      if (body && typeof body.consent === "object" && body.consent !== null) {
+        consent = body.consent as { dataProcessing?: boolean; marketing?: boolean; thirdParty?: boolean };
+      }
     } catch {
       // No body or invalid JSON — that's fine, form_data is optional
     }
+
+    // GDPR/UAE Data Compliance: require data processing consent
+    if (!consent?.dataProcessing) {
+      return NextResponse.json(
+        { error: "You must consent to the processing of your personal data to register." },
+        { status: 400 }
+      );
+    }
+
+    // Store consent inside form_data under a _consent key
+    formData._consent = {
+      dataProcessing: consent.dataProcessing ?? false,
+      marketing: consent.marketing ?? false,
+      thirdParty: consent.thirdParty ?? false,
+      consentedAt: new Date().toISOString(),
+    };
 
     // Check visibility — private hackathons require an invitation
     const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user.id, user.email ?? undefined);
@@ -165,6 +188,12 @@ export async function POST(
       }
     }
 
+    // Calculate completeness score based on form fields
+    const fields = (hackathonInfo.registration_fields as FormField[]) || [];
+    const completenessScore = Object.keys(formData).length > 0
+      ? calculateCompletenessScore(formData, fields)
+      : 0;
+
     let data;
     let error;
 
@@ -185,7 +214,7 @@ export async function POST(
       // Re-register from cancelled status only
       ({ data, error } = await supabase
         .from("hackathon_registrations")
-        .update({ status: initialStatus, form_data: formData })
+        .update({ status: initialStatus, form_data: formData, completeness_score: completenessScore })
         .eq("id", existing.id)
         .select("id, status, created_at, form_data")
         .single());
@@ -197,6 +226,7 @@ export async function POST(
           user_id: user.id,
           status: initialStatus,
           form_data: formData,
+          completeness_score: completenessScore,
         })
         .select("id, status, created_at, form_data")
         .single());
@@ -422,6 +452,220 @@ export async function DELETE(
       message: "Registration cancelled",
       backfill: promotedUser ? { userId: promotedUser.id, name: promotedUser.name } : null,
     });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ hackathonId: string }> }
+) {
+  try {
+    const { hackathonId } = await params;
+    const supabase = await getSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Parse formData from request body
+    let formData: Record<string, unknown> = {};
+    try {
+      const body = await request.json();
+      if (body && typeof body.formData === "object" && body.formData !== null) {
+        formData = body.formData as Record<string, unknown>;
+      } else {
+        return NextResponse.json({ error: "formData must be an object" }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
+    // Check for existing registration
+    const { data: existing, error: existingError } = await supabase
+      .from("hackathon_registrations")
+      .select("id, status")
+      .eq("hackathon_id", hackathonId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (existingError) {
+      return NextResponse.json({ error: "Failed to check registration status" }, { status: 500 });
+    }
+
+    let data;
+    let error;
+
+    if (existing) {
+      if (existing.status === "draft") {
+        // Update existing draft
+        ({ data, error } = await supabase
+          .from("hackathon_registrations")
+          .update({ form_data: formData })
+          .eq("id", existing.id)
+          .select("id, status, form_data, created_at")
+          .single());
+      } else if (existing.status === "cancelled") {
+        // Allow re-creating as draft from cancelled status
+        ({ data, error } = await supabase
+          .from("hackathon_registrations")
+          .update({ status: "draft", is_draft: true, form_data: formData })
+          .eq("id", existing.id)
+          .select("id, status, form_data, created_at")
+          .single());
+      } else {
+        // Active registration exists (not cancelled/rejected/ineligible/declined)
+        const inactiveStatuses = ["cancelled", "rejected", "ineligible", "declined"];
+        if (!inactiveStatuses.includes(existing.status)) {
+          return NextResponse.json(
+            { error: "Already registered" },
+            { status: 409 }
+          );
+        }
+        // For rejected/ineligible/declined — allow re-creating as draft
+        ({ data, error } = await supabase
+          .from("hackathon_registrations")
+          .update({ status: "draft", is_draft: true, form_data: formData })
+          .eq("id", existing.id)
+          .select("id, status, form_data, created_at")
+          .single());
+      }
+    } else {
+      // No existing registration — insert new draft
+      ({ data, error } = await supabase
+        .from("hackathon_registrations")
+        .insert({
+          hackathon_id: hackathonId,
+          user_id: user.id,
+          status: "draft",
+          is_draft: true,
+          form_data: formData,
+        })
+        .select("id, status, form_data, created_at")
+        .single());
+    }
+
+    if (error) {
+      return NextResponse.json({ error: "Failed to save draft" }, { status: 400 });
+    }
+
+    return NextResponse.json({ data });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ hackathonId: string }> }
+) {
+  try {
+    const { hackathonId } = await params;
+    const supabase = await getSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Parse formData from request body
+    let formData: Record<string, unknown> = {};
+    try {
+      const body = await request.json();
+      if (body && typeof body.formData === "object" && body.formData !== null) {
+        formData = body.formData as Record<string, unknown>;
+      } else {
+        return NextResponse.json({ error: "formData must be an object" }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
+    // Fetch current registration — must exist
+    const { data: currentReg, error: regError } = await supabase
+      .from("hackathon_registrations")
+      .select("id, status, form_data")
+      .eq("hackathon_id", hackathonId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (regError) {
+      return NextResponse.json({ error: "Failed to fetch registration" }, { status: 500 });
+    }
+
+    if (!currentReg) {
+      return NextResponse.json({ error: "No registration found" }, { status: 404 });
+    }
+
+    // Only allow editing if status is pending, draft, or confirmed
+    const editableStatuses = ["pending", "draft", "confirmed"];
+    if (!editableStatuses.includes(currentReg.status)) {
+      return NextResponse.json(
+        { error: `Cannot edit a registration with status "${currentReg.status}"` },
+        { status: 403 }
+      );
+    }
+
+    // Check hackathon's registration_editable_until deadline and get registration_fields for score
+    const { data: hackathonInfo } = await supabase
+      .from("hackathons")
+      .select("registration_editable_until, registration_fields")
+      .eq("id", hackathonId)
+      .single();
+
+    if (hackathonInfo?.registration_editable_until) {
+      const deadline = new Date(hackathonInfo.registration_editable_until);
+      if (new Date() > deadline) {
+        return NextResponse.json(
+          { error: "Editing deadline has passed" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Recalculate completeness score
+    const patchFields = (hackathonInfo?.registration_fields as FormField[]) || [];
+    const patchScore = calculateCompletenessScore(formData, patchFields);
+
+    // Build update payload
+    const updatePayload: Record<string, unknown> = { form_data: formData, completeness_score: patchScore };
+
+    // If status was draft, transition to pending (submitted) and clear is_draft
+    if (currentReg.status === "draft") {
+      updatePayload.status = "pending";
+      updatePayload.is_draft = false;
+    }
+
+    const { data, error } = await supabase
+      .from("hackathon_registrations")
+      .update(updatePayload)
+      .eq("id", currentReg.id)
+      .select("id, status, form_data")
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: "Failed to update registration" }, { status: 400 });
+    }
+
+    return NextResponse.json({ data });
   } catch (err) {
     console.error(err);
     return NextResponse.json(

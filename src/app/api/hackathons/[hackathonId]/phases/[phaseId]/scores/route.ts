@@ -321,6 +321,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Check for unresolved conflicts of interest
+    const { data: conflicts } = await supabase
+      .from("reviewer_conflicts")
+      .select("id")
+      .eq("phase_id", phaseId)
+      .eq("reviewer_id", auth.userId)
+      .eq("registration_id", registrationId)
+      .eq("resolved", false)
+      .limit(1);
+
+    if (conflicts && conflicts.length > 0) {
+      return NextResponse.json(
+        { error: "You have an unresolved conflict of interest with this applicant. Contact the organizer." },
+        { status: 403 }
+      );
+    }
+
     // Build a lookup from criteria definitions
     const criteriaMap = new Map<string, ScoringCriteria>();
     for (const c of (phaseData.scoring_criteria || [])) {

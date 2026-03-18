@@ -7,6 +7,7 @@ import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import { writeAuditLog } from "@/lib/audit";
+import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
@@ -141,7 +142,7 @@ export async function PATCH(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify ownership
+    // Verify ownership or collaborator access (owner/admin/editor can edit)
     const { data: existing } = await supabase
       .from("hackathons")
       .select("organizer_id, hacking_start, hacking_end, submission_deadline, registration_start, registration_end, judging_start, judging_end")
@@ -154,7 +155,10 @@ export async function PATCH(
         { status: 404 }
       );
     }
-    if (existing.organizer_id !== auth.userId) {
+
+    const hackathonUuid = UUID_RE.test(hackathonId) ? hackathonId : (existing as Record<string, unknown>).id as string;
+    const access = await checkHackathonAccess(supabase, hackathonUuid, auth.userId);
+    if (!access.hasAccess || !canEdit(access.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -187,6 +191,8 @@ export async function PATCH(
       registration_sections: "registration_sections", registrationSections: "registration_sections",
       screening_rules: "screening_rules", screeningRules: "screening_rules",
       screening_config: "screening_config", screeningConfig: "screening_config",
+      rsvp_deadline: "rsvp_deadline", rsvpDeadline: "rsvp_deadline",
+      registration_editable_until: "registration_editable_until", registrationEditableUntil: "registration_editable_until",
     };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
@@ -410,7 +416,7 @@ export async function DELETE(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify ownership
+    // Verify ownership — only the owner can delete
     const { data: existing } = await supabase
       .from("hackathons")
       .select("organizer_id")
@@ -423,7 +429,10 @@ export async function DELETE(
         { status: 404 }
       );
     }
-    if (existing.organizer_id !== auth.userId) {
+
+    const delHackathonUuid = UUID_RE.test(hackathonId) ? hackathonId : (existing as Record<string, unknown>).id as string;
+    const delAccess = await checkHackathonAccess(supabase, delHackathonUuid, auth.userId);
+    if (!delAccess.hasAccess || delAccess.role !== "owner") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

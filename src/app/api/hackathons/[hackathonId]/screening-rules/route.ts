@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import type { ScreeningRule } from "@/lib/types";
+import { checkHackathonAccess, canEdit, canManage } from "@/lib/check-hackathon-access";
 
 export async function GET(
   request: NextRequest,
@@ -35,19 +36,20 @@ export async function GET(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller is the hackathon organizer
+    // Verify caller has access (owner/admin/editor can view screening rules)
+    const getAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!getAccess.hasAccess || !canEdit(getAccess.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { data: hackathon } = await supabase
       .from("hackathons")
-      .select("organizer_id, screening_rules, screening_config, registration_fields")
+      .select("screening_rules, screening_config, registration_fields")
       .eq("id", hackathonId)
       .single();
 
     if (!hackathon) {
       return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
-    }
-
-    if (hackathon.organizer_id !== auth.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const config = (hackathon.screening_config as Record<string, unknown>) || {};
@@ -122,18 +124,9 @@ export async function POST(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller is the hackathon organizer
-    const { data: hackathon } = await supabase
-      .from("hackathons")
-      .select("organizer_id")
-      .eq("id", hackathonId)
-      .single();
-
-    if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
-    }
-
-    if (hackathon.organizer_id !== auth.userId) {
+    // Verify caller has access (owner/admin can modify screening rules)
+    const postAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!postAccess.hasAccess || !canManage(postAccess.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -240,18 +233,9 @@ export async function PATCH(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller is the hackathon organizer
-    const { data: hackathon } = await supabase
-      .from("hackathons")
-      .select("organizer_id")
-      .eq("id", hackathonId)
-      .single();
-
-    if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
-    }
-
-    if (hackathon.organizer_id !== auth.userId) {
+    // Verify caller has access (owner/admin can modify screening config)
+    const patchAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!patchAccess.hasAccess || !canManage(patchAccess.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

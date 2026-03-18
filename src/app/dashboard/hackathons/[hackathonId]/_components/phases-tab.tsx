@@ -58,6 +58,7 @@ import {
   FinalistsSection,
   AwardCategoriesEditor,
 } from "./phase-sections";
+import { PitchRoomsSection } from "./pitch-rooms-section";
 
 // ── Style Constants ────────────────────────────────────────
 
@@ -456,6 +457,10 @@ function PhaseCard({ hackathonId, hackathon, phase, onEdit }: PhaseCardProps) {
               {/* Assignments */}
               <AssignmentsSection hackathonId={hackathonId} phase={phase} />
 
+              {/* Pitch Rooms */}
+              <hr className="border-border" />
+              <PitchRoomsSection hackathonId={hackathonId} phaseId={phase.id} />
+
               {/* Scoring overview (when scoring/calibration/completed) */}
               {showScoring && (
                 <>
@@ -714,7 +719,7 @@ function ScoringCriteriaEditor({
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Button variant="outline" size="sm" onClick={handleAddCriteria}>
           <Plus className="h-4 w-4 mr-2" />
           Add Criteria

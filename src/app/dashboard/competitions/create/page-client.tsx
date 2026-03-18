@@ -537,7 +537,7 @@ export default function CreateCompetitionPage({ initialData, mode = "create" }: 
                           <Input
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            placeholder="e.g. KFED 2026 Startup Application"
+                            placeholder="e.g. Startup Competition Application"
                             className="text-lg font-display"
                           />
                         </div>

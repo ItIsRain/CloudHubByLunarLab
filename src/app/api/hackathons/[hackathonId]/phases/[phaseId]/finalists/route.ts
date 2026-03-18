@@ -282,22 +282,75 @@ async function handleAutoSelect(
     }
   }
 
-  // Sort by average score descending, take top N
-  const ranked = Object.entries(regScores)
+  // Sort by average score descending
+  const allRanked = Object.entries(regScores)
     .map(([regId, data]) => ({
       registrationId: regId,
       avgScore: data.count > 0 ? data.totalScore / data.count : 0,
       bestPhaseId: data.bestPhaseId,
       bestScore: data.bestScore,
     }))
-    .sort((a, b) => b.avgScore - a.avgScore)
-    .slice(0, topN);
+    .sort((a, b) => b.avgScore - a.avgScore);
 
-  if (ranked.length === 0) {
+  if (allRanked.length === 0) {
     return NextResponse.json(
       { error: "No scored registrations found in source phases" },
       { status: 404 }
     );
+  }
+
+  // Campus quota enforcement (optional)
+  // campusQuotas: { field: "campus_field_id", quotas: { "Abu Dhabi": 5, "Al Ain": 5, "Al Dhafra": 5 } }
+  const campusQuotas = body.campusQuotas as {
+    field: string;
+    quotas: Record<string, number>;
+  } | undefined;
+
+  let ranked: typeof allRanked;
+
+  if (campusQuotas && campusQuotas.field && campusQuotas.quotas) {
+    // Fetch form_data for all ranked registrations to determine campus
+    const regIds = allRanked.map((r) => r.registrationId);
+    const { data: regs } = await supabase
+      .from("hackathon_registrations")
+      .select("id, form_data")
+      .in("id", regIds);
+
+    const formDataMap: Record<string, Record<string, unknown>> = {};
+    for (const reg of regs || []) {
+      formDataMap[reg.id as string] = (reg.form_data as Record<string, unknown>) || {};
+    }
+
+    // Group by campus
+    const campusGroups: Record<string, typeof allRanked> = {};
+    const noCampus: typeof allRanked = [];
+
+    for (const r of allRanked) {
+      const fd = formDataMap[r.registrationId];
+      const campusValue = fd ? String(fd[campusQuotas.field] || "") : "";
+      if (campusValue && campusQuotas.quotas[campusValue] !== undefined) {
+        if (!campusGroups[campusValue]) campusGroups[campusValue] = [];
+        campusGroups[campusValue].push(r);
+      } else {
+        noCampus.push(r);
+      }
+    }
+
+    // Pick top N from each campus group
+    ranked = [];
+    for (const [campus, group] of Object.entries(campusGroups)) {
+      const quota = campusQuotas.quotas[campus] || 0;
+      ranked.push(...group.slice(0, quota));
+    }
+    // Fill remaining slots from noCampus if total < topN
+    const remaining = topN - ranked.length;
+    if (remaining > 0) {
+      ranked.push(...noCampus.slice(0, remaining));
+    }
+    // Re-sort by score
+    ranked.sort((a, b) => b.avgScore - a.avgScore);
+  } else {
+    ranked = allRanked.slice(0, topN);
   }
 
   // Clear existing finalists for this phase (replace mode)

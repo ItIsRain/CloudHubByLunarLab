@@ -91,7 +91,15 @@ function MainPrizeCard({ prize, dragHandle, onRemove, isPending }: MainPrizeCard
           {prize.name}
         </h3>
         <p className="text-2xl font-bold font-display text-primary mb-2">
-          {formatCurrency(prize.value, prize.currency)}
+          {prize.type === "cash"
+            ? formatCurrency(prize.value, prize.currency)
+            : prize.type === "credits"
+            ? `${prize.value?.toLocaleString() || 0} credits`
+            : prize.type === "swag"
+            ? "Swag Package"
+            : prize.type === "incubation"
+            ? "Incubation Program"
+            : prize.value ? `${prize.value}` : "Prize"}
         </p>
         <Badge variant="secondary" className="text-xs">
           {prize.type}
@@ -128,7 +136,15 @@ function SpecialPrizeCard({ prize, dragHandle, onRemove, isPending }: SpecialPri
             </h3>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-sm font-bold text-primary">
-                {formatCurrency(prize.value, prize.currency)}
+                {prize.type === "cash"
+                  ? formatCurrency(prize.value, prize.currency)
+                  : prize.type === "credits"
+                  ? `${prize.value?.toLocaleString() || 0} credits`
+                  : prize.type === "swag"
+                  ? "Swag"
+                  : prize.type === "incubation"
+                  ? "Incubation"
+                  : prize.value ? `${prize.value}` : ""}
               </span>
               <Badge
                 variant="secondary"
@@ -356,45 +372,22 @@ export function PrizesTab({ hackathon, hackathonId }: PrizesTabProps) {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Value</label>
-                    <Input
-                      type="number"
-                      value={formData.value}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          value: e.target.value,
-                        }))
-                      }
-                      placeholder="5000"
-                      min={0}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Currency</label>
-                    <Input
-                      value={formData.currency}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          currency: e.target.value,
-                        }))
-                      }
-                      placeholder="USD"
-                    />
-                  </div>
+                <div className={cn("grid grid-cols-1 gap-4", formData.type === "cash" ? "md:grid-cols-3" : "md:grid-cols-2")}>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Type</label>
                     <select
                       value={formData.type}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const newType = e.target.value as Prize["type"];
                         setFormData((prev) => ({
                           ...prev,
-                          type: e.target.value as Prize["type"],
-                        }))
-                      }
+                          type: newType,
+                          // Clear currency for non-cash types
+                          currency: newType === "cash" ? prev.currency || "USD" : "",
+                          // Clear value for types where monetary value doesn't apply
+                          value: (newType === "swag" || newType === "incubation") ? "" : prev.value,
+                        }));
+                      }}
                       className={selectClasses}
                     >
                       <option value="cash">Cash</option>
@@ -404,6 +397,40 @@ export function PrizesTab({ hackathon, hackathonId }: PrizesTabProps) {
                       <option value="other">Other</option>
                     </select>
                   </div>
+                  {(formData.type === "cash" || formData.type === "credits" || formData.type === "other") && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        {formData.type === "cash" ? "Amount" : formData.type === "credits" ? "Credit Value" : "Value"}
+                      </label>
+                      <Input
+                        type="number"
+                        value={formData.value}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            value: e.target.value,
+                          }))
+                        }
+                        placeholder={formData.type === "credits" ? "1000" : "5000"}
+                        min={0}
+                      />
+                    </div>
+                  )}
+                  {formData.type === "cash" && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Currency</label>
+                      <Input
+                        value={formData.currency}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            currency: e.target.value,
+                          }))
+                        }
+                        placeholder="USD"
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Description</label>

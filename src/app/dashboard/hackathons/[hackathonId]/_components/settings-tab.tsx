@@ -31,11 +31,14 @@ import {
   useSendEntityInvitation,
   useRevokeEntityInvitation,
 } from "@/hooks/use-invitations";
+import { CollaboratorsSection } from "./collaborators-section";
 import { toast } from "sonner";
 
 interface SettingsTabProps {
   hackathon: Hackathon;
   hackathonId: string;
+  isOwner?: boolean;
+  collaboratorRole?: string | null;
 }
 
 type Visibility = "public" | "private" | "unlisted";
@@ -66,7 +69,7 @@ const visibilityOptions: {
   },
 ];
 
-export function SettingsTab({ hackathon, hackathonId }: SettingsTabProps) {
+export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaboratorRole }: SettingsTabProps) {
   const router = useRouter();
   const updateHackathon = useUpdateHackathon();
   const deleteHackathon = useDeleteHackathon();
@@ -345,11 +348,23 @@ export function SettingsTab({ hackathon, hackathonId }: SettingsTabProps) {
         </motion.div>
       )}
 
-      {/* Hackathon URL */}
+      {/* Team & Access */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
+      >
+        <CollaboratorsSection
+          hackathonId={hackathonId}
+          isOwner={isOwner}
+        />
+      </motion.div>
+
+      {/* Hackathon URL */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
       >
         <Card>
           <CardHeader>
@@ -379,7 +394,7 @@ export function SettingsTab({ hackathon, hackathonId }: SettingsTabProps) {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
+        transition={{ delay: 0.2 }}
       >
         <Card>
           <CardHeader>
@@ -415,7 +430,7 @@ export function SettingsTab({ hackathon, hackathonId }: SettingsTabProps) {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
+        transition={{ delay: 0.25 }}
       >
         <Card>
           <CardHeader>
@@ -468,7 +483,7 @@ export function SettingsTab({ hackathon, hackathonId }: SettingsTabProps) {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.25 }}
+        transition={{ delay: 0.3 }}
       >
         <Card className="border-destructive/50">
           <CardHeader>

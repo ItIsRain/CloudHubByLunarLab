@@ -285,6 +285,8 @@ export interface Hackathon {
   teamCount: number;
   submissionCount: number;
   totalPrizePool: number;
+  rsvpDeadline?: string;
+  registrationEditableUntil?: string;
   isBookmarked?: boolean;
   isFeatured: boolean;
   createdAt: string;

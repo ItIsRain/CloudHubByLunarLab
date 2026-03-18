@@ -21,6 +21,7 @@ ALTER TABLE public.hackathon_registrations
 ALTER TABLE public.hackathon_registrations
   ADD CONSTRAINT hackathon_registrations_status_check
   CHECK (status IN (
+    'draft',
     'pending',
     'confirmed',
     'under_review',

@@ -28,9 +28,10 @@ const footerLinks = {
   //   { label: "Press", href: "/press" },
   // ],
   legal: [
-    { label: "Privacy", href: "/legal/privacy" },
+    { label: "Privacy Policy", href: "/legal/privacy" },
     { label: "Terms", href: "/legal/terms" },
     { label: "Cookies", href: "/legal/cookies" },
+    { label: "Data Rights", href: "/legal/privacy#your-rights" },
   ],
 };
 

@@ -7,6 +7,7 @@ import {
   dbRowToCompetitionPhase,
   phaseFormToDbRow,
 } from "@/lib/supabase/mappers";
+import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
 
 const VALID_PHASE_TYPES = ["bootcamp", "final", "custom"] as const;
 
@@ -47,6 +48,17 @@ async function authenticateOrganizer(
       ? getSupabaseAdminClient()
       : await getSupabaseServerClient();
 
+  // Check access via RBAC (canEdit check is done by caller)
+  const access = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+  if (!access.hasAccess || !canEdit(access.role)) {
+    return {
+      auth: null,
+      supabase: null,
+      hackathon: null,
+      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+    } as const;
+  }
+
   const { data: hackathon } = await supabase
     .from("hackathons")
     .select("organizer_id, screening_config")
@@ -65,19 +77,12 @@ async function authenticateOrganizer(
     } as const;
   }
 
-  if (hackathon.organizer_id !== auth.userId) {
-    return {
-      auth: null,
-      supabase: null,
-      hackathon: null,
-      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-    } as const;
-  }
-
   return { auth, supabase, hackathon, error: null } as const;
 }
 
 // ─── GET /api/hackathons/[hackathonId]/phases ────────────
+// Public read: returns basic phase info (name, dates, type, status)
+// Authenticated organizer: returns full data with aggregate counts
 
 export async function GET(
   request: NextRequest,
@@ -90,14 +95,33 @@ export async function GET(
       return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
     }
 
-    const { supabase, hackathon, error } = await authenticateOrganizer(
-      request,
-      hackathonId
-    );
-    if (error) return error;
+    // Try to authenticate — but allow public access for basic reads
+    const auth = await authenticateRequest(request);
+    const isAuthenticated = auth.type !== "unauthenticated";
+
+    // Always use admin client for reading phases (public endpoint).
+    // The organizer check below gates access to aggregate counts.
+    const adminSb = getSupabaseAdminClient();
+
+    // Check if the user is the organizer (for extended data)
+    let isOrganizer = false;
+    let hackathon: Record<string, unknown> | null = null;
+
+    const { data: hackathonRow } = await adminSb
+      .from("hackathons")
+      .select("organizer_id, screening_config")
+      .eq("id", hackathonId)
+      .single();
+
+    if (!hackathonRow) {
+      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+    }
+
+    hackathon = hackathonRow as Record<string, unknown>;
+    isOrganizer = isAuthenticated && hackathon.organizer_id === auth.userId;
 
     // Fetch all phases ordered by sort_order
-    const { data: phases, error: phasesError } = await supabase
+    const { data: phases, error: phasesError } = await adminSb
       .from("competition_phases")
       .select("*")
       .eq("hackathon_id", hackathonId)
@@ -114,26 +138,31 @@ export async function GET(
       return NextResponse.json({ data: [] });
     }
 
+    // Public read: return basic phase info only
+    if (!isOrganizer) {
+      const data = phases.map((p) => dbRowToCompetitionPhase(p as Record<string, unknown>));
+      return NextResponse.json({ data });
+    }
+
+    // ── Organizer-only: aggregate counts ──────────────────
     const phaseIds = phases.map((p) => (p as Record<string, unknown>).id as string);
 
-    // Fetch aggregate counts in parallel
     const [reviewersResult, scoresResult, assignmentsResult] =
       await Promise.all([
-        supabase
+        adminSb
           .from("phase_reviewers")
           .select("phase_id")
           .in("phase_id", phaseIds),
-        supabase
+        adminSb
           .from("phase_scores")
           .select("phase_id")
           .in("phase_id", phaseIds),
-        supabase
+        adminSb
           .from("reviewer_assignments")
           .select("phase_id")
           .in("phase_id", phaseIds),
       ]);
 
-    // Build per-phase count maps
     const reviewerCounts: Record<string, number> = {};
     const scoreCounts: Record<string, number> = {};
     const assignmentCounts: Record<string, number> = {};
@@ -151,26 +180,23 @@ export async function GET(
       assignmentCounts[pid] = (assignmentCounts[pid] || 0) + 1;
     }
 
-    // Compute applicant counts per phase using campus_filter
     const screeningConfig =
-      (hackathon.screening_config as Record<string, unknown>) || {};
+      (hackathon!.screening_config as Record<string, unknown>) || {};
     const quotaFieldId = screeningConfig.quotaFieldId as string | undefined;
     const applicantCounts: Record<string, number> = {};
 
-    // Only fetch registrations if any phase has a campus_filter
     const phasesWithCampus = phases.filter(
       (p) => (p as Record<string, unknown>).campus_filter
     );
 
     if (quotaFieldId && phasesWithCampus.length > 0) {
-      const { data: registrations } = await supabase
+      const { data: registrations } = await adminSb
         .from("hackathon_registrations")
         .select("form_data")
         .eq("hackathon_id", hackathonId)
         .in("status", ["accepted", "eligible"]);
 
       if (registrations) {
-        // Build a map: campusValue -> count of matching registrations
         const campusCounts: Record<string, number> = {};
         for (const reg of registrations) {
           const formData = (reg as Record<string, unknown>).form_data as
@@ -184,7 +210,6 @@ export async function GET(
           }
         }
 
-        // Assign count to each phase based on its campus_filter
         for (const p of phasesWithCampus) {
           const row = p as Record<string, unknown>;
           const campus = row.campus_filter as string;
@@ -193,12 +218,11 @@ export async function GET(
       }
     }
 
-    // For phases without campus_filter, count all accepted/eligible registrations
     const phasesWithoutCampus = phases.filter(
       (p) => !(p as Record<string, unknown>).campus_filter
     );
     if (phasesWithoutCampus.length > 0) {
-      const { count } = await supabase
+      const { count } = await adminSb
         .from("hackathon_registrations")
         .select("*", { count: "exact", head: true })
         .eq("hackathon_id", hackathonId)

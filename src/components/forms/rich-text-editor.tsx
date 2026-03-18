@@ -845,13 +845,15 @@ export function RichTextEditor({
                   : ""
               }
               onInsert={(url) => {
-                editor
-                  .chain()
-                  .focus()
-                  .extendMarkRange("link")
-                  .setLink({ href: url })
-                  .run();
                 setShowLinkPopover(false);
+                requestAnimationFrame(() => {
+                  editor
+                    ?.chain()
+                    .focus()
+                    .extendMarkRange("link")
+                    .setLink({ href: url })
+                    .run();
+                });
               }}
               onClose={() => setShowLinkPopover(false)}
             />
@@ -872,8 +874,11 @@ export function RichTextEditor({
           {showImagePopover && (
             <ImageInsertPopover
               onInsert={(url, alt) => {
-                editor.chain().focus().setImage({ src: url, alt }).run();
                 setShowImagePopover(false);
+                // Small delay to let popover unmount before focusing editor
+                requestAnimationFrame(() => {
+                  editor?.chain().focus().setImage({ src: url, alt }).run();
+                });
               }}
               onClose={() => setShowImagePopover(false)}
             />
@@ -894,8 +899,10 @@ export function RichTextEditor({
           {showYoutubePopover && (
             <YoutubeInsertPopover
               onInsert={(url) => {
-                editor.commands.setYoutubeVideo({ src: url });
                 setShowYoutubePopover(false);
+                requestAnimationFrame(() => {
+                  editor?.commands.setYoutubeVideo({ src: url });
+                });
               }}
               onClose={() => setShowYoutubePopover(false)}
             />

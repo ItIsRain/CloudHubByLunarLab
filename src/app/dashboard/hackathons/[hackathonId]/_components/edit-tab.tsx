@@ -77,6 +77,8 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
     judgingStart: "",
     judgingEnd: "",
     winnersAnnouncement: "",
+    rsvpDeadline: "",
+    registrationEditableUntil: "",
     minTeamSize: 1,
     maxTeamSize: 4,
     allowSolo: true,
@@ -106,6 +108,8 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
       judgingStart: hackathon.judgingStart || "",
       judgingEnd: hackathon.judgingEnd || "",
       winnersAnnouncement: hackathon.winnersAnnouncement || "",
+      rsvpDeadline: hackathon.rsvpDeadline || "",
+      registrationEditableUntil: hackathon.registrationEditableUntil || "",
       minTeamSize: hackathon.minTeamSize || 1,
       maxTeamSize: hackathon.maxTeamSize || 4,
       allowSolo: hackathon.allowSolo ?? true,
@@ -343,6 +347,40 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
                     }))
                   }
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  RSVP Deadline
+                </label>
+                <DateTimePicker
+                  value={formData.rsvpDeadline}
+                  onChange={(val) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      rsvpDeadline: val,
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Deadline for accepted applicants to confirm attendance
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Application Editable Until
+                </label>
+                <DateTimePicker
+                  value={formData.registrationEditableUntil}
+                  onChange={(val) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      registrationEditableUntil: val,
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Applicants can edit their submission until this date
+                </p>
               </div>
             </div>
           </CardContent>

@@ -31,6 +31,9 @@ import {
   EyeOff,
   LogOut,
   XCircle,
+  CheckCircle,
+  ThumbsDown,
+  FileEdit,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SafeHtml } from "@/components/ui/safe-html";
@@ -52,8 +55,9 @@ const HackathonRegistrationDialog = dynamic(() => import("@/components/dialogs/h
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useHackathonSubmissions } from "@/hooks/use-submissions";
 import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
-import { useHackathonRegistration, useRegisterForHackathon, useCancelHackathonRegistration } from "@/hooks/use-registrations";
+import { useHackathonRegistration, useRegisterForHackathon, useCancelHackathonRegistration, useSaveHackathonDraft, useEditHackathonRegistration, useRespondRsvp } from "@/hooks/use-registrations";
 import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
+import { usePhases } from "@/hooks/use-phases";
 import { useAuthStore } from "@/store/auth-store";
 import { cn, formatDate, formatCurrency, getTimeRemaining } from "@/lib/utils";
 
@@ -107,15 +111,25 @@ export default function HackathonDetailPage() {
   const hackathon = hackathonData?.data;
   const { data: teamsData } = useHackathonTeams(hackathon?.id);
   const { data: submissionsData } = useHackathonSubmissions(hackathon?.id);
+  const { data: phasesData } = usePhases(hackathon?.id);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const { data: regData } = useHackathonRegistration(hackathon?.id);
   const isRegistered = regData?.registered ?? false;
   const isRejected = regData?.rejected ?? false;
   const registrationStatus = regData?.registration?.status;
+  const rsvpStatus = regData?.registration?.rsvp_status;
   const registerMutation = useRegisterForHackathon();
   const cancelMutation = useCancelHackathonRegistration();
+  const saveDraftMutation = useSaveHackathonDraft();
+  const editMutation = useEditHackathonRegistration();
+  const rsvpMutation = useRespondRsvp();
   const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false);
+  const [editDialogOpen, setEditDialogOpen] = React.useState(false);
+
+  // Determine if registration is a draft
+  const isDraft = regData?.registration?.status === "draft";
+  const existingFormData = regData?.registration?.form_data;
 
   const { bookmarkIds } = useBookmarkIds("hackathon");
   const toggleBookmark = useToggleBookmark();
@@ -128,6 +142,8 @@ export default function HackathonDetailPage() {
   const [editTeamOpen, setEditTeamOpen] = React.useState(false);
   const [joinTeamOpen, setJoinTeamOpen] = React.useState(false);
   const [registrationDialogOpen, setRegistrationDialogOpen] = React.useState(false);
+  const [consentDialogOpen, setConsentDialogOpen] = React.useState(false);
+  const [directConsent, setDirectConsent] = React.useState({ dataProcessing: false, marketing: false, thirdParty: false });
   const [selectedTeam, setSelectedTeam] = React.useState<import("@/lib/types").Team | null>(null);
   const createTeamMutation = useCreateTeam();
 
@@ -168,6 +184,7 @@ export default function HackathonDetailPage() {
   const hackTeams = teamsData?.data || [];
   const hackSubs = submissionsData?.data || [];
   const isOrganizer = user?.id === hackathon.organizerId;
+  const canEditApplication = (registrationStatus === "pending" || registrationStatus === "draft" || registrationStatus === "confirmed") && !isOrganizer;
 
   const getDeadline = () => {
     if (hackathon.status === "published" || hackathon.status === "registration-open") return hackathon.registrationEnd;
@@ -179,15 +196,36 @@ export default function HackathonDetailPage() {
 
   const tierOrder = ["platinum", "gold", "silver", "bronze", "community"] as const;
 
-  const timeline = [
-    { label: "Registration Opens", date: hackathon.registrationStart },
-    { label: "Registration Closes", date: hackathon.registrationEnd },
-    { label: "Hacking Starts", date: hackathon.hackingStart },
-    { label: "Hacking Ends", date: hackathon.hackingEnd },
-    { label: "Submission Deadline", date: hackathon.submissionDeadline },
-    { label: "Judging", date: hackathon.judgingStart },
-    { label: "Winners Announced", date: hackathon.winnersAnnouncement },
-  ];
+  const competitionPhases = phasesData?.data ?? [];
+
+  const timeline: {
+    label: string;
+    date: string;
+    isPhase: boolean;
+    endDate?: string | null;
+    campusFilter?: string | null;
+    phaseType?: string | null;
+  }[] = [
+    { label: "Registration Opens", date: hackathon.registrationStart, isPhase: false },
+    { label: "Registration Closes", date: hackathon.registrationEnd, isPhase: false },
+    { label: "Hacking Starts", date: hackathon.hackingStart, isPhase: false },
+    { label: "Hacking Ends", date: hackathon.hackingEnd, isPhase: false },
+    { label: "Submission Deadline", date: hackathon.submissionDeadline, isPhase: false },
+    { label: "Judging", date: hackathon.judgingStart, isPhase: false },
+    { label: "Winners Announced", date: hackathon.winnersAnnouncement, isPhase: false },
+    ...competitionPhases
+      .filter((p) => p.startDate)
+      .map((p) => ({
+        label: p.name,
+        date: p.startDate!,
+        isPhase: true as const,
+        endDate: p.endDate,
+        campusFilter: p.campusFilter,
+        phaseType: p.phaseType,
+      })),
+  ]
+    .filter((item) => item.date)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -286,81 +324,143 @@ export default function HackathonDetailPage() {
                       <Badge variant="destructive" className="w-full justify-center whitespace-nowrap px-4 py-2 text-sm">
                         Application {registrationStatus === "ineligible" ? "Ineligible" : registrationStatus === "declined" ? "Declined" : "Rejected"}
                       </Badge>
+                    ) : isDraft ? (
+                      <Button size="sm" onClick={() => {
+                        if (hackathon.registrationFields && hackathon.registrationFields.length > 0) {
+                          setRegistrationDialogOpen(true);
+                        }
+                      }}>
+                        <FileEdit className="h-4 w-4 mr-1" />
+                        Resume Draft
+                      </Button>
                     ) : isRegistered ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-nowrap">
                         {(registrationStatus === "accepted" || registrationStatus === "approved") && (
-                          <Badge variant="success" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
-                            <Check className="h-4 w-4 mr-1.5" />
-                            Successfully Registered
+                          <Badge variant="success" className="justify-center whitespace-nowrap px-3 py-1.5 text-xs">
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            Registered
                           </Badge>
                         )}
                         {registrationStatus === "eligible" && (
-                          <Badge variant="success" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
-                            <Check className="h-4 w-4 mr-1.5" />
+                          <Badge variant="success" className="justify-center whitespace-nowrap px-3 py-1.5 text-xs">
+                            <Check className="h-3.5 w-3.5 mr-1" />
                             Eligible
                           </Badge>
                         )}
                         {registrationStatus === "pending" && (
-                          <Badge variant="warning" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
-                            <Clock className="h-4 w-4 mr-1.5" />
-                            Pending Review
+                          <Badge variant="warning" className="justify-center whitespace-nowrap px-3 py-1.5 text-xs">
+                            <Clock className="h-3.5 w-3.5 mr-1" />
+                            Pending
                           </Badge>
                         )}
                         {registrationStatus === "under_review" && (
-                          <Badge variant="warning" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
-                            <Clock className="h-4 w-4 mr-1.5" />
+                          <Badge variant="warning" className="justify-center whitespace-nowrap px-3 py-1.5 text-xs">
+                            <Clock className="h-3.5 w-3.5 mr-1" />
                             Under Review
                           </Badge>
                         )}
                         {registrationStatus === "waitlisted" && (
-                          <Badge variant="warning" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
-                            <Clock className="h-4 w-4 mr-1.5" />
+                          <Badge variant="warning" className="justify-center whitespace-nowrap px-3 py-1.5 text-xs">
+                            <Clock className="h-3.5 w-3.5 mr-1" />
                             Waitlisted
                           </Badge>
                         )}
                         {registrationStatus === "confirmed" && (
-                          <Badge variant="success" className="justify-center whitespace-nowrap px-4 py-2 text-sm">
-                            <Check className="h-4 w-4 mr-1.5" />
+                          <Badge variant="success" className="justify-center whitespace-nowrap px-3 py-1.5 text-xs">
+                            <Check className="h-3.5 w-3.5 mr-1" />
                             Registered
                           </Badge>
                         )}
+                        {/* RSVP buttons for accepted users who haven't responded yet */}
+                        {(registrationStatus === "accepted" || registrationStatus === "approved") && (!rsvpStatus || rsvpStatus === "pending") && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="bg-green-500/20 border-green-400/50 text-green-200 hover:bg-green-500/30 h-8 px-3 text-xs"
+                              onClick={() => rsvpMutation.mutate({ hackathonId: hackathon.id, response: "confirmed" }, {
+                                onSuccess: () => toast.success("RSVP confirmed! See you there!"),
+                                onError: (err) => toast.error(err.message),
+                              })}
+                              disabled={rsvpMutation.isPending}
+                            >
+                              <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                              RSVP
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="bg-white/10 border-white/30 text-white hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-200 h-8 px-3 text-xs"
+                              onClick={() => rsvpMutation.mutate({ hackathonId: hackathon.id, response: "declined" }, {
+                                onSuccess: () => toast.success("RSVP declined. Your spot will be given to the next person on the waitlist."),
+                                onError: (err) => toast.error(err.message),
+                              })}
+                              disabled={rsvpMutation.isPending}
+                            >
+                              <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+                              Decline
+                            </Button>
+                          </>
+                        )}
+                        {/* Show RSVP status badge if already responded */}
+                        {(registrationStatus === "accepted" || registrationStatus === "approved") && rsvpStatus === "confirmed" && (
+                          <Badge variant="success" className="justify-center whitespace-nowrap px-3 py-1.5 text-xs">
+                            <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                            RSVP Confirmed
+                          </Badge>
+                        )}
+                        {(registrationStatus === "accepted" || registrationStatus === "approved") && rsvpStatus === "declined" && (
+                          <Badge variant="destructive" className="justify-center whitespace-nowrap px-3 py-1.5 text-xs">
+                            <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+                            RSVP Declined
+                          </Badge>
+                        )}
+                        {/* Edit Application button */}
+                        {canEditApplication && hackathon.registrationFields?.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="bg-white/10 border-white/30 text-white hover:bg-white/20 h-8 px-3 text-xs"
+                            onClick={() => setEditDialogOpen(true)}
+                          >
+                            <FileEdit className="h-3.5 w-3.5 mr-1" />
+                            Edit
+                          </Button>
+                        )}
+                        {/* Cancel / Leave button */}
                         <Button
                           size="sm"
                           variant="outline"
-                          className="bg-white/10 border-white/30 text-white hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-200"
+                          className="bg-white/10 border-white/30 text-white hover:bg-red-500/20 hover:border-red-400/50 hover:text-red-200 h-8 px-3 text-xs"
                           onClick={() => setCancelDialogOpen(true)}
                           disabled={cancelMutation.isPending}
                         >
                           {cancelMutation.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (registrationStatus === "accepted" || registrationStatus === "approved") ? (
                             <>
-                              <LogOut className="h-4 w-4 mr-1" />
+                              <LogOut className="h-3.5 w-3.5 mr-1" />
                               Leave
                             </>
                           ) : (
                             <>
-                              <XCircle className="h-4 w-4 mr-1" />
+                              <XCircle className="h-3.5 w-3.5 mr-1" />
                               Cancel
                             </>
                           )}
                         </Button>
                       </div>
                     ) : (
-                      <Button size="sm" onClick={async () => {
+                      <Button size="sm" onClick={() => {
                         if (!isAuthenticated) { toast.error("Please sign in to register"); return; }
                         // If hackathon has custom registration fields, open the form dialog
                         if (hackathon.registrationFields && hackathon.registrationFields.length > 0) {
                           setRegistrationDialogOpen(true);
                           return;
                         }
-                        // Otherwise, register directly (no form needed)
-                        try {
-                          await registerMutation.mutateAsync({ hackathonId: hackathon.id });
-                          toast.success("Successfully registered for the hackathon!");
-                        } catch (err) {
-                          toast.error(err instanceof Error ? err.message : "Registration failed");
-                        }
+                        // Otherwise, show consent dialog before direct registration
+                        setDirectConsent({ dataProcessing: false, marketing: false, thirdParty: false });
+                        setConsentDialogOpen(true);
                       }} disabled={registerMutation.isPending}>
                         {registerMutation.isPending ? (
                           <Loader2 className="h-4 w-4 mr-1 animate-spin" />
@@ -416,12 +516,31 @@ export default function HackathonDetailPage() {
                       {timeline.map((item, i) => (
                         <div key={i} className="flex items-center gap-4">
                           <div className="flex flex-col items-center">
-                            <div className={cn("h-3 w-3 rounded-full", new Date(item.date) < new Date() ? "bg-primary" : "bg-muted")} />
+                            <div className={cn(
+                              "rounded-full shrink-0",
+                              item.isPhase ? "h-4 w-4 border-2 border-accent bg-accent/20" : "h-3 w-3",
+                              !item.isPhase && (new Date(item.date) < new Date() ? "bg-primary" : "bg-muted")
+                            )} />
                             {i < timeline.length - 1 && <div className="w-0.5 h-8 bg-muted" />}
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-medium">{item.label}</p>
-                            <p className="text-xs text-muted-foreground">{formatDate(item.date)}</p>
+                            <div className="flex items-center gap-2">
+                              <p className={cn("text-sm font-medium", item.isPhase && "text-accent")}>{item.label}</p>
+                              {item.isPhase && item.phaseType && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize">
+                                  {item.phaseType}
+                                </Badge>
+                              )}
+                              {item.isPhase && item.campusFilter && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                  {item.campusFilter}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {formatDate(item.date)}
+                              {item.isPhase && item.endDate && ` — ${formatDate(item.endDate)}`}
+                            </p>
                           </div>
                         </div>
                       ))}
@@ -540,11 +659,30 @@ export default function HackathonDetailPage() {
                     <div className="space-y-4">
                       {timeline.map((item, i) => (
                         <div key={i} className="flex items-center gap-4 py-3 border-b last:border-0">
-                          <div className={cn("h-3 w-3 rounded-full flex-shrink-0", new Date(item.date) < new Date() ? "bg-primary" : "bg-muted")} />
+                          <div className={cn(
+                            "rounded-full flex-shrink-0",
+                            item.isPhase ? "h-4 w-4 border-2 border-accent bg-accent/20" : "h-3 w-3",
+                            !item.isPhase && (new Date(item.date) < new Date() ? "bg-primary" : "bg-muted")
+                          )} />
                           <div className="flex-1">
-                            <p className="font-medium">{item.label}</p>
+                            <div className="flex items-center gap-2">
+                              <p className={cn("font-medium", item.isPhase && "text-accent")}>{item.label}</p>
+                              {item.isPhase && item.phaseType && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize">
+                                  {item.phaseType}
+                                </Badge>
+                              )}
+                              {item.isPhase && item.campusFilter && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                  {item.campusFilter}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
-                          <span className="text-sm text-muted-foreground">{formatDate(item.date)}</span>
+                          <span className="text-sm text-muted-foreground shrink-0">
+                            {formatDate(item.date)}
+                            {item.isPhase && item.endDate && ` — ${formatDate(item.endDate)}`}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -842,9 +980,23 @@ export default function HackathonDetailPage() {
           registrationFields={hackathon.registrationFields}
           registrationSections={hackathon.registrationSections}
           isSubmitting={registerMutation.isPending}
-          onSubmit={async (formData) => {
+          mode={isDraft ? "draft" : "new"}
+          initialFormData={isDraft ? (existingFormData ?? undefined) : undefined}
+          onSaveDraft={(formData) => {
+            saveDraftMutation.mutate({ hackathonId: hackathon.id, formData }, {
+              onSuccess: () => toast.success("Draft saved!"),
+              onError: (err) => toast.error(err.message),
+            });
+          }}
+          isSavingDraft={saveDraftMutation.isPending}
+          onSubmit={async (formData, consent) => {
             try {
-              await registerMutation.mutateAsync({ hackathonId: hackathon.id, formData });
+              if (isDraft) {
+                // Submitting a draft → use PATCH to finalize
+                await editMutation.mutateAsync({ hackathonId: hackathon.id, formData });
+              } else {
+                await registerMutation.mutateAsync({ hackathonId: hackathon.id, formData, consent });
+              }
               setRegistrationDialogOpen(false);
               toast.success("Application submitted! You'll be notified once it's reviewed.");
             } catch (err) {
@@ -853,6 +1005,108 @@ export default function HackathonDetailPage() {
           }}
         />
       )}
+
+      {/* Edit Application Dialog */}
+      {hackathon.registrationFields && hackathon.registrationFields.length > 0 && (
+        <HackathonRegistrationDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          hackathonId={hackathon.id}
+          hackathonName={hackathon.name}
+          registrationFields={hackathon.registrationFields}
+          registrationSections={hackathon.registrationSections}
+          isSubmitting={editMutation.isPending}
+          mode="edit"
+          initialFormData={existingFormData ?? undefined}
+          onSubmit={async (formData, consent) => {
+            try {
+              await editMutation.mutateAsync({ hackathonId: hackathon.id, formData });
+              setEditDialogOpen(false);
+              toast.success("Application updated successfully!");
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Failed to update application");
+            }
+          }}
+        />
+      )}
+
+      {/* Direct Registration Consent Dialog (for hackathons with no form fields) */}
+      <Dialog open={consentDialogOpen} onOpenChange={setConsentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Data Consent</DialogTitle>
+            <DialogDescription>
+              Please review and accept the data processing consent before registering.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={directConsent.dataProcessing}
+                onChange={(e) => setDirectConsent((prev) => ({ ...prev, dataProcessing: e.target.checked }))}
+                className="h-4 w-4 rounded border-input mt-0.5 shrink-0"
+              />
+              <span className="text-sm">
+                I consent to the processing of my personal data for this competition.{" "}
+                <span className="text-destructive">*</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={directConsent.marketing}
+                onChange={(e) => setDirectConsent((prev) => ({ ...prev, marketing: e.target.checked }))}
+                className="h-4 w-4 rounded border-input mt-0.5 shrink-0"
+              />
+              <span className="text-sm text-muted-foreground">
+                I agree to receive marketing communications.
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={directConsent.thirdParty}
+                onChange={(e) => setDirectConsent((prev) => ({ ...prev, thirdParty: e.target.checked }))}
+                className="h-4 w-4 rounded border-input mt-0.5 shrink-0"
+              />
+              <span className="text-sm text-muted-foreground">
+                I consent to sharing my data with competition partners.
+              </span>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              View our{" "}
+              <Link href="/legal/privacy" target="_blank" className="text-primary hover:underline">
+                Privacy Policy
+              </Link>{" "}
+              for details on how your data is processed.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setConsentDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!directConsent.dataProcessing || registerMutation.isPending}
+              onClick={async () => {
+                try {
+                  await registerMutation.mutateAsync({
+                    hackathonId: hackathon.id,
+                    consent: directConsent,
+                  });
+                  setConsentDialogOpen(false);
+                  toast.success("Successfully registered for the hackathon!");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Registration failed");
+                }
+              }}
+            >
+              {registerMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Register
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Cancel Registration / Leave Hackathon Confirmation Dialog */}
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>

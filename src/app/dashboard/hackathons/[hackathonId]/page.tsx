@@ -17,8 +17,11 @@ import {
   GraduationCap,
   Handshake,
   Gift,
+  Trophy,
   Megaphone,
+  Mail,
   BarChart3,
+  Columns3,
   Settings,
   FileText,
   HelpCircle,
@@ -31,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useHackathon } from "@/hooks/use-hackathons";
+import { useCollaborators } from "@/hooks/use-collaborators";
 import { useAuthStore } from "@/store/auth-store";
 import { toast } from "sonner";
 
@@ -53,6 +57,9 @@ const ApplicationsTab = dynamic(() => import("./_components/applications-tab").t
 const ScreeningTab = dynamic(() => import("./_components/screening-tab").then(m => m.ScreeningTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 const FormBuilderTab = dynamic(() => import("./_components/form-builder-tab"), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 const PhasesTab = dynamic(() => import("./_components/phases-tab").then(m => m.PhasesTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
+const EmailTemplatesTab = dynamic(() => import("./_components/email-templates-tab").then(m => m.EmailTemplatesTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
+const WinnersTab = dynamic(() => import("./_components/winners-tab").then(m => m.WinnersTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
+const ScoreReviewTab = dynamic(() => import("./_components/score-review-tab").then(m => m.ScoreReviewTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 
 const statusConfig: Record<
   string,
@@ -79,11 +86,14 @@ const tabs = [
   { value: "teams", label: "Teams", icon: UsersRound },
   { value: "submissions", label: "Submissions", icon: Inbox },
   { value: "judging", label: "Judging", icon: Scale },
+  { value: "score-review", label: "Score Review", icon: Columns3 },
   { value: "mentors", label: "Mentors", icon: GraduationCap },
   { value: "sponsors", label: "Sponsors", icon: Handshake },
   { value: "prizes", label: "Prizes", icon: Gift },
+  { value: "winners", label: "Winners", icon: Trophy },
   { value: "faq", label: "FAQ", icon: HelpCircle },
   { value: "announcements", label: "Announcements", icon: Megaphone },
+  { value: "emails", label: "Emails", icon: Mail },
   { value: "analytics", label: "Analytics", icon: BarChart3 },
   { value: "settings", label: "Settings", icon: Settings },
 ];
@@ -97,9 +107,15 @@ function HackathonDashboardContent() {
   const hackathon = hackathonData?.data;
   const { user, isLoading: authLoading } = useAuthStore();
 
+  const { data: collabData } = useCollaborators(hackathonId);
+  const collaborators = collabData?.data ?? [];
+  const myCollab = collaborators.find((c) => c.userId === user?.id);
+  const isCollaborator = !!myCollab;
+  const collaboratorRole = myCollab?.role ?? null;
+
   const isOwner = hackathon && user && hackathon.organizerId === user.id;
   const isAdmin = user?.roles?.includes("admin");
-  const hasAccess = isOwner || isAdmin;
+  const hasAccess = isOwner || isAdmin || isCollaborator;
 
   // Redirect unauthorized users
   React.useEffect(() => {
@@ -313,6 +329,9 @@ function HackathonDashboardContent() {
             <TabsContent value="judging">
               <JudgingTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
+            <TabsContent value="score-review">
+              <ScoreReviewTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
             <TabsContent value="mentors">
               <MentorsTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
@@ -322,17 +341,28 @@ function HackathonDashboardContent() {
             <TabsContent value="prizes">
               <PrizesTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
+            <TabsContent value="winners">
+              <WinnersTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
             <TabsContent value="faq">
               <FAQTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
             <TabsContent value="announcements">
               <AnnouncementsTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
+            <TabsContent value="emails">
+              <EmailTemplatesTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
             <TabsContent value="analytics">
               <AnalyticsTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
             <TabsContent value="settings">
-              <SettingsTab hackathon={hackathon} hackathonId={hackathonId} />
+              <SettingsTab
+                hackathon={hackathon}
+                hackathonId={hackathonId}
+                isOwner={!!isOwner}
+                collaboratorRole={collaboratorRole}
+              />
             </TabsContent>
           </Tabs>
         </motion.div>

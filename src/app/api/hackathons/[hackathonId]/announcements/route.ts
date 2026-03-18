@@ -5,6 +5,7 @@ import { profileToPublicUser } from "@/lib/supabase/mappers";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
 
 export async function GET(
   request: NextRequest,
@@ -32,20 +33,12 @@ export async function GET(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify user is either the organizer or a registered participant
-    const { data: hackathon } = await supabase
-      .from("hackathons")
-      .select("organizer_id")
-      .eq("id", hackathonId)
-      .single();
+    // Verify user is either a collaborator or a registered participant
+    const access = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    const isCollaborator = access.hasAccess;
 
-    if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
-    }
-
-    const isOrganizer = hackathon.organizer_id === auth.userId;
-    if (!isOrganizer) {
-      // For API key auth, only the organizer can list announcements
+    if (!isCollaborator) {
+      // For API key auth, only collaborators can list announcements
       if (auth.type === "api_key") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
@@ -135,7 +128,12 @@ export async function POST(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller is the hackathon organizer and get hackathon name
+    // Verify caller has access (owner/admin/editor can send announcements)
+    const postAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
+    if (!postAccess.hasAccess || !canEdit(postAccess.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { data: hackathon } = await supabase
       .from("hackathons")
       .select("organizer_id, name")
@@ -147,9 +145,6 @@ export async function POST(
         { error: "Hackathon not found" },
         { status: 404 }
       );
-    }
-    if (hackathon.organizer_id !== auth.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { title, message } = await request.json();

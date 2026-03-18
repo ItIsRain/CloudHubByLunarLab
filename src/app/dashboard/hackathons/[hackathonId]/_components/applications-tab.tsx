@@ -26,6 +26,10 @@ import {
   MinusSquare,
   Save,
   Megaphone,
+  Users,
+  CalendarClock,
+  Trash2,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,6 +56,11 @@ import type { Hackathon, FormField } from "@/lib/types";
 import { fetchJson } from "@/lib/fetch-json";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHackathonRsvp } from "@/hooks/use-registrations";
+import {
+  useScreeningOverrides,
+  type ScreeningOverride,
+} from "@/hooks/use-screening-overrides";
 
 // ── Types ──────────────────────────────────────────────
 
@@ -83,6 +92,7 @@ interface ApplicationParticipant {
   screeningResults?: ScreeningResult[];
   screeningFlags?: ScreeningResult[];
   screeningCompletedAt?: string | null;
+  resultsPublishedAt?: string | null;
   internalNotes?: string | null;
   flags?: { type: string; message: string; resolved: boolean }[];
   user: {
@@ -169,6 +179,23 @@ function getStatusActions(status: string) {
       );
       break;
     case "rejected":
+      actions.push(
+        { label: "Re-accept", icon: RotateCcw, targetStatus: "accepted", className: "text-green-600" },
+      );
+      break;
+    case "approved":
+      actions.push(
+        { label: "Decline", icon: XCircle, targetStatus: "declined", className: "text-orange-600" },
+        { label: "Cancel", icon: XCircle, targetStatus: "cancelled", className: "text-red-600" },
+      );
+      break;
+    case "declined":
+      actions.push(
+        { label: "Re-accept", icon: RotateCcw, targetStatus: "accepted", className: "text-green-600" },
+        { label: "Re-approve", icon: RotateCcw, targetStatus: "approved", className: "text-green-600" },
+      );
+      break;
+    case "cancelled":
       actions.push(
         { label: "Re-accept", icon: RotateCcw, targetStatus: "accepted", className: "text-green-600" },
       );
@@ -424,6 +451,185 @@ function InternalNotesEditor({
   );
 }
 
+// ── Override History Section ─────────────────────────────
+
+function OverrideHistorySection({
+  hackathonId,
+  registrationId,
+}: {
+  hackathonId: string;
+  registrationId: string;
+}) {
+  const { data, isLoading } = useScreeningOverrides(hackathonId, registrationId);
+  const overrides: ScreeningOverride[] = data?.data ?? [];
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border/50">
+      <div className="flex items-center gap-2 mb-3">
+        <RotateCcw className="h-4 w-4 text-muted-foreground" />
+        <h5 className="font-display font-bold text-sm">Status History</h5>
+        {overrides.length > 0 && (
+          <Badge variant="outline" className="text-xs ml-auto">
+            {overrides.length} {overrides.length === 1 ? "change" : "changes"}
+          </Badge>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="shimmer rounded-lg h-10 w-full" />
+          ))}
+        </div>
+      ) : overrides.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic py-2">
+          No manual status changes recorded.
+        </p>
+      ) : (
+        <div className="relative space-y-0">
+          {/* Timeline line */}
+          <div className="absolute left-[7px] top-3 bottom-3 w-px bg-border" />
+
+          {overrides.map((override) => {
+            const prevConf = statusBadgeConfig[override.previous_status] || {
+              variant: "muted" as const,
+            };
+            const newConf = statusBadgeConfig[override.new_status] || {
+              variant: "muted" as const,
+            };
+            const overriderLabel =
+              override.overrider?.full_name ||
+              override.overrider?.email ||
+              "Unknown";
+
+            return (
+              <div key={override.id} className="relative flex gap-3 pb-3 last:pb-0">
+                {/* Timeline dot */}
+                <div className="relative z-10 mt-1.5 h-[15px] w-[15px] shrink-0 rounded-full border-2 border-primary/40 bg-background flex items-center justify-center">
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge
+                      variant={prevConf.variant}
+                      className="capitalize text-[10px] px-1.5 py-0 h-4"
+                    >
+                      {override.previous_status.replace(/_/g, " ")}
+                    </Badge>
+                    <span className="text-muted-foreground text-xs">&rarr;</span>
+                    <Badge
+                      variant={newConf.variant}
+                      className="capitalize text-[10px] px-1.5 py-0 h-4"
+                    >
+                      {override.new_status.replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <span className="text-[11px] text-muted-foreground">
+                      by <span className="font-medium text-foreground/80">{overriderLabel}</span>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/60">
+                      {formatDate(override.created_at)}
+                    </span>
+                  </div>
+
+                  {override.reason && (
+                    <p className="text-xs text-muted-foreground mt-1 bg-muted/50 rounded px-2 py-1">
+                      {override.reason}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Status Change Reason Dialog ─────────────────────────
+
+function StatusChangeReasonDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  targetStatus,
+  actionLabel,
+  isPending,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (reason: string) => void;
+  targetStatus: string;
+  actionLabel: string;
+  isPending: boolean;
+}) {
+  const [reason, setReason] = React.useState("");
+
+  // Reset reason when dialog opens
+  React.useEffect(() => {
+    if (open) setReason("");
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            Change Status to{" "}
+            <Badge
+              variant={
+                (statusBadgeConfig[targetStatus] || { variant: "muted" as const })
+                  .variant
+              }
+              className="capitalize text-xs ml-1"
+            >
+              {targetStatus.replace(/_/g, " ")}
+            </Badge>
+          </DialogTitle>
+          <DialogDescription>
+            Optionally provide a reason for this status change. This will be
+            recorded in the audit trail.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-2">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">
+            Reason (optional)
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Overriding screening -- applicant provided additional documentation..."
+            rows={3}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+          />
+        </div>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onConfirm(reason)}
+            disabled={isPending}
+          >
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+            ) : null}
+            {actionLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────
 
 export function ApplicationsTab({
@@ -436,6 +642,23 @@ export function ApplicationsTab({
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [expandedRow, setExpandedRow] = React.useState<string | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+  const [reasonDialog, setReasonDialog] = React.useState<{
+    open: boolean;
+    registrationId: string;
+    targetStatus: string;
+    actionLabel: string;
+  }>({ open: false, registrationId: "", targetStatus: "", actionLabel: "" });
+  const [rsvpExpanded, setRsvpExpanded] = React.useState(true);
+  const [sectorExpanded, setSectorExpanded] = React.useState(true);
+
+  // Fetch RSVP stats
+  const { data: rsvpData } = useHackathonRsvp(hackathonId);
+  const rsvpStats = rsvpData?.data;
+  const hasAcceptedApplicants = (rsvpStats?.total ?? 0) > 0;
+  const confirmationRate =
+    rsvpStats && rsvpStats.total > 0
+      ? Math.round((rsvpStats.confirmed / rsvpStats.total) * 100)
+      : 0;
 
   // Fetch applications (participants with form_data)
   const { data: applicationsData, isLoading } = useQuery<{
@@ -470,16 +693,20 @@ export function ApplicationsTab({
     mutationFn: async ({
       registrationId,
       status,
+      reason,
     }: {
       registrationId: string;
       status: string;
+      reason?: string;
     }) => {
+      const payload: Record<string, unknown> = { registrationId, status };
+      if (reason) payload.reason = reason;
       const res = await fetch(
         `/api/hackathons/${hackathonId}/participants`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ registrationId, status }),
+          body: JSON.stringify(payload),
         }
       );
       if (!res.ok) {
@@ -498,6 +725,36 @@ export function ApplicationsTab({
       queryClient.invalidateQueries({
         queryKey: ["hackathon-participants", hackathonId],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["screening-overrides", hackathonId],
+      });
+    },
+  });
+
+  // Delete applicant mutation (cancelled only)
+  const deleteApplicant = useMutation({
+    mutationFn: async (registrationId: string) => {
+      const res = await fetch(
+        `/api/hackathons/${hackathonId}/participants?registrationId=${registrationId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Failed to delete applicant");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-applications", hackathonId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-applications-counts", hackathonId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["hackathon-participants", hackathonId],
+      });
+      toast.success("Applicant deleted successfully.");
     },
   });
 
@@ -559,6 +816,7 @@ export function ApplicationsTab({
           eligible: number;
           ineligible: number;
           underReview: number;
+          rejected: number;
         };
       }>;
     },
@@ -570,11 +828,14 @@ export function ApplicationsTab({
   const unpublishedEligible = unpublishedData?.data?.eligible ?? 0;
   const unpublishedIneligible = unpublishedData?.data?.ineligible ?? 0;
   const unpublishedUnderReview = unpublishedData?.data?.underReview ?? 0;
+  const unpublishedRejected = unpublishedData?.data?.rejected ?? 0;
 
   const publishResults = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { force?: boolean }) => {
       const res = await fetch(`/api/hackathons/${hackathonId}/screen`, {
         method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: opts?.force ?? false }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -588,6 +849,8 @@ export function ApplicationsTab({
           eligible: number;
           ineligible: number;
           underReview: number;
+          rejected: number;
+          forced?: boolean;
           message?: string;
         };
       }>;
@@ -603,9 +866,10 @@ export function ApplicationsTab({
         if (d.waitlisted > 0) parts.push(`${d.waitlisted} waitlisted`);
         if (d.eligible > 0) parts.push(`${d.eligible} eligible`);
         if (d.ineligible > 0) parts.push(`${d.ineligible} ineligible`);
+        if (d.rejected > 0) parts.push(`${d.rejected} rejected`);
         if (d.underReview > 0) parts.push(`${d.underReview} under review`);
         toast.success(
-          `Published results: ${d.published} emails sent (${parts.join(", ")})`
+          `${d.forced ? "Resent" : "Published"} results: ${d.published} emails sent (${parts.join(", ")})`
         );
       }
       queryClient.invalidateQueries({
@@ -749,7 +1013,8 @@ export function ApplicationsTab({
   }, [applications]);
 
   const pendingCount = statusCounts["pending"] || 0;
-  const eligibleCount = statusCounts["eligible"] || 0;
+  const eligibleCount =
+    (statusCounts["eligible"] || 0) + (statusCounts["accepted"] || 0) + (statusCounts["approved"] || 0);
   const acceptedCount = statusCounts["accepted"] || 0;
   const ineligibleCount =
     (statusCounts["ineligible"] || 0) + (statusCounts["rejected"] || 0);
@@ -757,6 +1022,79 @@ export function ApplicationsTab({
     () => applications.filter((app) => !!app.screeningCompletedAt).length,
     [applications]
   );
+
+  // Sector distribution data
+  const sectorDistribution = React.useMemo(() => {
+    // Step 1: Find the sector field from the form schema
+    // Check mappingKey first (deprecated but may still exist), then match by label
+    const sectorField = hackathon.registrationFields.find(
+      (f) => f.mappingKey === "sector"
+    ) ?? hackathon.registrationFields.find(
+      (f) =>
+        (f.type === "select" || f.type === "radio") &&
+        /sector|industry/i.test(f.label)
+    );
+
+    // Step 2: Fall back to scanning form_data for common field names
+    const SECTOR_KEYS = ["sector", "industry", "business_sector", "startup_sector"];
+
+    const counts: Record<string, number> = {};
+    let total = 0;
+
+    for (const app of applications) {
+      if (!app.formData) continue;
+
+      let sectorValue: unknown = undefined;
+
+      if (sectorField) {
+        sectorValue = app.formData[sectorField.id];
+      } else {
+        // Try common field names in form_data keys
+        for (const key of SECTOR_KEYS) {
+          if (app.formData[key] !== undefined && app.formData[key] !== null && app.formData[key] !== "") {
+            sectorValue = app.formData[key];
+            break;
+          }
+        }
+        // Also try matching form field IDs that contain sector/industry
+        if (sectorValue === undefined) {
+          for (const field of hackathon.registrationFields) {
+            if (
+              (field.type === "select" || field.type === "radio" || field.type === "text") &&
+              SECTOR_KEYS.some((k) => field.id.toLowerCase().includes(k) || field.label.toLowerCase().includes(k))
+            ) {
+              sectorValue = app.formData[field.id];
+              if (sectorValue !== undefined && sectorValue !== null && sectorValue !== "") break;
+            }
+          }
+        }
+      }
+
+      if (sectorValue !== null && sectorValue !== undefined && sectorValue !== "") {
+        const label = String(sectorValue);
+        counts[label] = (counts[label] || 0) + 1;
+        total++;
+      }
+    }
+
+    // Resolve display labels from field options if available
+    const optionsMap = new Map<string, string>();
+    if (sectorField?.options) {
+      for (const opt of sectorField.options) {
+        optionsMap.set(opt.value, opt.label);
+      }
+    }
+
+    const entries = Object.entries(counts)
+      .map(([value, count]) => ({
+        label: optionsMap.get(value) || value,
+        count,
+        percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { entries, total, fieldLabel: sectorField?.label ?? "Sector" };
+  }, [applications, hackathon.registrationFields]);
 
   // Extract applicant name/email from form_data or user profile
   const getApplicantInfo = (app: ApplicationParticipant) => {
@@ -786,14 +1124,27 @@ export function ApplicationsTab({
   const handleStatusChange = async (
     registrationId: string,
     newStatus: string,
-    label: string
+    label: string,
+    reason?: string
   ) => {
     try {
-      await updateStatus.mutateAsync({ registrationId, status: newStatus });
+      await updateStatus.mutateAsync({
+        registrationId,
+        status: newStatus,
+        reason: reason || undefined,
+      });
       toast.success(`Application ${label.toLowerCase()} successfully!`);
     } catch {
       toast.error("Failed to update application status.");
     }
+  };
+
+  const openReasonDialog = (
+    registrationId: string,
+    targetStatus: string,
+    actionLabel: string
+  ) => {
+    setReasonDialog({ open: true, registrationId, targetStatus, actionLabel });
   };
 
   const handleRunScreening = () => {
@@ -926,8 +1277,7 @@ export function ApplicationsTab({
             }}
             disabled={
               publishResults.isPending ||
-              totalApplications === 0 ||
-              !allScreened
+              totalApplications === 0
             }
             title={
               totalApplications > 0 && !allScreened
@@ -981,6 +1331,182 @@ export function ApplicationsTab({
           <option value="cancelled">Cancelled</option>
         </select>
       </motion.div>
+
+      {/* RSVP Tracking */}
+      {hasAcceptedApplicants && rsvpStats && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+            <CardContent className="p-0">
+              {/* Collapsible Header */}
+              <button
+                type="button"
+                onClick={() => setRsvpExpanded((prev) => !prev)}
+                className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-muted/30 rounded-xl"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                    <UserCheck className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-sm font-semibold">
+                      RSVP Tracking
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {rsvpStats.confirmed} of {rsvpStats.total} accepted
+                      applicants confirmed
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge
+                    variant={confirmationRate >= 75 ? "success" : confirmationRate >= 40 ? "warning" : "destructive"}
+                    className="text-xs"
+                  >
+                    {confirmationRate}% confirmed
+                  </Badge>
+                  {rsvpExpanded ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </div>
+              </button>
+
+              {/* Collapsible Content */}
+              <AnimatePresence initial={false}>
+                {rsvpExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-4 px-5 pb-5">
+                      {/* Stat Boxes */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="rounded-lg border border-blue-500/30 bg-blue-50 dark:bg-blue-950/20 p-3 text-center">
+                          <Users className="mx-auto mb-1 h-4 w-4 text-blue-500" />
+                          <p className="font-mono text-xl font-bold text-blue-600 dark:text-blue-400">
+                            {rsvpStats.total}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Total Accepted
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-green-500/30 bg-green-50 dark:bg-green-950/20 p-3 text-center">
+                          <CheckCircle2 className="mx-auto mb-1 h-4 w-4 text-green-500" />
+                          <p className="font-mono text-xl font-bold text-green-600 dark:text-green-400">
+                            {rsvpStats.confirmed}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Confirmed
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-yellow-500/30 bg-yellow-50 dark:bg-yellow-950/20 p-3 text-center">
+                          <Clock className="mx-auto mb-1 h-4 w-4 text-yellow-500" />
+                          <p className="font-mono text-xl font-bold text-yellow-600 dark:text-yellow-400">
+                            {rsvpStats.pending}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Pending
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-red-500/30 bg-red-50 dark:bg-red-950/20 p-3 text-center">
+                          <XCircle className="mx-auto mb-1 h-4 w-4 text-red-500" />
+                          <p className="font-mono text-xl font-bold text-red-600 dark:text-red-400">
+                            {rsvpStats.declined}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Declined
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            Confirmation Progress
+                          </span>
+                          <span className="font-mono font-medium text-foreground">
+                            {rsvpStats.confirmed}/{rsvpStats.total}
+                          </span>
+                        </div>
+                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted/50">
+                          <motion.div
+                            className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${confirmationRate}%` }}
+                            transition={{ duration: 0.6, ease: "easeOut" }}
+                          />
+                        </div>
+                        {/* Segmented indicator */}
+                        {rsvpStats.total > 0 && (
+                          <div className="flex gap-4 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+                              Confirmed {Math.round((rsvpStats.confirmed / rsvpStats.total) * 100)}%
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
+                              Pending {Math.round((rsvpStats.pending / rsvpStats.total) * 100)}%
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
+                              Declined {Math.round((rsvpStats.declined / rsvpStats.total) * 100)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Deadline */}
+                      {rsvpStats.deadline && (
+                        <div className="flex items-center gap-2 rounded-lg border border-orange-500/20 bg-orange-50 dark:bg-orange-950/20 px-3 py-2">
+                          <CalendarClock className="h-4 w-4 text-orange-500 shrink-0" />
+                          <div className="text-sm text-orange-700 dark:text-orange-400">
+                            <span className="font-medium">RSVP Deadline:</span>{" "}
+                            {formatDate(rsvpStats.deadline)}
+                            {(() => {
+                              const deadlineDate = new Date(rsvpStats.deadline!);
+                              const now = new Date();
+                              const diffMs = deadlineDate.getTime() - now.getTime();
+                              if (diffMs <= 0) {
+                                return (
+                                  <Badge variant="destructive" className="ml-2 text-xs">
+                                    Expired
+                                  </Badge>
+                                );
+                              }
+                              const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                              if (diffDays <= 3) {
+                                return (
+                                  <Badge variant="warning" className="ml-2 text-xs">
+                                    {diffDays} day{diffDays !== 1 ? "s" : ""} left
+                                  </Badge>
+                                );
+                              }
+                              return (
+                                <span className="ml-1 text-muted-foreground">
+                                  ({diffDays} days left)
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Bulk Action Bar */}
       <AnimatePresence>
@@ -1101,6 +1627,123 @@ export function ApplicationsTab({
           color="blue"
         />
       </motion.div>
+
+      {/* Sector Distribution */}
+      {sectorDistribution.entries.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+        >
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+            <CardContent className="p-0">
+              {/* Collapsible Header */}
+              <button
+                type="button"
+                onClick={() => setSectorExpanded((prev) => !prev)}
+                className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-muted/30 rounded-xl"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                    <BarChart3 className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-sm font-semibold">
+                      {sectorDistribution.fieldLabel} Distribution
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {sectorDistribution.entries.length} {sectorDistribution.entries.length === 1 ? "sector" : "sectors"} across {sectorDistribution.total} {sectorDistribution.total === 1 ? "application" : "applications"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="text-xs">
+                    {sectorDistribution.entries.length} {sectorDistribution.entries.length === 1 ? "sector" : "sectors"}
+                  </Badge>
+                  {sectorExpanded ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </div>
+              </button>
+
+              {/* Collapsible Content */}
+              <AnimatePresence initial={false}>
+                {sectorExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-3 px-5 pb-5">
+                      {sectorDistribution.entries.map((sector, idx) => {
+                        // Cycle through gradient color pairs for visual variety
+                        const colorPairs = [
+                          { bar: "from-primary to-primary/70", text: "text-primary", bg: "bg-primary/10" },
+                          { bar: "from-accent to-accent/70", text: "text-accent", bg: "bg-accent/10" },
+                          { bar: "from-blue-500 to-blue-400", text: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/10" },
+                          { bar: "from-emerald-500 to-emerald-400", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
+                          { bar: "from-orange-500 to-orange-400", text: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/10" },
+                          { bar: "from-purple-500 to-purple-400", text: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/10" },
+                          { bar: "from-rose-500 to-rose-400", text: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
+                          { bar: "from-cyan-500 to-cyan-400", text: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-500/10" },
+                        ];
+                        const colors = colorPairs[idx % colorPairs.length];
+
+                        return (
+                          <motion.div
+                            key={sector.label}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: idx * 0.04, duration: 0.3 }}
+                            className="group"
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={cn(
+                                  "inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold",
+                                  colors.bg, colors.text
+                                )}>
+                                  {idx + 1}
+                                </span>
+                                <span className="text-sm font-medium truncate">
+                                  {sector.label}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 ml-3">
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  {sector.count} {sector.count === 1 ? "app" : "apps"}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={cn("text-[10px] px-1.5 py-0 h-4 font-mono", colors.text)}
+                                >
+                                  {sector.percentage}%
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted/50">
+                              <motion.div
+                                className={cn("h-full rounded-full bg-gradient-to-r", colors.bar)}
+                                initial={{ width: 0 }}
+                                animate={{ width: `${Math.max(sector.percentage, 2)}%` }}
+                                transition={{ duration: 0.6, delay: idx * 0.04, ease: "easeOut" }}
+                              />
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Applications Table */}
       <motion.div
@@ -1265,6 +1908,12 @@ export function ApplicationsTab({
                                       Screened
                                     </Badge>
                                   )}
+                                  {app.resultsPublishedAt && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5 text-green-600 border-green-300 dark:text-green-400 dark:border-green-700">
+                                      <Mail className="h-2.5 w-2.5" />
+                                      Email Sent
+                                    </Badge>
+                                  )}
                                 </div>
                               </td>
 
@@ -1319,7 +1968,7 @@ export function ApplicationsTab({
                                       <DropdownMenuItem
                                         key={action.targetStatus}
                                         onClick={() =>
-                                          handleStatusChange(
+                                          openReasonDialog(
                                             app.id,
                                             action.targetStatus,
                                             action.label
@@ -1374,6 +2023,23 @@ export function ApplicationsTab({
                                       <Mail className="h-4 w-4 mr-2" />
                                       Copy Email
                                     </DropdownMenuItem>
+                                    {app.status === "cancelled" && (
+                                      <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            if (confirm("Are you sure you want to permanently delete this applicant? This cannot be undone.")) {
+                                              deleteApplicant.mutate(app.id);
+                                            }
+                                          }}
+                                          disabled={deleteApplicant.isPending}
+                                          className="text-red-600"
+                                        >
+                                          <Trash2 className="h-4 w-4 mr-2" />
+                                          Delete Applicant
+                                        </DropdownMenuItem>
+                                      </>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </td>
@@ -1518,6 +2184,12 @@ export function ApplicationsTab({
                                           isSaving={updateNotes.isPending}
                                         />
 
+                                        {/* Override / Status History */}
+                                        <OverrideHistorySection
+                                          hackathonId={hackathonId}
+                                          registrationId={app.id}
+                                        />
+
                                         {/* Quick actions in expanded view */}
                                         {statusActions.length > 0 && (
                                           <div className="flex items-center gap-2 mt-5 pt-4 border-t border-border/50">
@@ -1535,7 +2207,7 @@ export function ApplicationsTab({
                                                 )}
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  handleStatusChange(
+                                                  openReasonDialog(
                                                     app.id,
                                                     action.targetStatus,
                                                     action.label
@@ -1600,7 +2272,7 @@ export function ApplicationsTab({
 
       {/* Publish Screening Results Dialog */}
       <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-display">
               <AlertTriangle className="h-5 w-5 text-orange-500" />
@@ -1616,7 +2288,7 @@ export function ApplicationsTab({
                   with their screening results:
                 </p>
 
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div className="rounded-lg border border-green-500/30 bg-green-50 dark:bg-green-950/20 p-2.5 text-center">
                     <p className="font-mono text-lg font-bold text-green-600 dark:text-green-400">
                       {unpublishedAccepted}
@@ -1634,6 +2306,12 @@ export function ApplicationsTab({
                       {unpublishedEligible}
                     </p>
                     <p className="text-xs text-muted-foreground">Eligible</p>
+                  </div>
+                  <div className="rounded-lg border border-red-500/30 bg-red-50 dark:bg-red-950/20 p-2.5 text-center">
+                    <p className="font-mono text-lg font-bold text-red-600 dark:text-red-400">
+                      {unpublishedRejected}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Rejected</p>
                   </div>
                   <div className="rounded-lg border border-red-500/30 bg-red-50 dark:bg-red-950/20 p-2.5 text-center">
                     <p className="font-mono text-lg font-bold text-red-600 dark:text-red-400">
@@ -1659,7 +2337,7 @@ export function ApplicationsTab({
               </div>
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 flex-col sm:flex-row">
             <Button
               variant="ghost"
               onClick={() => setPublishDialogOpen(false)}
@@ -1668,8 +2346,22 @@ export function ApplicationsTab({
               Cancel
             </Button>
             <Button
+              variant="outline"
+              className="border-orange-400/50 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+              onClick={() => publishResults.mutate({ force: true })}
+              disabled={publishResults.isPending || totalScreened === 0}
+              title="Resend emails to all screened applicants, including those already notified"
+            >
+              {publishResults.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="mr-2 h-4 w-4" />
+              )}
+              Force Resend All
+            </Button>
+            <Button
               className="bg-gradient-to-r from-orange-500 to-red-500 text-white hover:from-orange-600 hover:to-red-600"
-              onClick={() => publishResults.mutate()}
+              onClick={() => publishResults.mutate({})}
               disabled={publishResults.isPending || unpublishedCount === 0}
             >
               {publishResults.isPending ? (
@@ -1677,11 +2369,31 @@ export function ApplicationsTab({
               ) : (
                 <Megaphone className="mr-2 h-4 w-4" />
               )}
-              {publishResults.isPending ? "Publishing..." : "Publish Results"}
+              {publishResults.isPending ? "Publishing..." : `Publish Results (${unpublishedCount})`}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Status Change Reason Dialog */}
+      <StatusChangeReasonDialog
+        open={reasonDialog.open}
+        onOpenChange={(open) =>
+          setReasonDialog((prev) => ({ ...prev, open }))
+        }
+        targetStatus={reasonDialog.targetStatus}
+        actionLabel={reasonDialog.actionLabel}
+        isPending={updateStatus.isPending}
+        onConfirm={async (reason) => {
+          await handleStatusChange(
+            reasonDialog.registrationId,
+            reasonDialog.targetStatus,
+            reasonDialog.actionLabel,
+            reason
+          );
+          setReasonDialog((prev) => ({ ...prev, open: false }));
+        }}
+      />
     </div>
   );
 }

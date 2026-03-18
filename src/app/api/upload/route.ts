@@ -80,9 +80,11 @@ export async function POST(request: NextRequest) {
     };
     if (context) params.context = context;
 
-    // Ensure raw resources (PDFs, docs, etc.) are publicly accessible
-    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-      params.access_mode = "public";
+    // Raw resources (PDFs, docs) use authenticated access by default.
+    // Cloudinary delivers them via signed URLs — no public access mode needed.
+    // Only images/videos need public access for display in the browser.
+    if (file.type.startsWith("image/") || file.type.startsWith("video/")) {
+      params.type = "upload"; // default, publicly accessible for display
     }
 
     // Generate signature

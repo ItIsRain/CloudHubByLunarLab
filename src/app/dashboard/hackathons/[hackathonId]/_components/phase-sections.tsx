@@ -21,6 +21,8 @@ import {
   Search,
   Check,
   UserCheck,
+  Shield,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +65,12 @@ import {
   useManualSelectFinalists,
 } from "@/hooks/use-phase-scoring";
 import { useHackathonParticipants } from "@/hooks/use-hackathon-participants";
+import {
+  usePhaseConflicts,
+  useDetectConflicts,
+  useResolveConflict,
+  type ReviewerConflict,
+} from "@/hooks/use-conflicts";
 
 // ── Shared Styles ──────────────────────────────────────────
 
@@ -73,11 +81,17 @@ const selectClasses =
 
 const reviewerStatusVariant: Record<
   string,
-  "muted" | "success" | "destructive"
+  "muted" | "success" | "destructive" | "warning"
 > = {
-  invited: "muted",
+  invited: "warning",
   accepted: "success",
   declined: "destructive",
+};
+
+const reviewerStatusLabel: Record<string, string> = {
+  invited: "Pending",
+  accepted: "Accepted",
+  declined: "Declined",
 };
 
 const decisionBadgeVariant: Record<
@@ -101,6 +115,21 @@ const decisionLabel: Record<PhaseDecisionType, string> = {
   do_not_advance: "Do Not Advance",
 };
 
+const conflictTypeLabel: Record<ReviewerConflict["conflict_type"], string> = {
+  self_registration: "Self-Registered",
+  same_team: "Same Team",
+  declared: "Declared",
+};
+
+const conflictTypeVariant: Record<
+  ReviewerConflict["conflict_type"],
+  "destructive" | "warning"
+> = {
+  self_registration: "destructive",
+  same_team: "warning",
+  declared: "warning",
+};
+
 // ═════════════════════════════════════════════════════════════
 // ReviewersSection
 // ═════════════════════════════════════════════════════════════
@@ -122,6 +151,39 @@ export function ReviewersSection({
   const removeReviewer = useRemovePhaseReviewer(hackathonId, phase.id);
 
   const reviewers: PhaseReviewer[] = reviewersData?.data ?? [];
+
+  // Conflict detection
+  const { data: conflictsData } = usePhaseConflicts(hackathonId, phase.id);
+  const detectConflicts = useDetectConflicts(hackathonId, phase.id);
+  const resolveConflict = useResolveConflict(hackathonId, phase.id);
+
+  const conflicts: ReviewerConflict[] = conflictsData?.data ?? [];
+  const unresolvedCount = conflicts.filter((c) => !c.resolved).length;
+
+  const handleDetectConflicts = async () => {
+    try {
+      const result = await detectConflicts.mutateAsync();
+      const { detected, newConflicts } = result.data;
+      if (newConflicts > 0) {
+        toast.warning(
+          `Found ${newConflicts} new conflict${newConflicts !== 1 ? "s" : ""} (${detected} total).`
+        );
+      } else {
+        toast.success(`No new conflicts found (${detected} total).`);
+      }
+    } catch {
+      toast.error("Failed to detect conflicts.");
+    }
+  };
+
+  const handleResolve = async (conflictId: string) => {
+    try {
+      await resolveConflict.mutateAsync(conflictId);
+      toast.success("Conflict resolved.");
+    } catch {
+      toast.error("Failed to resolve conflict.");
+    }
+  };
 
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -166,6 +228,20 @@ export function ReviewersSection({
         <Badge variant="muted" className="ml-auto">
           {reviewers.length} reviewer{reviewers.length !== 1 ? "s" : ""}
         </Badge>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleDetectConflicts}
+          disabled={detectConflicts.isPending}
+          className="gap-1.5"
+        >
+          {detectConflicts.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Shield className="h-3.5 w-3.5" />
+          )}
+          Detect Conflicts
+        </Button>
       </div>
 
       {isLoading ? (
@@ -193,7 +269,7 @@ export function ReviewersSection({
                 </p>
               </div>
               <Badge variant={reviewerStatusVariant[reviewer.status] ?? "muted"}>
-                {reviewer.status}
+                {reviewerStatusLabel[reviewer.status] ?? reviewer.status}
               </Badge>
               <Button
                 size="icon"
@@ -206,6 +282,79 @@ export function ReviewersSection({
               </Button>
             </motion.div>
           ))}
+        </div>
+      )}
+
+      {/* Conflicts section */}
+      {conflicts.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            <h5 className="text-sm font-semibold">Conflicts</h5>
+            {unresolvedCount > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                {unresolvedCount} unresolved
+              </Badge>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <AnimatePresence mode="popLayout">
+              {conflicts.map((conflict) => (
+                <motion.div
+                  key={conflict.id}
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border px-4 py-3",
+                    conflict.resolved
+                      ? "border-muted bg-muted/30"
+                      : "border-destructive/30 bg-destructive/5"
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {conflict.reviewer?.name ?? "Unknown reviewer"}
+                      <span className="text-muted-foreground font-normal">
+                        {" "}vs{" "}
+                      </span>
+                      {conflict.applicant?.name ?? "Unknown applicant"}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {conflict.reviewer?.email} / {conflict.applicant?.email}
+                    </p>
+                  </div>
+
+                  <Badge variant={conflictTypeVariant[conflict.conflict_type]}>
+                    {conflictTypeLabel[conflict.conflict_type]}
+                  </Badge>
+
+                  {conflict.resolved ? (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>Resolved</span>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleResolve(conflict.id)}
+                      disabled={resolveConflict.isPending}
+                      className="gap-1 text-xs"
+                    >
+                      {resolveConflict.isPending ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-3 w-3" />
+                      )}
+                      Resolve
+                    </Button>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
         </div>
       )}
 

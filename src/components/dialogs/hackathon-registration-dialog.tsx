@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, ClipboardList, ChevronLeft, ChevronRight, Upload, X, FileText, ExternalLink } from "lucide-react";
+import { Loader2, ClipboardList, ChevronLeft, ChevronRight, Upload, X, FileText, ExternalLink, Save, Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +45,12 @@ interface QuotaStatus {
   quotaEnforcement?: string;
 }
 
+export interface ConsentData {
+  dataProcessing: boolean;
+  marketing: boolean;
+  thirdParty: boolean;
+}
+
 interface HackathonRegistrationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -53,7 +59,14 @@ interface HackathonRegistrationDialogProps {
   registrationFields: FormField[];
   registrationSections?: FormSection[];
   isSubmitting: boolean;
-  onSubmit: (formData: Record<string, unknown>) => void;
+  onSubmit: (formData: Record<string, unknown>, consent: ConsentData) => void;
+  /** Pre-fill form with existing data (draft or edit mode) */
+  initialFormData?: Record<string, unknown>;
+  /** 'new' = fresh application, 'draft' = resuming saved draft, 'edit' = editing submitted application */
+  mode?: "new" | "draft" | "edit";
+  /** Called when user saves a draft */
+  onSaveDraft?: (formData: Record<string, unknown>) => void;
+  isSavingDraft?: boolean;
 }
 
 export function HackathonRegistrationDialog({
@@ -65,11 +78,22 @@ export function HackathonRegistrationDialog({
   registrationSections,
   isSubmitting,
   onSubmit,
+  initialFormData,
+  mode = "new",
+  onSaveDraft,
+  isSavingDraft = false,
 }: HackathonRegistrationDialogProps) {
   const [formData, setFormData] = React.useState<Record<string, unknown>>({});
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = React.useState(0);
   const [quotaStatus, setQuotaStatus] = React.useState<QuotaStatus | null>(null);
+  const [showReview, setShowReview] = React.useState(false);
+  const [consent, setConsent] = React.useState<ConsentData>({
+    dataProcessing: false,
+    marketing: false,
+    thirdParty: false,
+  });
+  const [consentError, setConsentError] = React.useState<string | null>(null);
 
   // Fetch quota status when dialog opens
   React.useEffect(() => {
@@ -125,14 +149,19 @@ export function HackathonRegistrationDialog({
   const currentPageTitle = pages[currentPage]?.title;
   const currentPageDescription = pages[currentPage]?.description;
 
-  // Reset form when dialog opens
+  // Reset or populate form when dialog opens
   React.useEffect(() => {
     if (open) {
-      setFormData({});
+      setFormData(initialFormData && Object.keys(initialFormData).length > 0 ? { ...initialFormData } : {});
       setErrors({});
       setCurrentPage(0);
+      setShowReview(false);
+      // Pre-fill consent from existing form data (edit mode) or reset
+      const existingConsent = initialFormData?._consent as ConsentData | undefined;
+      setConsent(existingConsent ?? { dataProcessing: false, marketing: false, thirdParty: false });
+      setConsentError(null);
     }
-  }, [open]);
+  }, [open, initialFormData]);
 
   const updateField = (fieldId: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
@@ -202,33 +231,80 @@ export function HackathonRegistrationDialog({
   const handleSubmit = () => {
     if (!validateAll()) {
       // Find first page with errors and navigate to it
+      setShowReview(false);
+      const freshErrors: Record<string, string> = {};
+      const allFields = pages.flatMap((p) => p.fields);
+      for (const field of allFields) {
+        if (field.type === "heading" || field.type === "paragraph") continue;
+        if (field.conditionalOn) {
+          const depValue = formData[field.conditionalOn.fieldId];
+          let visible = false;
+          switch (field.conditionalOn.operator) {
+            case "equals": visible = String(depValue) === field.conditionalOn.value; break;
+            case "not_equals": visible = String(depValue) !== field.conditionalOn.value; break;
+            case "contains": visible = String(depValue || "").includes(field.conditionalOn.value || ""); break;
+            case "is_not_empty": visible = depValue !== undefined && depValue !== null && depValue !== ""; break;
+          }
+          if (!visible) continue;
+        }
+        if (field.required) {
+          const val = formData[field.id];
+          if (val === undefined || val === null || val === "") {
+            freshErrors[field.id] = `${field.label} is required`;
+          }
+        }
+      }
+      setErrors(freshErrors);
       for (let i = 0; i < pages.length; i++) {
         const pageFieldIds = pages[i].fields.map((f) => f.id);
-        const hasError = pageFieldIds.some((id) => errors[id]);
+        const hasError = pageFieldIds.some((id) => freshErrors[id]);
         if (hasError) { setCurrentPage(i); break; }
       }
       return;
     }
-    onSubmit(formData);
+    // Validate data processing consent (required)
+    if (!consent.dataProcessing) {
+      setConsentError("You must consent to the processing of your personal data to submit your application.");
+      return;
+    }
+    setConsentError(null);
+    onSubmit(formData, consent);
+  };
+
+  const handleGoToReview = () => {
+    if (validatePage(currentFields)) {
+      setShowReview(true);
+    }
+  };
+
+  const handleBackFromReview = () => {
+    setShowReview(false);
   };
 
   const isLastPage = currentPage === pages.length - 1;
+
+  const dialogTitle = mode === "edit" ? `Edit Application — ${hackathonName}` : `Register for ${hackathonName}`;
+  const submitLabel = mode === "edit" ? "Save Changes" : "Submit Application";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-display">Register for {hackathonName}</DialogTitle>
+          <DialogTitle className="font-display">{dialogTitle}</DialogTitle>
           <DialogDescription>
-            Please fill in the required information to complete your registration.
+            {showReview
+              ? "Review your answers before submitting. Click any section to go back and edit."
+              : mode === "edit"
+              ? "Update your application details below."
+              : "Please fill in the required information to complete your registration."}
           </DialogDescription>
-          {isMultiPage && (
-            <div className="flex items-center gap-2 pt-2">
+          {!showReview && isMultiPage && (
+            <div className="flex items-center gap-2 pt-2 flex-wrap">
               {pages.map((page, i) => (
                 <button
                   key={page.id}
                   type="button"
-                  onClick={() => setCurrentPage(i)}
+                  onClick={() => { setShowReview(false); setCurrentPage(i); }}
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
                     i === currentPage
@@ -244,82 +320,217 @@ export function HackathonRegistrationDialog({
                   <span className="hidden sm:inline">{page.title}</span>
                 </button>
               ))}
+              <button
+                type="button"
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                  "bg-muted text-muted-foreground"
+                )}
+                disabled
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Review</span>
+              </button>
             </div>
           )}
         </DialogHeader>
 
-        {/* Page title */}
-        {isMultiPage && currentPageTitle && (
-          <div className="border-b pb-3 mb-2">
-            <h3 className="font-display text-base font-bold">{currentPageTitle}</h3>
-            {currentPageDescription && (
-              <p className="text-xs text-muted-foreground mt-0.5">{currentPageDescription}</p>
+        {showReview ? (
+          /* ── Review / Preview Step ── */
+          <div className="space-y-6 py-2">
+            {pages.map((page, pageIdx) => {
+              const visibleFields = page.fields.filter((field) => {
+                if (field.type === "heading" || field.type === "paragraph") return false;
+                if (field.conditionalOn) {
+                  const depValue = formData[field.conditionalOn.fieldId];
+                  switch (field.conditionalOn.operator) {
+                    case "equals": return String(depValue) === field.conditionalOn.value;
+                    case "not_equals": return String(depValue) !== field.conditionalOn.value;
+                    case "contains": return String(depValue || "").includes(field.conditionalOn.value || "");
+                    case "is_not_empty": return depValue !== undefined && depValue !== null && depValue !== "";
+                  }
+                }
+                return true;
+              });
+              if (visibleFields.length === 0) return null;
+
+              return (
+                <div key={page.id} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-display text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                      {page.title}
+                    </h3>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setShowReview(false); setCurrentPage(pageIdx); }}
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Edit
+                    </Button>
+                  </div>
+                  <div className="border rounded-xl p-4 space-y-3">
+                    {visibleFields.map((field) => (
+                      <ReviewField key={field.id} field={field} value={formData[field.id]} registrationFields={registrationFields} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* ── Form Fields ── */
+          <>
+            {isMultiPage && currentPageTitle && (
+              <div className="border-b pb-3 mb-2">
+                <h3 className="font-display text-base font-bold">{currentPageTitle}</h3>
+                {currentPageDescription && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{currentPageDescription}</p>
+                )}
+              </div>
             )}
+
+            <div className="space-y-4 py-2">
+              {currentFields.map((field) => {
+                if (field.conditionalOn) {
+                  const depValue = formData[field.conditionalOn.fieldId];
+                  let visible = false;
+                  switch (field.conditionalOn.operator) {
+                    case "equals":
+                      visible = String(depValue) === field.conditionalOn.value;
+                      break;
+                    case "not_equals":
+                      visible = String(depValue) !== field.conditionalOn.value;
+                      break;
+                    case "contains":
+                      visible = String(depValue || "").includes(field.conditionalOn.value || "");
+                      break;
+                    case "is_not_empty":
+                      visible = depValue !== undefined && depValue !== null && depValue !== "";
+                      break;
+                  }
+                  if (!visible) return null;
+                }
+
+                return (
+                  <RegistrationField
+                    key={field.id}
+                    field={field}
+                    value={formData[field.id]}
+                    error={errors[field.id]}
+                    onChange={(val) => updateField(field.id, val)}
+                    quotaStatus={quotaStatus}
+                  />
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Data Consent Section — shown on review step */}
+        {showReview && (
+          <div className="border rounded-xl p-4 space-y-3 bg-muted/30">
+            <h3 className="font-display text-sm font-bold text-muted-foreground uppercase tracking-wider">
+              Data Consent
+            </h3>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={consent.dataProcessing}
+                onChange={(e) => {
+                  setConsent((prev) => ({ ...prev, dataProcessing: e.target.checked }));
+                  if (e.target.checked) setConsentError(null);
+                }}
+                className="h-4 w-4 rounded border-input mt-0.5 shrink-0"
+              />
+              <span className="text-sm">
+                I consent to the processing of my personal data for this competition.{" "}
+                <span className="text-destructive">*</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={consent.marketing}
+                onChange={(e) => setConsent((prev) => ({ ...prev, marketing: e.target.checked }))}
+                className="h-4 w-4 rounded border-input mt-0.5 shrink-0"
+              />
+              <span className="text-sm text-muted-foreground">
+                I agree to receive marketing communications.
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={consent.thirdParty}
+                onChange={(e) => setConsent((prev) => ({ ...prev, thirdParty: e.target.checked }))}
+                className="h-4 w-4 rounded border-input mt-0.5 shrink-0"
+              />
+              <span className="text-sm text-muted-foreground">
+                I consent to sharing my data with competition partners.
+              </span>
+            </label>
+            {consentError && (
+              <p className="text-xs text-destructive">{consentError}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              View our{" "}
+              <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                Privacy Policy
+              </a>{" "}
+              for details on how your data is processed.
+            </p>
           </div>
         )}
 
-        <div className="space-y-4 py-2">
-          {currentFields.map((field) => {
-            // Check conditional visibility
-            if (field.conditionalOn) {
-              const depValue = formData[field.conditionalOn.fieldId];
-              let visible = false;
-              switch (field.conditionalOn.operator) {
-                case "equals":
-                  visible = String(depValue) === field.conditionalOn.value;
-                  break;
-                case "not_equals":
-                  visible = String(depValue) !== field.conditionalOn.value;
-                  break;
-                case "contains":
-                  visible = String(depValue || "").includes(field.conditionalOn.value || "");
-                  break;
-                case "is_not_empty":
-                  visible = depValue !== undefined && depValue !== null && depValue !== "";
-                  break;
-              }
-              if (!visible) return null;
-            }
-
-            return (
-              <RegistrationField
-                key={field.id}
-                field={field}
-                value={formData[field.id]}
-                error={errors[field.id]}
-                onChange={(val) => updateField(field.id, val)}
-                quotaStatus={quotaStatus}
-              />
-            );
-          })}
-        </div>
-
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <div className="flex items-center gap-2 mr-auto">
-            {isMultiPage && currentPage > 0 && (
+            {showReview ? (
+              <Button type="button" variant="outline" onClick={handleBackFromReview} disabled={isSubmitting}>
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Back to Form
+              </Button>
+            ) : isMultiPage && currentPage > 0 ? (
               <Button type="button" variant="outline" onClick={handlePrev} disabled={isSubmitting}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Previous
               </Button>
-            )}
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            {onSaveDraft && !showReview && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onSaveDraft(formData)}
+                disabled={isSavingDraft || isSubmitting}
+              >
+                {isSavingDraft ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                Save Draft
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting || isSavingDraft}>
               Cancel
             </Button>
-            {isMultiPage && !isLastPage ? (
-              <Button onClick={handleNext}>
-                Next
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            ) : (
+            {showReview ? (
               <Button onClick={handleSubmit} disabled={isSubmitting}>
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <ClipboardList className="h-4 w-4 mr-2" />
                 )}
-                {isSubmitting ? "Submitting..." : "Submit Application"}
+                {isSubmitting ? "Submitting..." : submitLabel}
+              </Button>
+            ) : isMultiPage && !isLastPage ? (
+              <Button onClick={handleNext}>
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            ) : (
+              <Button onClick={handleGoToReview}>
+                <Eye className="h-4 w-4 mr-2" />
+                Review &amp; Submit
               </Button>
             )}
           </div>
@@ -570,6 +781,66 @@ function RegistrationField({
       )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+// ── Review Field (read-only display) ─────────────────────
+
+function ReviewField({
+  field,
+  value,
+  registrationFields,
+}: {
+  field: FormField;
+  value: unknown;
+  registrationFields: FormField[];
+}) {
+  const displayValue = React.useMemo(() => {
+    if (value === undefined || value === null || value === "") return <span className="text-muted-foreground italic">Not provided</span>;
+
+    // File upload
+    if (field.type === "file") {
+      const file = value as { originalFilename?: string; url?: string; format?: string } | null;
+      if (!file?.url) return <span className="text-muted-foreground italic">No file</span>;
+      return (
+        <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">
+          <FileText className="h-3.5 w-3.5" />
+          {file.originalFilename || "Uploaded file"}
+        </a>
+      );
+    }
+
+    // Multi-select
+    if (field.type === "multi_select" && Array.isArray(value)) {
+      const labels = (value as string[]).map((v) => {
+        const opt = field.options?.find((o) => o.value === v);
+        return opt?.label || v;
+      });
+      return labels.length > 0 ? labels.join(", ") : <span className="text-muted-foreground italic">None selected</span>;
+    }
+
+    // Select / Radio — show label not value
+    if ((field.type === "select" || field.type === "radio") && field.options) {
+      const opt = field.options.find((o) => o.value === String(value));
+      return opt?.label || String(value);
+    }
+
+    // Checkbox
+    if (field.type === "checkbox") {
+      return value ? "Yes" : "No";
+    }
+
+    return String(value);
+  }, [field, value]);
+
+  // Skip fields that are just labels/headings in other components
+  void registrationFields;
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-start gap-1">
+      <span className="text-sm font-medium text-muted-foreground sm:w-1/3 shrink-0">{field.label}</span>
+      <span className="text-sm sm:w-2/3">{displayValue}</span>
     </div>
   );
 }

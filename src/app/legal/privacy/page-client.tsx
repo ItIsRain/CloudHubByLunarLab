@@ -11,8 +11,11 @@ const sections = [
   { id: "information-collect", title: "Information We Collect" },
   { id: "how-we-use", title: "How We Use Information" },
   { id: "information-sharing", title: "Information Sharing" },
+  { id: "data-storage", title: "Data Storage & Region" },
+  { id: "data-retention", title: "Data Retention" },
   { id: "data-security", title: "Data Security" },
   { id: "your-rights", title: "Your Rights" },
+  { id: "consent", title: "Consent Collection" },
   { id: "cookies", title: "Cookies" },
   { id: "children", title: "Children's Privacy" },
   { id: "changes", title: "Changes to Policy" },
@@ -57,7 +60,7 @@ export default function PrivacyPolicyPage() {
               Privacy Policy
             </h1>
             <p className="mt-3 text-muted-foreground">
-              Last updated: January 15, 2026
+              Last updated: March 17, 2026
             </p>
           </motion.div>
 
@@ -137,9 +140,40 @@ export default function PrivacyPolicyPage() {
                 </ul>
               </section>
 
+              <section id="data-storage" className="mb-10">
+                <h2 className="font-display text-2xl font-bold mb-4">
+                  4. Data Storage &amp; Region
+                </h2>
+                <p className="text-muted-foreground leading-relaxed">
+                  Your data is stored and processed in the United Arab Emirates and Middle East region. Our infrastructure is hosted on servers located in this region to ensure compliance with UAE data protection regulations and the Abu Dhabi Global Market (ADGM) data protection framework.
+                </p>
+                <p className="mt-4 text-muted-foreground leading-relaxed">
+                  In some cases, data may be processed by third-party service providers located outside the UAE. When this occurs, we ensure appropriate safeguards are in place, such as standard contractual clauses or equivalent mechanisms, to protect your personal data.
+                </p>
+              </section>
+
+              <section id="data-retention" className="mb-10">
+                <h2 className="font-display text-2xl font-bold mb-4">
+                  5. Data Retention
+                </h2>
+                <p className="text-muted-foreground leading-relaxed">
+                  We retain your personal data only for as long as necessary to fulfill the purposes for which it was collected. Specific retention periods include:
+                </p>
+                <ul className="mt-4 space-y-2 text-muted-foreground list-disc pl-6">
+                  <li><strong>Account Data:</strong> Retained for the lifetime of your account plus 30 days after account deletion to allow for recovery.</li>
+                  <li><strong>Competition &amp; Hackathon Data:</strong> Registration details, submissions, and team data are retained for 2 years after the competition ends to allow for verification of results, certificates, and portfolio purposes.</li>
+                  <li><strong>Event Registration Data:</strong> Retained for 1 year after the event concludes.</li>
+                  <li><strong>Marketing Consent Records:</strong> Retained for as long as the consent is valid, plus 1 year after withdrawal for audit purposes.</li>
+                  <li><strong>Data Deletion Requests:</strong> Processed within 30 days of the request. Backup copies may take up to 90 days to be fully purged.</li>
+                </ul>
+                <p className="mt-4 text-muted-foreground leading-relaxed">
+                  After the retention period expires, your data will be securely deleted or anonymized so that it can no longer be associated with you.
+                </p>
+              </section>
+
               <section id="data-security" className="mb-10">
                 <h2 className="font-display text-2xl font-bold mb-4">
-                  4. Data Security
+                  6. Data Security
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
                   We implement appropriate technical and organizational security measures to protect your personal information against unauthorized access, alteration, disclosure, or destruction. These measures include encryption of data in transit and at rest, regular security assessments, access controls, and secure development practices.
@@ -151,27 +185,45 @@ export default function PrivacyPolicyPage() {
 
               <section id="your-rights" className="mb-10">
                 <h2 className="font-display text-2xl font-bold mb-4">
-                  5. Your Rights
+                  7. Your Rights
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  Depending on your jurisdiction, you may have certain rights regarding your personal information:
+                  Under applicable data protection laws (including GDPR and ADGM Data Protection Regulations), you have the following rights regarding your personal information:
                 </p>
                 <ul className="mt-4 space-y-2 text-muted-foreground list-disc pl-6">
-                  <li><strong>Access:</strong> You can request a copy of the personal information we hold about you.</li>
+                  <li><strong>Access &amp; Export:</strong> You can download a copy of all your personal data at any time through your account settings or by using our <Link href="/dashboard/settings" className="text-primary hover:underline">self-service data export</Link> feature. Your data is provided in machine-readable JSON format.</li>
                   <li><strong>Correction:</strong> You can update or correct inaccurate personal information through your account settings or by contacting us.</li>
-                  <li><strong>Deletion:</strong> You can request deletion of your personal information, subject to certain legal exceptions.</li>
-                  <li><strong>Data Portability:</strong> You can request a machine-readable copy of your data.</li>
+                  <li><strong>Deletion:</strong> You can request deletion of your personal information through our <Link href="/dashboard/settings" className="text-primary hover:underline">account settings</Link> or by contacting us. Deletion requests are processed within 30 days.</li>
+                  <li><strong>Data Portability:</strong> You can request a machine-readable copy of your data via our data export API.</li>
                   <li><strong>Opt-Out:</strong> You can opt out of marketing communications at any time through your notification settings or by using the unsubscribe link in emails.</li>
                   <li><strong>Restriction:</strong> You can request that we restrict the processing of your personal information in certain circumstances.</li>
+                  <li><strong>Withdraw Consent:</strong> Where processing is based on your consent, you may withdraw it at any time without affecting the lawfulness of processing carried out before withdrawal.</li>
                 </ul>
                 <p className="mt-4 text-muted-foreground leading-relaxed">
-                  To exercise any of these rights, please contact us at hello@lnr.ae. We will respond to your request within 30 days.
+                  To exercise any of these rights, please contact us at hello@lnr.ae or use the self-service tools in your account settings. We will respond to your request within 30 days.
+                </p>
+              </section>
+
+              <section id="consent" className="mb-10">
+                <h2 className="font-display text-2xl font-bold mb-4">
+                  8. Consent Collection
+                </h2>
+                <p className="text-muted-foreground leading-relaxed">
+                  We collect explicit consent for the processing of your personal data at key points in the platform:
+                </p>
+                <ul className="mt-4 space-y-2 text-muted-foreground list-disc pl-6">
+                  <li><strong>Competition Registration:</strong> When you register for a hackathon or competition, you are asked to provide explicit consent for data processing. Consent to data processing is required to participate. Marketing communications and third-party data sharing are optional.</li>
+                  <li><strong>Marketing Communications:</strong> You may optionally consent to receiving marketing communications. This consent can be withdrawn at any time.</li>
+                  <li><strong>Third-Party Sharing:</strong> For competitions with sponsors or partners, you may optionally consent to sharing your data with those partners. This consent is separate from data processing consent and can be withdrawn independently.</li>
+                </ul>
+                <p className="mt-4 text-muted-foreground leading-relaxed">
+                  All consent records are stored with timestamps and can be reviewed or updated through your account settings. We maintain audit trails of consent changes for compliance purposes.
                 </p>
               </section>
 
               <section id="cookies" className="mb-10">
                 <h2 className="font-display text-2xl font-bold mb-4">
-                  6. Cookies
+                  9. Cookies
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
                   We use cookies and similar tracking technologies to collect and track information about your use of the Service. Cookies are small data files stored on your device that help us improve the Service, remember your preferences, and understand how you interact with our platform.
@@ -183,7 +235,7 @@ export default function PrivacyPolicyPage() {
 
               <section id="children" className="mb-10">
                 <h2 className="font-display text-2xl font-bold mb-4">
-                  7. Children&apos;s Privacy
+                  10. Children&apos;s Privacy
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
                   The Service is not intended for use by children under the age of 16. We do not knowingly collect personal information from children under 16. If we become aware that a child under 16 has provided us with personal information, we will take steps to delete such information promptly. If you are a parent or guardian and believe your child has provided us with personal information, please contact us at hello@lnr.ae.
@@ -192,7 +244,7 @@ export default function PrivacyPolicyPage() {
 
               <section id="changes" className="mb-10">
                 <h2 className="font-display text-2xl font-bold mb-4">
-                  8. Changes to This Policy
+                  11. Changes to This Policy
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
                   We may update this Privacy Policy from time to time. We will notify you of any material changes by posting the new Privacy Policy on this page and updating the &quot;Last updated&quot; date above. For significant changes, we may also send you a notification via email or through the Service. We encourage you to review this Privacy Policy periodically to stay informed about how we protect your information.
@@ -201,7 +253,7 @@ export default function PrivacyPolicyPage() {
 
               <section id="contact" className="mb-10">
                 <h2 className="font-display text-2xl font-bold mb-4">
-                  9. Contact
+                  12. Contact
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
                   If you have any questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:
