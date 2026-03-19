@@ -129,6 +129,8 @@ export function dbRowToHackathon(
     minTeamSize: (row.min_team_size as number) || 1,
     maxTeamSize: (row.max_team_size as number) || 4,
     allowSolo: (row.allow_solo as boolean) ?? true,
+    teamsEnabled: (row.teams_enabled as boolean) ?? true,
+    submissionsEnabled: (row.submissions_enabled as boolean) ?? true,
     registrationFields: (row.registration_fields as Hackathon["registrationFields"]) || [],
     registrationSections: (row.registration_sections as Hackathon["registrationSections"]) || [],
     screeningRules: (row.screening_rules as Hackathon["screeningRules"]) || [],
@@ -414,6 +416,8 @@ export function hackathonFormToDbRow(
     minTeamSize: number;
     maxTeamSize: number;
     allowSolo: boolean;
+    teamsEnabled?: boolean;
+    submissionsEnabled?: boolean;
     visibility?: string;
     registrationFields?: unknown[];
   },
@@ -439,6 +443,8 @@ export function hackathonFormToDbRow(
     min_team_size: form.minTeamSize,
     max_team_size: form.maxTeamSize,
     allow_solo: form.allowSolo,
+    teams_enabled: form.teamsEnabled ?? true,
+    submissions_enabled: form.submissionsEnabled ?? true,
     organizer_id: organizerId,
     total_prize_pool: totalPrizePool,
     registration_start: form.registrationStart || null,

@@ -59,7 +59,7 @@ import { useHackathonRegistration, useRegisterForHackathon, useCancelHackathonRe
 import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
 import { usePhases } from "@/hooks/use-phases";
 import { useAuthStore } from "@/store/auth-store";
-import { cn, formatDate, formatCurrency, getTimeRemaining } from "@/lib/utils";
+import { cn, formatDate, formatCurrency, formatPrizeValue, getTimeRemaining } from "@/lib/utils";
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   "draft": { label: "Draft", color: "bg-muted" },
@@ -276,14 +276,29 @@ export default function HackathonDetailPage() {
 
                 {/* Key Stats */}
                 <div className="flex flex-wrap items-center gap-6 mt-4 text-white/80">
-                  <div className="flex items-center gap-1.5">
-                    <Trophy className="h-5 w-5 text-yellow-400" />
-                    <span className="font-bold text-white">{formatCurrency(
-                      (hackathon.prizes ?? []).reduce((sum, p) => sum + (p.value || 0), 0),
-                      hackathon.prizes?.[0]?.currency || "USD"
-                    )}</span>
-                    <span>in prizes</span>
-                  </div>
+                  {(() => {
+                    const totalValue = (hackathon.prizes ?? []).reduce((sum, p) => sum + (p.value || 0), 0);
+                    const prizeTypes = [...new Set((hackathon.prizes ?? []).map((p) => p.type))];
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <Trophy className="h-5 w-5 text-yellow-400" />
+                        {totalValue > 0 ? (
+                          <>
+                            <span className="font-bold text-white">
+                              {formatCurrency(totalValue, hackathon.prizes?.[0]?.currency || "USD")}
+                            </span>
+                            <span>in prizes</span>
+                          </>
+                        ) : (
+                          <span className="font-bold text-white">
+                            {prizeTypes.length === 1 && prizeTypes[0] !== "cash"
+                              ? formatPrizeValue(0, "USD", prizeTypes[0])
+                              : `${(hackathon.prizes ?? []).length} prizes`}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div className="flex items-center gap-1.5">
                     <Users className="h-5 w-5" />
                     <span>{hackathon.participantCount} participants</span>
@@ -489,8 +504,8 @@ export default function HackathonDetailPage() {
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="tracks">Tracks ({hackathon.tracks.length})</TabsTrigger>
                 <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                <TabsTrigger value="teams">Teams ({hackTeams.length})</TabsTrigger>
-                <TabsTrigger value="submissions">Submissions ({hackSubs.length})</TabsTrigger>
+                {hackathon.teamsEnabled !== false && <TabsTrigger value="teams">Teams ({hackTeams.length})</TabsTrigger>}
+                {hackathon.submissionsEnabled !== false && <TabsTrigger value="submissions">Submissions ({hackSubs.length})</TabsTrigger>}
                 {hackathon.mentors.length > 0 && <TabsTrigger value="mentors">Mentors</TabsTrigger>}
                 <TabsTrigger value="sponsors">Sponsors</TabsTrigger>
                 <TabsTrigger value="faq">FAQ</TabsTrigger>
@@ -572,7 +587,7 @@ export default function HackathonDetailPage() {
                             prize.place === 2 ? "text-gray-400" :
                             prize.place === 3 ? "text-orange-600" : "text-primary"
                           )} />
-                          <p className="font-display text-2xl font-bold">{formatCurrency(prize.value, prize.currency)}</p>
+                          <p className="font-display text-2xl font-bold">{formatPrizeValue(prize.value, prize.currency, prize.type)}</p>
                           <p className="text-sm font-medium mt-1">{prize.name}</p>
                           {prize.description && <p className="text-xs text-muted-foreground mt-1">{prize.description}</p>}
                         </motion.div>
@@ -633,7 +648,7 @@ export default function HackathonDetailPage() {
                               {track.prizes.map((p) => (
                                 <div key={p.id} className="flex items-center justify-between text-sm">
                                   <span>{p.name}</span>
-                                  <span className="font-bold">{formatCurrency(p.value, p.currency)}</span>
+                                  <span className="font-bold">{formatPrizeValue(p.value, p.currency, p.type)}</span>
                                 </div>
                               ))}
                             </div>
@@ -691,7 +706,7 @@ export default function HackathonDetailPage() {
               </TabsContent>
 
               {/* Teams */}
-              <TabsContent value="teams" className="mt-6">
+              {hackathon.teamsEnabled !== false && <TabsContent value="teams" className="mt-6">
                 {hackTeams.length === 0 ? (
                   <div className="text-center py-16">
                     <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
@@ -785,10 +800,10 @@ export default function HackathonDetailPage() {
                     ))}
                   </div>
                 )}
-              </TabsContent>
+              </TabsContent>}
 
               {/* Submissions */}
-              <TabsContent value="submissions" className="mt-6">
+              {hackathon.submissionsEnabled !== false && <TabsContent value="submissions" className="mt-6">
                 {hackSubs.length === 0 ? (
                   <div className="text-center py-16">
                     <Award className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
@@ -821,7 +836,7 @@ export default function HackathonDetailPage() {
                     ))}
                   </div>
                 )}
-              </TabsContent>
+              </TabsContent>}
 
               {/* Mentors */}
               {hackathon.mentors.length > 0 && (

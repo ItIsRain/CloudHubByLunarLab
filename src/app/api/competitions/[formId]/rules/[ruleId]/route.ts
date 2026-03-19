@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/api-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToScreeningRule } from "@/lib/supabase/mappers";
+import { UUID_RE } from "@/lib/constants";
 
 interface Params {
   params: Promise<{ formId: string; ruleId: string }>;
@@ -29,6 +30,7 @@ async function verifyAccess(formId: string, userId: string) {
 // ── PATCH — update a rule ───────────────────────────────
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { formId, ruleId } = await params;
+  if (!UUID_RE.test(formId) || !UUID_RE.test(ruleId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -68,7 +70,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .select("*")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("Failed to update screening rule:", error);
+    return NextResponse.json({ error: "Failed to update screening rule" }, { status: 500 });
+  }
   if (!data) return NextResponse.json({ error: "Rule not found" }, { status: 404 });
 
   return NextResponse.json({ data: dbRowToScreeningRule(data as Record<string, unknown>) });
@@ -77,6 +82,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 // ── DELETE — delete a rule ──────────────────────────────
 export async function DELETE(request: NextRequest, { params }: Params) {
   const { formId, ruleId } = await params;
+  if (!UUID_RE.test(formId) || !UUID_RE.test(ruleId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -93,6 +99,9 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     .eq("id", ruleId)
     .eq("form_id", formId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("Failed to delete screening rule:", error);
+    return NextResponse.json({ error: "Failed to delete screening rule" }, { status: 500 });
+  }
   return NextResponse.json({ success: true });
 }

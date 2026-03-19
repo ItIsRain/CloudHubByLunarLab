@@ -103,7 +103,8 @@ async function exportApplications(
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to fetch applications: ${error.message}`);
+    console.error("Failed to fetch applications:", error);
+    throw new Error("Failed to fetch applications");
   }
 
   if (!data || data.length === 0) {
@@ -164,7 +165,8 @@ async function exportScreening(
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to fetch screening data: ${error.message}`);
+    console.error("Failed to fetch screening data:", error);
+    throw new Error("Failed to fetch screening data");
   }
 
   const headers = [
@@ -251,7 +253,8 @@ async function exportScores(
     .order("submitted_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to fetch scores: ${error.message}`);
+    console.error("Failed to fetch scores:", error);
+    throw new Error("Failed to fetch scores");
   }
 
   // Collect reviewer IDs and look up their profiles
@@ -343,7 +346,8 @@ async function exportRegistrations(
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to fetch registrations: ${error.message}`);
+    console.error("Failed to fetch registrations:", error);
+    throw new Error("Failed to fetch registrations");
   }
 
   const headers = [
@@ -386,7 +390,8 @@ async function exportWinners(
     .order("rank", { ascending: true, nullsFirst: false });
 
   if (error) {
-    throw new Error(`Failed to fetch winners: ${error.message}`);
+    console.error("Failed to fetch winners:", error);
+    throw new Error("Failed to fetch winners");
   }
 
   const headers = [
@@ -466,7 +471,8 @@ async function exportAttendance(
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to fetch attendance data: ${error.message}`);
+    console.error("Failed to fetch attendance data:", error);
+    throw new Error("Failed to fetch attendance data");
   }
 
   const headers = [
@@ -575,8 +581,6 @@ export async function GET(
     });
   } catch (err) {
     console.error("Export error:", err);
-    const message =
-      err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Export failed" }, { status: 500 });
   }
 }

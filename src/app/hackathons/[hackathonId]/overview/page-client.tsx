@@ -22,7 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { usePhases } from "@/hooks/use-phases";
-import { cn, formatDate, formatCurrency } from "@/lib/utils";
+import { cn, formatDate, formatCurrency, formatPrizeValue } from "@/lib/utils";
 import type { CompetitionPhase } from "@/lib/types";
 
 interface TimelineItem {
@@ -400,7 +400,7 @@ export default function HackathonOverviewPage() {
                             {placeLabels[place] || prize.name}
                           </p>
                           <p className="font-display text-3xl font-bold">
-                            {formatCurrency(prize.value, prize.currency)}
+                            {formatPrizeValue(prize.value, prize.currency, prize.type)}
                           </p>
                           {prize.description && (
                             <p className="text-xs text-muted-foreground mt-2">
@@ -434,11 +434,7 @@ export default function HackathonOverviewPage() {
                                 {prize.name}
                               </p>
                               <p className="font-display text-xl font-bold text-primary">
-                                {prize.value > 0
-                                  ? formatCurrency(prize.value, prize.currency)
-                                  : prize.type === "incubation"
-                                    ? "Incubation"
-                                    : prize.type}
+                                {formatPrizeValue(prize.value, prize.currency, prize.type)}
                               </p>
                               {prize.description && (
                                 <p className="text-xs text-muted-foreground mt-1">

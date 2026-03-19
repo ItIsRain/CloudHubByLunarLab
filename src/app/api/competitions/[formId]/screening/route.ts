@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/api-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/audit";
 import { evaluateAllRules, calculateCompletenessScore, detectDuplicates } from "@/lib/screening-engine";
+import { UUID_RE } from "@/lib/constants";
 import type { FormField, ScreeningRule } from "@/lib/types";
 
 interface Params {
@@ -12,6 +14,7 @@ interface Params {
 // ── GET — screening dashboard data ──────────────────────
 export async function GET(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+  if (!UUID_RE.test(formId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -123,9 +126,15 @@ export async function GET(request: NextRequest, { params }: Params) {
 // ── POST — run screening on all submitted applications ──
 export async function POST(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+  if (!UUID_RE.test(formId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
+  }
+
+  const rl = checkRateLimit(auth.userId, { namespace: "bulk-screening", limit: 2, windowMs: 5 * 60 * 1000 });
+  if (rl.limited) {
+    return NextResponse.json({ error: "Bulk screening rate limit exceeded. Try again later." }, { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } });
   }
 
   const admin = getSupabaseAdminClient();

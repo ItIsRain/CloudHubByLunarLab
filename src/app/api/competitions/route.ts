@@ -18,7 +18,10 @@ export async function GET(request: NextRequest) {
       .in("status", ["published", "closed"])
       .order("created_at", { ascending: false });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("Failed to fetch public competition forms:", error);
+      return NextResponse.json({ error: "Failed to fetch competitions" }, { status: 500 });
+    }
     return NextResponse.json({ data: (data || []).map((r) => dbRowToCompetitionForm(r as Record<string, unknown>)) });
   }
 
@@ -45,7 +48,10 @@ export async function GET(request: NextRequest) {
   }
 
   const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("Failed to fetch competition forms:", error);
+    return NextResponse.json({ error: "Failed to fetch competitions" }, { status: 500 });
+  }
 
   return NextResponse.json({
     data: (data || []).map((r) => dbRowToCompetitionForm(r as Record<string, unknown>)),
@@ -135,7 +141,8 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to create competition form:", error);
+    return NextResponse.json({ error: "Failed to create competition" }, { status: 500 });
   }
 
   void writeAuditLog({

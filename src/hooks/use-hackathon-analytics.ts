@@ -57,6 +57,104 @@ export interface WinnerStats {
   locked: number;
 }
 
+// ── New analytics types ──────────────────────────────────
+
+export interface ReviewerActivityEntry {
+  reviewerId: string;
+  name: string;
+  email: string;
+  status: string;
+  assignedCount: number;
+  scoredCount: number;
+  completionRate: number;
+  avgScoreGiven: number;
+  recommendCount: number;
+  doNotRecommendCount: number;
+  flaggedCount: number;
+}
+
+export interface ReviewerActivity {
+  reviewers: ReviewerActivityEntry[];
+  summary: {
+    totalInvited: number;
+    totalAccepted: number;
+    totalDeclined: number;
+    avgCompletionRate: number;
+  };
+}
+
+export interface HistogramBucket {
+  bucket: string;
+  count: number;
+}
+
+export interface ScoreStats {
+  histogram: HistogramBucket[];
+  mean: number;
+  median: number;
+  min: number;
+  max: number;
+  stdDev: number;
+  totalScores: number;
+}
+
+export interface PhaseScoreStats extends ScoreStats {
+  phaseId: string;
+  phaseName: string;
+}
+
+export interface ScoreDistributions {
+  overall: ScoreStats;
+  byPhase: PhaseScoreStats[];
+}
+
+export interface PhaseDecisionOutcome {
+  phaseId: string;
+  phaseName: string;
+  total: number;
+  advance: number;
+  borderline: number;
+  doNotAdvance: number;
+  overrideCount: number;
+  advanceRate: number;
+}
+
+export interface DecisionOutcomes {
+  byPhase: PhaseDecisionOutcome[];
+  overall: {
+    total: number;
+    advance: number;
+    borderline: number;
+    doNotAdvance: number;
+    overrideCount: number;
+  };
+}
+
+export interface FunnelStage {
+  stage: string;
+  count: number;
+  percentOfTotal: number;
+  dropOff: number;
+}
+
+export interface ConversionRates {
+  funnel: FunnelStage[];
+}
+
+export interface TimeStat {
+  avgHours: number;
+  medianHours: number;
+  minHours: number;
+  maxHours: number;
+  sampleSize: number;
+}
+
+export interface ProcessingTimes {
+  reviewerResponse: TimeStat;
+  screeningTurnaround: TimeStat;
+  scoringTurnaround: TimeStat;
+}
+
 export interface HackathonAnalytics {
   registrationsByStatus: Record<string, number>;
   registrationTimeline: { date: string; count: number }[];
@@ -74,6 +172,12 @@ export interface HackathonAnalytics {
   campusPerformance?: Record<string, CampusPerformance>;
   sectorDistribution?: Record<string, number>;
   winnerStats?: WinnerStats;
+  // New analytics
+  reviewerActivity?: ReviewerActivity;
+  scoreDistributions?: ScoreDistributions;
+  decisionOutcomes?: DecisionOutcomes;
+  conversionRates?: ConversionRates;
+  processingTimes?: ProcessingTimes;
 }
 
 export function useHackathonAnalytics(hackathonId: string | undefined) {

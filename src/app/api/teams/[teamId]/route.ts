@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToTeam } from "@/lib/supabase/mappers";
 import { verifyIsTeamLeaderOrOrganizer, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
+import { UUID_RE } from "@/lib/constants";
 
 export async function GET(
   _request: NextRequest,
@@ -9,6 +10,7 @@ export async function GET(
 ) {
   try {
     const { teamId } = await params;
+    if (!UUID_RE.test(teamId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
     const {
       data: { user },
@@ -58,6 +60,7 @@ export async function PATCH(
 ) {
   try {
     const { teamId } = await params;
+    if (!UUID_RE.test(teamId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
     const {
       data: { user },
@@ -150,6 +153,7 @@ export async function DELETE(
 ) {
   try {
     const { teamId } = await params;
+    if (!UUID_RE.test(teamId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
     const {
       data: { user },

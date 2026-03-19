@@ -66,6 +66,12 @@ export async function PATCH(
 
     // Apply resolution note
     if (body.resolutionNote !== undefined) {
+      if (typeof body.resolutionNote !== "string" || body.resolutionNote.length > 5000) {
+        return NextResponse.json(
+          { error: "resolutionNote must be a string of at most 5000 characters" },
+          { status: 400 }
+        );
+      }
       updates.resolution_note = body.resolutionNote;
     }
 

@@ -4,6 +4,42 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess } from "@/lib/check-hackathon-access";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+// ── Stat helpers ───────────────────────────────────────
+function median(arr: number[]): number {
+  if (arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function stdDev(arr: number[], mean: number): number {
+  if (arr.length < 2) return 0;
+  const variance = arr.reduce((sum, v) => sum + (v - mean) ** 2, 0) / arr.length;
+  return Math.sqrt(variance);
+}
+
+function hoursBetween(start: string, end: string): number {
+  return (new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60);
+}
+
+function buildHistogram(values: number[], bucketSize: number): { bucket: string; count: number }[] {
+  if (values.length === 0) return [];
+  const maxVal = Math.max(...values);
+  const buckets: Record<string, number> = {};
+  for (let lo = 0; lo <= maxVal; lo += bucketSize) {
+    const hi = lo + bucketSize;
+    buckets[`${lo}-${hi}`] = 0;
+  }
+  for (const v of values) {
+    const lo = Math.floor(v / bucketSize) * bucketSize;
+    const hi = lo + bucketSize;
+    const key = `${lo}-${hi}`;
+    buckets[key] = (buckets[key] || 0) + 1;
+  }
+  return Object.entries(buckets).map(([bucket, count]) => ({ bucket, count }));
+}
 
 export async function GET(
   request: NextRequest,
@@ -39,6 +75,15 @@ export async function GET(
     const access = await checkHackathonAccess(supabase, hackathonId, auth.userId);
     if (!access.hasAccess) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Rate limit: 30 requests per user per minute (analytics is compute-heavy)
+    const rl = checkRateLimit(auth.userId, { namespace: "analytics", limit: 30, windowMs: 60_000 });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
     }
 
     const { data: hackathon } = await supabase
@@ -77,10 +122,10 @@ export async function GET(
         .from("submissions")
         .select("id, track")
         .eq("hackathon_id", hackathonId),
-      // 4. Competition phases with assignment/score counts
+      // 4. Competition phases
       supabase
         .from("competition_phases")
-        .select("id, name, sort_order")
+        .select("id, name, sort_order, status, scoring_criteria")
         .eq("hackathon_id", hackathonId)
         .order("sort_order", { ascending: true }),
       // 5. RSVP data from accepted/approved registrations
@@ -185,15 +230,39 @@ export async function GET(
       total: number;
     }[] = [];
 
+    // Declare phase-related result variables outside the if block so sections 12-16 can access them
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let assignmentsResult: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let phaseScoresResult: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let decisionsResult: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let reviewersResult: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let finalistsResult: any = null;
+
     if (phaseIds.length > 0) {
-      // Fetch all assignments and scores across all phases in parallel
-      const [assignmentsResult, phaseScoresResult] = await Promise.all([
+      // Fetch assignments, scores, decisions, reviewers, and finalists in parallel
+      [assignmentsResult, phaseScoresResult, decisionsResult, reviewersResult, finalistsResult] = await Promise.all([
         supabase
           .from("reviewer_assignments")
-          .select("phase_id, registration_id")
+          .select("phase_id, reviewer_id, registration_id, assigned_at")
           .in("phase_id", phaseIds),
         supabase
           .from("phase_scores")
+          .select("phase_id, reviewer_id, registration_id, total_score, criteria_scores, recommendation, flagged, submitted_at")
+          .in("phase_id", phaseIds),
+        supabase
+          .from("phase_decisions")
+          .select("phase_id, registration_id, decision, average_score, is_override, recommendation_count, total_reviewers, created_at")
+          .in("phase_id", phaseIds),
+        supabase
+          .from("phase_reviewers")
+          .select("id, phase_id, user_id, name, email, status, invited_at, accepted_at")
+          .in("phase_id", phaseIds),
+        supabase
+          .from("phase_finalists")
           .select("phase_id, registration_id")
           .in("phase_id", phaseIds),
       ]);
@@ -459,6 +528,234 @@ export async function GET(
     const confirmedWinners = winners?.filter((w) => (w as Record<string, unknown>).confirmed).length || 0;
     const lockedWinners = winners?.filter((w) => (w as Record<string, unknown>).locked).length || 0;
 
+    // ── 12. Reviewer Activity ──────────────────────────────────
+    const allReviewers: Record<string, unknown>[] = reviewersResult?.data || [];
+    const allScoreRows: Record<string, unknown>[] = phaseScoresResult?.data || [];
+    const allAssignments: Record<string, unknown>[] = assignmentsResult?.data || [];
+
+    // Build reviewer activity map
+    const reviewerAssignCounts: Record<string, number> = {};
+    const reviewerScoreCounts: Record<string, number> = {};
+    const reviewerScoreSums: Record<string, number> = {};
+    const reviewerRecommendCounts: Record<string, number> = {};
+    const reviewerDNRCounts: Record<string, number> = {};
+    const reviewerFlagCounts: Record<string, number> = {};
+    const reviewerPhases: Record<string, Set<string>> = {};
+
+    for (const a of allAssignments) {
+      const row = a as Record<string, unknown>;
+      const rid = row.reviewer_id as string;
+      reviewerAssignCounts[rid] = (reviewerAssignCounts[rid] || 0) + 1;
+      if (!reviewerPhases[rid]) reviewerPhases[rid] = new Set();
+      reviewerPhases[rid].add(row.phase_id as string);
+    }
+
+    for (const s of allScoreRows) {
+      const row = s as Record<string, unknown>;
+      const rid = row.reviewer_id as string;
+      const score = Number(row.total_score) || 0;
+      reviewerScoreCounts[rid] = (reviewerScoreCounts[rid] || 0) + 1;
+      reviewerScoreSums[rid] = (reviewerScoreSums[rid] || 0) + score;
+      if (row.recommendation === "recommend") reviewerRecommendCounts[rid] = (reviewerRecommendCounts[rid] || 0) + 1;
+      if (row.recommendation === "do_not_recommend") reviewerDNRCounts[rid] = (reviewerDNRCounts[rid] || 0) + 1;
+      if (row.flagged) reviewerFlagCounts[rid] = (reviewerFlagCounts[rid] || 0) + 1;
+    }
+
+    const reviewerActivityList = allReviewers.map((r) => {
+      const row = r as Record<string, unknown>;
+      const uid = row.user_id as string;
+      const assigned = reviewerAssignCounts[uid] || 0;
+      const scored = reviewerScoreCounts[uid] || 0;
+      return {
+        reviewerId: uid,
+        name: row.name as string,
+        email: row.email as string,
+        status: row.status as string,
+        assignedCount: assigned,
+        scoredCount: scored,
+        completionRate: assigned > 0 ? Math.round((scored / assigned) * 100) / 100 : 0,
+        avgScoreGiven: scored > 0 ? Math.round(((reviewerScoreSums[uid] || 0) / scored) * 100) / 100 : 0,
+        recommendCount: reviewerRecommendCounts[uid] || 0,
+        doNotRecommendCount: reviewerDNRCounts[uid] || 0,
+        flaggedCount: reviewerFlagCounts[uid] || 0,
+      };
+    });
+
+    // Deduplicate by user_id (a reviewer may appear in multiple phases)
+    const seenReviewers = new Set<string>();
+    const uniqueReviewers = reviewerActivityList.filter((r) => {
+      if (seenReviewers.has(r.reviewerId)) return false;
+      seenReviewers.add(r.reviewerId);
+      return true;
+    });
+
+    const completionRates = uniqueReviewers.filter((r) => r.assignedCount > 0).map((r) => r.completionRate);
+    const reviewerActivity = {
+      reviewers: uniqueReviewers.sort((a, b) => b.scoredCount - a.scoredCount),
+      summary: {
+        totalInvited: allReviewers.filter((r) => (r as Record<string, unknown>).status === "invited").length,
+        totalAccepted: allReviewers.filter((r) => (r as Record<string, unknown>).status === "accepted").length,
+        totalDeclined: allReviewers.filter((r) => (r as Record<string, unknown>).status === "declined").length,
+        avgCompletionRate: completionRates.length > 0 ? Math.round((completionRates.reduce((a, b) => a + b, 0) / completionRates.length) * 100) / 100 : 0,
+      },
+    };
+
+    // ── 13. Score Distributions ────────────────────────────────
+    const allTotalScores = allScoreRows.map((s) => Number((s as Record<string, unknown>).total_score) || 0);
+    const overallMean = allTotalScores.length > 0 ? allTotalScores.reduce((a, b) => a + b, 0) / allTotalScores.length : 0;
+
+    const scoreDistributions = {
+      overall: {
+        histogram: buildHistogram(allTotalScores, 10),
+        mean: Math.round(overallMean * 100) / 100,
+        median: Math.round(median(allTotalScores) * 100) / 100,
+        min: allTotalScores.length > 0 ? Math.min(...allTotalScores) : 0,
+        max: allTotalScores.length > 0 ? Math.max(...allTotalScores) : 0,
+        stdDev: Math.round(stdDev(allTotalScores, overallMean) * 100) / 100,
+        totalScores: allTotalScores.length,
+      },
+      byPhase: phases.map((p) => {
+        const row = p as Record<string, unknown>;
+        const pid = row.id as string;
+        const phaseScoreValues = allScoreRows
+          .filter((s) => (s as Record<string, unknown>).phase_id === pid)
+          .map((s) => Number((s as Record<string, unknown>).total_score) || 0);
+        const pMean = phaseScoreValues.length > 0 ? phaseScoreValues.reduce((a, b) => a + b, 0) / phaseScoreValues.length : 0;
+        return {
+          phaseId: pid,
+          phaseName: row.name as string,
+          histogram: buildHistogram(phaseScoreValues, 10),
+          mean: Math.round(pMean * 100) / 100,
+          median: Math.round(median(phaseScoreValues) * 100) / 100,
+          min: phaseScoreValues.length > 0 ? Math.min(...phaseScoreValues) : 0,
+          max: phaseScoreValues.length > 0 ? Math.max(...phaseScoreValues) : 0,
+          stdDev: Math.round(stdDev(phaseScoreValues, pMean) * 100) / 100,
+          totalScores: phaseScoreValues.length,
+        };
+      }),
+    };
+
+    // ── 14. Decision Outcomes ──────────────────────────────────
+    const allDecisions: Record<string, unknown>[] = decisionsResult?.data || [];
+    const decisionsByPhase: Record<string, Record<string, unknown>[]> = {};
+    for (const d of allDecisions) {
+      const pid = d.phase_id as string;
+      if (!decisionsByPhase[pid]) decisionsByPhase[pid] = [];
+      decisionsByPhase[pid].push(d);
+    }
+
+    const decisionOutcomes = {
+      byPhase: phases.map((p) => {
+        const row = p as Record<string, unknown>;
+        const pid = row.id as string;
+        const pDecisions = decisionsByPhase[pid] || [];
+        const advance = pDecisions.filter((d) => (d as Record<string, unknown>).decision === "advance").length;
+        const borderline = pDecisions.filter((d) => (d as Record<string, unknown>).decision === "borderline").length;
+        const doNotAdvance = pDecisions.filter((d) => (d as Record<string, unknown>).decision === "do_not_advance").length;
+        const overrides = pDecisions.filter((d) => (d as Record<string, unknown>).is_override).length;
+        const total = pDecisions.length;
+        return {
+          phaseId: pid,
+          phaseName: row.name as string,
+          total,
+          advance,
+          borderline,
+          doNotAdvance,
+          overrideCount: overrides,
+          advanceRate: total > 0 ? Math.round((advance / total) * 100) / 100 : 0,
+        };
+      }),
+      overall: {
+        total: allDecisions.length,
+        advance: allDecisions.filter((d) => (d as Record<string, unknown>).decision === "advance").length,
+        borderline: allDecisions.filter((d) => (d as Record<string, unknown>).decision === "borderline").length,
+        doNotAdvance: allDecisions.filter((d) => (d as Record<string, unknown>).decision === "do_not_advance").length,
+        overrideCount: allDecisions.filter((d) => (d as Record<string, unknown>).is_override).length,
+      },
+    };
+
+    // ── 15. Conversion Rates ──────────────────────────────────
+    const totalAssigned = new Set(allAssignments.map((a) => (a as Record<string, unknown>).registration_id as string)).size;
+    const totalScored = new Set(allScoreRows.map((s) => (s as Record<string, unknown>).registration_id as string)).size;
+    const totalAdvanced = allDecisions.filter((d) => (d as Record<string, unknown>).decision === "advance").length;
+    const totalFinalists = (finalistsResult?.data || []).length;
+
+    const funnelStages = [
+      { stage: "Applied", count: totalApplied },
+      { stage: "Screened", count: screened },
+      { stage: "Eligible", count: eligible },
+      { stage: "Accepted", count: accepted },
+      { stage: "Assigned (Judging)", count: totalAssigned },
+      { stage: "Scored", count: totalScored },
+      { stage: "Advanced", count: totalAdvanced },
+      { stage: "Finalist", count: totalFinalists },
+      { stage: "Winner", count: winnerCount },
+    ];
+
+    const conversionRates = {
+      funnel: funnelStages.map((s, i) => ({
+        stage: s.stage,
+        count: s.count,
+        percentOfTotal: totalApplied > 0 ? Math.round((s.count / totalApplied) * 1000) / 10 : 0,
+        dropOff: i === 0 ? 0 : (funnelStages[i - 1].count > 0
+          ? Math.round(((funnelStages[i - 1].count - s.count) / funnelStages[i - 1].count) * 1000) / 10
+          : 0),
+      })),
+    };
+
+    // ── 16. Processing Time Metrics ───────────────────────────
+    // Reviewer response time (invited → accepted)
+    const responseTimesHrs: number[] = [];
+    for (const r of allReviewers) {
+      const row = r as Record<string, unknown>;
+      if (row.status === "accepted" && row.invited_at && row.accepted_at) {
+        const hrs = hoursBetween(row.invited_at as string, row.accepted_at as string);
+        if (hrs >= 0) responseTimesHrs.push(hrs);
+      }
+    }
+
+    // Screening turnaround (application → screening)
+    const screeningTimesHrs: number[] = [];
+    for (const reg of registrations) {
+      const r = reg as Record<string, unknown>;
+      if (r.screening_completed_at && r.created_at) {
+        const hrs = hoursBetween(r.created_at as string, r.screening_completed_at as string);
+        if (hrs >= 0) screeningTimesHrs.push(hrs);
+      }
+    }
+
+    // Scoring turnaround (assignment → score submission)
+    const assignmentMap = new Map<string, string>();
+    for (const a of allAssignments) {
+      const row = a as Record<string, unknown>;
+      const key = `${row.phase_id}:${row.reviewer_id}:${row.registration_id}`;
+      assignmentMap.set(key, row.assigned_at as string);
+    }
+    const scoringTimesHrs: number[] = [];
+    for (const s of allScoreRows) {
+      const row = s as Record<string, unknown>;
+      const key = `${row.phase_id}:${row.reviewer_id}:${row.registration_id}`;
+      const assignedAt = assignmentMap.get(key);
+      if (assignedAt && row.submitted_at) {
+        const hrs = hoursBetween(assignedAt, row.submitted_at as string);
+        if (hrs >= 0) scoringTimesHrs.push(hrs);
+      }
+    }
+
+    const formatTimeStat = (arr: number[]) => ({
+      avgHours: arr.length > 0 ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : 0,
+      medianHours: Math.round(median(arr) * 10) / 10,
+      minHours: arr.length > 0 ? Math.round(Math.min(...arr) * 10) / 10 : 0,
+      maxHours: arr.length > 0 ? Math.round(Math.max(...arr) * 10) / 10 : 0,
+      sampleSize: arr.length,
+    });
+
+    const processingTimes = {
+      reviewerResponse: formatTimeStat(responseTimesHrs),
+      screeningTurnaround: formatTimeStat(screeningTimesHrs),
+      scoringTurnaround: formatTimeStat(scoringTimesHrs),
+    };
+
     return NextResponse.json({
       data: {
         registrationsByStatus,
@@ -480,6 +777,12 @@ export async function GET(
         campusPerformance,
         sectorDistribution,
         winnerStats: { total: winnerCount, confirmed: confirmedWinners, locked: lockedWinners },
+        // New analytics
+        reviewerActivity,
+        scoreDistributions,
+        decisionOutcomes,
+        conversionRates,
+        processingTimes,
       },
     });
   } catch (err) {

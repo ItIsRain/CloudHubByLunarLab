@@ -72,7 +72,17 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error || "Login failed");
+        const err = new Error(json.error || "Login failed");
+        // Attach needsVerification flag so the UI can redirect to verify page
+        if (json.needsVerification) {
+          (err as Error & { needsVerification?: boolean; email?: string }).needsVerification = true;
+          (err as Error & { email?: string }).email = json.email;
+        }
+        // Attach oauthProvider hint so the UI can suggest OAuth login
+        if (json.oauthProvider) {
+          (err as Error & { oauthProvider?: string }).oauthProvider = json.oauthProvider;
+        }
+        throw err;
       }
 
       if (json.profile) {
@@ -113,7 +123,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error || "Registration failed");
+        const err = new Error(json.error || "Registration failed");
+        if (json.oauthProvider) {
+          (err as Error & { oauthProvider?: string }).oauthProvider = json.oauthProvider;
+        }
+        throw err;
       }
 
       // Don't fetch user — no session until email is verified

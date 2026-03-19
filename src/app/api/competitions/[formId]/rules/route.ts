@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/api-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToScreeningRule } from "@/lib/supabase/mappers";
+import { UUID_RE } from "@/lib/constants";
 
 interface Params {
   params: Promise<{ formId: string }>;
@@ -10,6 +11,7 @@ interface Params {
 // ── GET — list rules for a form ─────────────────────────
 export async function GET(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+  if (!UUID_RE.test(formId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -43,7 +45,10 @@ export async function GET(request: NextRequest, { params }: Params) {
     .eq("form_id", formId)
     .order("sort_order", { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("Failed to fetch screening rules:", error);
+    return NextResponse.json({ error: "Failed to fetch screening rules" }, { status: 500 });
+  }
 
   return NextResponse.json({
     data: (data || []).map((r) => dbRowToScreeningRule(r as Record<string, unknown>)),
@@ -53,6 +58,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 // ── POST — create a rule ────────────────────────────────
 export async function POST(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+  if (!UUID_RE.test(formId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -130,7 +136,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     .select("*")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("Failed to create screening rule:", error);
+    return NextResponse.json({ error: "Failed to create screening rule" }, { status: 500 });
+  }
 
   return NextResponse.json(
     { data: dbRowToScreeningRule(data as Record<string, unknown>) },

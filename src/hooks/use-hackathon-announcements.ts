@@ -19,17 +19,19 @@ export function useSendAnnouncement() {
       hackathonId,
       title,
       message,
+      audience,
     }: {
       hackathonId: string;
       title: string;
       message: string;
+      audience: string;
     }) => {
       const res = await fetch(
         `/api/hackathons/${hackathonId}/announcements`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, message }),
+          body: JSON.stringify({ title, message, audience }),
         }
       );
       if (!res.ok) {

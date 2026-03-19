@@ -3,6 +3,7 @@ import { authenticateRequest } from "@/lib/api-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToApplication } from "@/lib/supabase/mappers";
 import { writeAuditLog } from "@/lib/audit";
+import { UUID_RE } from "@/lib/constants";
 import {
   sendApplicationAcceptedEmail,
   sendApplicationRejectedEmail,
@@ -19,6 +20,7 @@ interface Params {
 // ── GET — single application detail ─────────────────────
 export async function GET(request: NextRequest, { params }: Params) {
   const { formId, applicationId } = await params;
+  if (!UUID_RE.test(formId) || !UUID_RE.test(applicationId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -75,6 +77,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 // ── PATCH — update application ──────────────────────────
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { formId, applicationId } = await params;
+  if (!UUID_RE.test(formId) || !UUID_RE.test(applicationId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -202,7 +205,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to update application:", error);
+    return NextResponse.json({ error: "Failed to update application" }, { status: 500 });
   }
 
   void writeAuditLog({

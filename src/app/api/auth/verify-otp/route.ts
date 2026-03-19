@@ -3,13 +3,14 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { profileToUser } from "@/lib/supabase/mappers";
 import { PROFILE_COLS } from "@/lib/constants";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { sendWelcomeEmail } from "@/lib/resend";
 
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
     const rl = checkRateLimit(ip, {
       namespace: "auth-verify-otp",
-      limit: 5,
+      limit: 10,
       windowMs: 15 * 60 * 1000,
     });
     if (rl.limited) {
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, token, type = "email" } = await request.json();
+    const { email, token } = await request.json();
 
     if (!email || !token) {
       return NextResponse.json(
@@ -31,26 +32,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const VALID_OTP_TYPES = ["email", "recovery"];
-    if (!VALID_OTP_TYPES.includes(type)) {
-      return NextResponse.json(
-        { error: "Invalid verification type" },
-        { status: 400 }
-      );
-    }
-
     const supabase = await getSupabaseServerClient();
 
+    // Verify the OTP. The OTP was generated via admin.generateLink({ type: "magiclink" }),
+    // so we verify with type "magiclink". This both confirms the user's email and
+    // establishes a session (sets cookies via the server client).
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token,
-      type: type as "email" | "recovery",
+      type: "magiclink",
     });
 
     if (error) {
       console.error("Verification failed:", error.message);
       return NextResponse.json(
-        { error: "Verification failed. Please request a new code." },
+        { error: "Invalid or expired verification code. Please request a new one." },
         { status: 400 }
       );
     }
@@ -64,6 +60,12 @@ export async function POST(request: NextRequest) {
         .eq("id", data.user.id)
         .single();
       profile = profileData;
+
+      // Send welcome email (non-blocking)
+      const userName = data.user.user_metadata?.name || email.split("@")[0];
+      sendWelcomeEmail(email, userName).catch((err: unknown) =>
+        console.error("Failed to send welcome email:", err)
+      );
     }
 
     return NextResponse.json({

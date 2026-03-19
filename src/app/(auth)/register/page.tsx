@@ -105,8 +105,15 @@ function RegisterForm() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Something went wrong";
-      if (message.includes("User already registered")) {
-        toast.error("An account with this email already exists");
+      const oauthProvider = (err as Error & { oauthProvider?: string }).oauthProvider;
+      if (oauthProvider === "github") {
+        toast.error(message, { duration: 6000 });
+        // Auto-trigger GitHub login after a short delay
+        setTimeout(() => handleGitHubLogin(), 1500);
+        return;
+      }
+      if (message.includes("already exists")) {
+        toast.error("An account with this email already exists. Please sign in instead.");
       } else if (message.includes("Password")) {
         toast.error(message);
       } else {

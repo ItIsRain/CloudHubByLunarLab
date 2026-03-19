@@ -81,6 +81,17 @@ export async function PATCH(
       );
     }
 
+    const VALID_ROLES = ["admin", "organizer", "attendee", "judge", "mentor", "moderator"];
+    if (roles !== undefined && isValidRolesArray(roles)) {
+      const invalidRoles = (roles as string[]).filter((r) => !VALID_ROLES.includes(r));
+      if (invalidRoles.length > 0) {
+        return NextResponse.json(
+          { error: `Invalid roles: ${invalidRoles.join(", ")}. Allowed roles: ${VALID_ROLES.join(", ")}` },
+          { status: 400 }
+        );
+      }
+    }
+
     if (status !== undefined && !isValidStatus(status)) {
       return NextResponse.json(
         {

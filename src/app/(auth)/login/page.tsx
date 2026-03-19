@@ -66,10 +66,26 @@ function LoginForm() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Invalid email or password";
-      if (message.includes("Invalid login credentials")) {
+      // If email needs verification, redirect to verify page
+      const needsVerification = (err as Error & { needsVerification?: boolean }).needsVerification;
+      const errEmail = (err as Error & { email?: string }).email;
+      if (needsVerification && errEmail) {
+        toast.info("Please verify your email first. Redirecting...");
+        router.push(`/verify-email?email=${encodeURIComponent(errEmail)}`);
+        return;
+      }
+      // If email is linked to an OAuth provider, prompt them to use it
+      const oauthProvider = (err as Error & { oauthProvider?: string }).oauthProvider;
+      if (oauthProvider === "github") {
+        toast.error(message, { duration: 6000 });
+        // Auto-trigger GitHub login after a short delay
+        setTimeout(() => handleGitHubLogin(), 1500);
+        return;
+      }
+      if (message.includes("verify your email")) {
+        toast.error(message);
+      } else if (message.includes("Invalid")) {
         toast.error("Invalid email or password");
-      } else if (message.includes("Email not confirmed")) {
-        toast.error("Please verify your email before signing in");
       } else {
         toast.error(message);
       }

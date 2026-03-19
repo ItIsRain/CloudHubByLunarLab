@@ -275,6 +275,8 @@ export interface Hackathon {
   minTeamSize: number;
   maxTeamSize: number;
   allowSolo: boolean;
+  teamsEnabled: boolean;
+  submissionsEnabled: boolean;
   registrationFields: FormField[];
   registrationSections: FormSection[];
   screeningRules: ScreeningRule[];
@@ -368,6 +370,7 @@ export interface HackathonAnnouncement {
   hackathonId: string;
   title: string;
   message: string;
+  audience: string;
   sentBy: User;
   recipientCount: number;
   sentAt: string;

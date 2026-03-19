@@ -34,7 +34,7 @@ function VerifyEmailContent() {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, token: code, type: "email" }),
+        body: JSON.stringify({ email, token: code }),
       });
 
       const json = await res.json();

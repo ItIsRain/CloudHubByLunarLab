@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useHackathon } from "@/hooks/use-hackathons";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatPrizeValue } from "@/lib/utils";
 
 const trackIcons: Record<string, React.ElementType> = {
   brain: Brain,
@@ -196,7 +196,7 @@ export default function HackathonTracksPage() {
                                   <span>{prize.name}</span>
                                 </div>
                                 <span className="font-bold">
-                                  {formatCurrency(prize.value, prize.currency)}
+                                  {formatPrizeValue(prize.value, prize.currency, prize.type)}
                                 </span>
                               </div>
                             ))}

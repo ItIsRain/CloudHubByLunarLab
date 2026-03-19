@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToApplication } from "@/lib/supabase/mappers";
 import { writeAuditLog } from "@/lib/audit";
 import { evaluateAllRules, calculateCompletenessScore, detectDuplicates } from "@/lib/screening-engine";
+import { UUID_RE } from "@/lib/constants";
 import type { FormField, ScreeningRule } from "@/lib/types";
 
 interface Params {
@@ -13,6 +14,7 @@ interface Params {
 // ── GET /api/competitions/[formId]/applications ─────────
 export async function GET(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+  if (!UUID_RE.test(formId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -50,7 +52,10 @@ export async function GET(request: NextRequest, { params }: Params) {
       .eq("applicant_id", auth.userId)
       .order("created_at", { ascending: false });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("Failed to fetch user applications:", error);
+      return NextResponse.json({ error: "Failed to fetch applications" }, { status: 500 });
+    }
     return NextResponse.json({
       data: (data || []).map((r) => dbRowToApplication(r as Record<string, unknown>)),
     });
@@ -84,7 +89,10 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const { data, error, count } = await query;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("Failed to fetch applications:", error);
+    return NextResponse.json({ error: "Failed to fetch applications" }, { status: 500 });
+  }
 
   return NextResponse.json({
     data: (data || []).map((r) => dbRowToApplication(r as Record<string, unknown>)),
@@ -100,6 +108,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 // ── POST /api/competitions/[formId]/applications ────────
 export async function POST(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+  if (!UUID_RE.test(formId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: "You must be logged in to submit an application" }, { status: 401 });
@@ -233,7 +242,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (insertErr.code === "23505") {
       return NextResponse.json({ error: "Duplicate application detected" }, { status: 409 });
     }
-    return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    console.error("Failed to create application:", insertErr);
+    return NextResponse.json({ error: "Failed to create application" }, { status: 500 });
   }
 
   // Post-insert recheck for max_applications to handle race conditions.

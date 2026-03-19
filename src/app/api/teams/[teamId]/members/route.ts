@@ -4,6 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToTeam } from "@/lib/supabase/mappers";
 import { getHackathonTimeline } from "@/lib/supabase/auth-helpers";
 import { canFormTeams, getPhaseMessage } from "@/lib/hackathon-phases";
+import { UUID_RE } from "@/lib/constants";
 
 export async function POST(
   request: NextRequest,
@@ -11,6 +12,7 @@ export async function POST(
 ) {
   try {
     const { teamId } = await params;
+    if (!UUID_RE.test(teamId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
     const {
       data: { user },
@@ -132,6 +134,7 @@ export async function DELETE(
 ) {
   try {
     const { teamId } = await params;
+    if (!UUID_RE.test(teamId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
     const {
       data: { user },

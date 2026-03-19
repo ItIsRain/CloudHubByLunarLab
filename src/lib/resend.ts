@@ -57,10 +57,9 @@ function emailWrapper(content: string) {
 <body style="margin:0;padding:0;background:${COLORS.bg};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
   <div style="max-width:520px;margin:0 auto;padding:40px 16px;">
 
-    <!-- Header -->
+    <!-- Header / Logo -->
     <div style="text-align:center;margin-bottom:32px;">
-      <div style="display:inline-block;background:linear-gradient(135deg,${COLORS.coral},${COLORS.magenta});width:48px;height:48px;border-radius:12px;line-height:48px;font-size:22px;font-weight:800;color:#fff;margin-bottom:12px;">C</div>
-      <div style="font-size:18px;font-weight:700;color:${COLORS.white};letter-spacing:-0.3px;">CloudHub</div>
+      <img src="https://res.cloudinary.com/dhfysudgu/image/upload/v1773875035/CloudHubLight_1_x1hhk2.png" alt="CloudHub" width="180" style="display:block;max-width:180px;height:auto;margin:0 auto;border:0;" />
     </div>
 
     <!-- Card -->
@@ -139,9 +138,8 @@ function infoBox(text: string) {
 
 /**
  * General-purpose transactional email sender.
- * Auth emails (verification, password reset) are handled by the Supabase
- * Edge Function `send-email` via the Send Email Hook — not this utility.
- * Use this for non-auth emails (welcome, notifications, receipts, etc.).
+ * Used for all transactional emails including auth verification (via custom
+ * OTP flow) and application status notifications.
  */
 export async function sendEmail({
   to,
@@ -181,6 +179,32 @@ export async function sendWelcomeEmail(email: string, name: string) {
           <strong style="color:${COLORS.white};">Join a team</strong> &mdash; collaborate with talented builders
         `)}
         ${ctaButton(`${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/explore`, "Explore Events")}
+      `)}
+    `),
+  });
+}
+
+// ── Email Verification OTP ───────────────────────────────
+
+export async function sendVerificationOtpEmail(email: string, otp: string, expiryMinutes: number = 10) {
+  // Build the OTP display with individual digit boxes
+  const boxSize = otp.length > 6 ? "width:36px;height:44px;line-height:44px;font-size:20px;" : "width:44px;height:52px;line-height:52px;font-size:24px;";
+  const otpDigits = otp.split("").map((d) =>
+    `<td style="padding:0 3px;">
+      <div style="${boxSize}text-align:center;font-weight:700;font-family:'JetBrains Mono',monospace;color:${COLORS.white};background:${COLORS.surface};border:1px solid ${COLORS.surfaceBorder};border-radius:10px;">${escapeHtml(d)}</div>
+    </td>`
+  ).join("");
+
+  return sendEmail({
+    to: email,
+    subject: `${otp} is your CloudHub verification code`,
+    html: emailWrapper(`
+      ${statusBanner(COLORS.coral, `${COLORS.coral}08`, "&#128274;", "Verify Your Email")}
+      ${bodySection(`
+        ${paragraph(`Enter this code on the verification page to confirm your email address:`)}
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px auto;"><tr>${otpDigits}</tr></table>
+        ${infoBox(`This code expires in <strong style="color:${COLORS.white};">${expiryMinutes} minutes</strong>. If you didn't create a CloudHub account, you can safely ignore this email.`)}
+        ${paragraph(`<span style="color:${COLORS.textDim};font-size:13px;">If you're having trouble, copy and paste this code: <strong style="color:${COLORS.white};">${otp}</strong></span>`)}
       `)}
     `),
   });

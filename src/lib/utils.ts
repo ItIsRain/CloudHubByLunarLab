@@ -61,6 +61,23 @@ export function formatCurrency(amount: number, currency: string = "USD"): string
   }).format(amount);
 }
 
+const prizeTypeLabels: Record<string, string> = {
+  incubation: "Incubation",
+  credits: "Credits",
+  swag: "Swag",
+  other: "Prize",
+};
+
+/** Format a prize's display value — shows currency for cash, label for non-monetary */
+export function formatPrizeValue(
+  value: number,
+  currency: string,
+  type: string
+): string {
+  if (value > 0) return formatCurrency(value, currency);
+  return prizeTypeLabels[type] || type;
+}
+
 export function formatNumber(num: number): string {
   if (num >= 1000000) {
     return `${(num / 1000000).toFixed(1)}M`;

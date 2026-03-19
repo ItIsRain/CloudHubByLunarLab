@@ -19,7 +19,8 @@ export function VerificationCodeInput({ length = 6, onComplete }: VerificationCo
   };
 
   const handleChange = (index: number, value: string) => {
-    if (!/^\d*$/.test(value)) return;
+    // Accept digits and letters (Supabase OTPs may be alphanumeric)
+    if (!/^[a-zA-Z0-9]*$/.test(value)) return;
 
     const newValues = [...values];
     newValues[index] = value.slice(-1);
@@ -45,7 +46,7 @@ export function VerificationCodeInput({ length = 6, onComplete }: VerificationCo
 
   const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, length);
+    const pasted = e.clipboardData.getData("text").replace(/[^a-zA-Z0-9]/g, "").slice(0, length);
     if (!pasted) return;
 
     const newValues = [...values];
@@ -74,9 +75,10 @@ export function VerificationCodeInput({ length = 6, onComplete }: VerificationCo
           onKeyDown={(e) => handleKeyDown(index, e)}
           onPaste={index === 0 ? handlePaste : undefined}
           className={cn(
-            "h-14 w-12 text-center text-2xl font-mono font-bold rounded-lg border border-input bg-background",
+            "h-14 text-center text-2xl font-mono font-bold rounded-lg border border-input bg-background",
             "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
             "transition-all",
+            length > 6 ? "w-10" : "w-12",
             value ? "border-primary" : ""
           )}
           aria-label={`Digit ${index + 1}`}

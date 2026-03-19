@@ -181,6 +181,8 @@ export async function PATCH(
       max_team_size: "max_team_size", maxTeamSize: "max_team_size",
       min_team_size: "min_team_size", minTeamSize: "min_team_size",
       allow_solo: "allow_solo", allowSolo: "allow_solo",
+      teams_enabled: "teams_enabled", teamsEnabled: "teams_enabled",
+      submissions_enabled: "submissions_enabled", submissionsEnabled: "submissions_enabled",
       total_prize_pool: "total_prize_pool", totalPrizePool: "total_prize_pool",
       judging_criteria: "judging_criteria", judgingCriteria: "judging_criteria",
       tracks: "tracks", prizes: "prizes", rules: "rules",

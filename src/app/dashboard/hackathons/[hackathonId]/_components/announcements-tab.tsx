@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Send, Megaphone, Clock, Users } from "lucide-react";
+import { Send, Megaphone, Clock, Users, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { cn, formatDate } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { formatDate } from "@/lib/utils";
 import type { Hackathon } from "@/lib/types";
 import {
   useHackathonAnnouncements,
@@ -22,6 +23,44 @@ interface AnnouncementsTabProps {
 const textareaClasses =
   "flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50 resize-y min-h-[100px]";
 
+const selectClasses =
+  "flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary appearance-none";
+
+const AUDIENCE_OPTIONS = [
+  { value: "all", label: "All Participants" },
+  { value: "accepted", label: "Accepted" },
+  { value: "waitlisted", label: "Waitlisted" },
+  { value: "rejected", label: "Rejected" },
+  { value: "confirmed", label: "Confirmed (RSVP)" },
+  { value: "pending", label: "Pending" },
+  { value: "eligible", label: "Eligible" },
+  { value: "ineligible", label: "Ineligible" },
+] as const;
+
+function getAudienceLabel(value: string): string {
+  const option = AUDIENCE_OPTIONS.find((o) => o.value === value);
+  return option?.label ?? "All Participants";
+}
+
+function getAudienceBadgeVariant(
+  value: string
+): "default" | "secondary" | "destructive" | "outline" {
+  switch (value) {
+    case "accepted":
+    case "confirmed":
+    case "eligible":
+      return "default";
+    case "rejected":
+    case "ineligible":
+      return "destructive";
+    case "waitlisted":
+    case "pending":
+      return "secondary";
+    default:
+      return "outline";
+  }
+}
+
 export function AnnouncementsTab({
   hackathon,
   hackathonId,
@@ -32,6 +71,7 @@ export function AnnouncementsTab({
 
   const [title, setTitle] = React.useState("");
   const [message, setMessage] = React.useState("");
+  const [audience, setAudience] = React.useState<string>("all");
 
   const announcements = announcementsData?.data ?? [];
 
@@ -43,16 +83,19 @@ export function AnnouncementsTab({
     }
 
     try {
-      await sendAnnouncement.mutateAsync({
+      const result = await sendAnnouncement.mutateAsync({
         hackathonId,
         title: title.trim(),
         message: message.trim(),
+        audience,
       });
+      const recipientCount = result?.data?.recipientCount ?? 0;
       toast.success(
-        `Announcement sent to ${hackathon.participantCount ?? 0} participants!`
+        `Announcement sent to ${recipientCount} ${getAudienceLabel(audience).toLowerCase()}!`
       );
       setTitle("");
       setMessage("");
+      setAudience("all");
     } catch {
       toast.error("Failed to send announcement.");
     }
@@ -67,7 +110,7 @@ export function AnnouncementsTab({
       >
         <h2 className="font-display text-2xl font-bold">Announcements</h2>
         <p className="text-sm text-muted-foreground">
-          Send updates and announcements to all participants
+          Send updates and announcements to participants
         </p>
       </motion.div>
 
@@ -92,6 +135,7 @@ export function AnnouncementsTab({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Announcement title..."
+                  maxLength={200}
                 />
               </div>
               <div className="space-y-2">
@@ -101,7 +145,25 @@ export function AnnouncementsTab({
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Write your announcement message..."
                   className={textareaClasses}
+                  maxLength={5000}
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <Filter className="h-3.5 w-3.5" />
+                  Audience
+                </label>
+                <select
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  className={selectClasses}
+                >
+                  {AUDIENCE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <Button
                 type="submit"
@@ -110,7 +172,9 @@ export function AnnouncementsTab({
                 className="gap-2"
               >
                 <Send className="h-4 w-4" />
-                {sendAnnouncement.isPending ? "Sending..." : "Send to All"}
+                {sendAnnouncement.isPending
+                  ? "Sending..."
+                  : `Send to ${getAudienceLabel(audience)}`}
               </Button>
             </form>
           </CardContent>
@@ -152,9 +216,19 @@ export function AnnouncementsTab({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-1">
-                          <h4 className="font-medium truncate">
-                            {announcement.title}
-                          </h4>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <h4 className="font-medium truncate">
+                              {announcement.title}
+                            </h4>
+                            <Badge
+                              variant={getAudienceBadgeVariant(
+                                announcement.audience
+                              )}
+                              className="shrink-0 text-[10px] px-1.5 py-0"
+                            >
+                              {getAudienceLabel(announcement.audience)}
+                            </Badge>
+                          </div>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
                             <span className="flex items-center gap-1">
                               <Users className="h-3 w-3" />

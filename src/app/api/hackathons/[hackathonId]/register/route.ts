@@ -6,6 +6,8 @@ import { canRegister, getPhaseMessage } from "@/lib/hackathon-phases";
 import { calculateCompletenessScore } from "@/lib/screening-engine";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 import { sendApplicationAcceptedEmail } from "@/lib/resend";
+import { UUID_RE } from "@/lib/constants";
+import { checkRateLimit } from "@/lib/rate-limit";
 import type { FormField } from "@/lib/types";
 
 export async function GET(
@@ -14,6 +16,7 @@ export async function GET(
 ) {
   try {
     const { hackathonId } = await params;
+    if (!UUID_RE.test(hackathonId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
 
     const {
@@ -60,6 +63,7 @@ export async function POST(
 ) {
   try {
     const { hackathonId } = await params;
+    if (!UUID_RE.test(hackathonId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
 
     const {
@@ -69,6 +73,11 @@ export async function POST(
 
     if (authError || !user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    const rl = checkRateLimit(user.id, { namespace: "hackathon-register", limit: 5, windowMs: 60 * 1000 });
+    if (rl.limited) {
+      return NextResponse.json({ error: "Rate limit exceeded. Try again later." }, { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } });
     }
 
     // Parse optional form_data and consent from request body
@@ -283,6 +292,7 @@ export async function DELETE(
 ) {
   try {
     const { hackathonId } = await params;
+    if (!UUID_RE.test(hackathonId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
 
     const {
@@ -467,6 +477,7 @@ export async function PUT(
 ) {
   try {
     const { hackathonId } = await params;
+    if (!UUID_RE.test(hackathonId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
 
     const {
@@ -575,6 +586,7 @@ export async function PATCH(
 ) {
   try {
     const { hackathonId } = await params;
+    if (!UUID_RE.test(hackathonId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     const supabase = await getSupabaseServerClient();
 
     const {

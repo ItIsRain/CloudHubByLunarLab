@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/api-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToCampusQuota } from "@/lib/supabase/mappers";
+import { UUID_RE } from "@/lib/constants";
 
 interface Params {
   params: Promise<{ formId: string }>;
@@ -10,14 +11,25 @@ interface Params {
 // ── GET — list quotas ───────────────────────────────────
 export async function GET(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+
+  if (!UUID_RE.test(formId)) {
+    return NextResponse.json({ error: "Invalid form ID" }, { status: 400 });
+  }
+
+  // CRIT-03 fix: require authentication before using admin client
+  const auth = await authenticateRequest(request);
+  if (auth.type === "unauthenticated") {
+    return NextResponse.json({ error: auth.error }, { status: 401 });
+  }
+
   const admin = getSupabaseAdminClient();
 
   const { data, error } = await admin
     .from("campus_quotas")
-    .select("*")
+    .select("id, form_id, campus, quota, filled, created_at, updated_at")
     .eq("form_id", formId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: "Failed to fetch quotas" }, { status: 500 });
 
   return NextResponse.json({
     data: (data || []).map((r) => dbRowToCampusQuota(r as Record<string, unknown>)),
@@ -27,6 +39,11 @@ export async function GET(request: NextRequest, { params }: Params) {
 // ── POST — set/update quotas (upserts all at once) ──────
 export async function POST(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+
+  if (!UUID_RE.test(formId)) {
+    return NextResponse.json({ error: "Invalid form ID" }, { status: 400 });
+  }
+
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -91,7 +108,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     .insert(rows)
     .select("*");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: "Failed to save quotas" }, { status: 500 });
 
   return NextResponse.json({
     data: (data || []).map((r) => dbRowToCampusQuota(r as Record<string, unknown>)),

@@ -13,7 +13,8 @@ async function fetchSettingsMap(): Promise<Record<string, unknown>> {
     .select("key, value");
 
   if (error) {
-    throw new Error(`Failed to fetch settings: ${error.message}`);
+    console.error("Failed to fetch settings:", error);
+    throw new Error("Failed to fetch settings");
   }
 
   const map: Record<string, unknown> = {};

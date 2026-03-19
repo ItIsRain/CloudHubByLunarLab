@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/api-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -20,6 +21,11 @@ export async function GET(request: NextRequest) {
         { error: auth.error },
         { status: 401 }
       );
+    }
+
+    const rl = checkRateLimit(auth.userId, { namespace: "data-export", limit: 2, windowMs: 60 * 60 * 1000 });
+    if (rl.limited) {
+      return NextResponse.json({ error: "Data export rate limit exceeded. Try again later." }, { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } });
     }
 
     const userId = auth.userId;

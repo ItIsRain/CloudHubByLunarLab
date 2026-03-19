@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 /**
  * POST /api/blog/[slug]/engage
@@ -30,6 +31,19 @@ export async function POST(
         { error: "sessionId is required" },
         { status: 400 }
       );
+    }
+
+    if (sessionId.length > 100) {
+      return NextResponse.json(
+        { error: "sessionId is too long" },
+        { status: 400 }
+      );
+    }
+
+    const ip = getClientIp(request);
+    const rl = checkRateLimit(ip, { namespace: "blog-engage", limit: 30, windowMs: 60 * 1000 });
+    if (rl.limited) {
+      return NextResponse.json({ error: "Rate limit exceeded. Try again later." }, { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } });
     }
 
     const admin = getSupabaseAdminClient();

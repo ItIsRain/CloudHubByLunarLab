@@ -4,6 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToCompetitionForm } from "@/lib/supabase/mappers";
 import { writeAuditLog } from "@/lib/audit";
+import { UUID_RE } from "@/lib/constants";
 
 interface Params {
   params: Promise<{ formId: string }>;
@@ -12,6 +13,7 @@ interface Params {
 // ── GET /api/competitions/[formId] — get form detail ────
 export async function GET(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+  if (!UUID_RE.test(formId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
   // Try public access first (published forms)
   const admin = getSupabaseAdminClient();
@@ -58,6 +60,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 // ── PATCH /api/competitions/[formId] — update form ──────
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+  if (!UUID_RE.test(formId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -157,7 +160,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to update competition form:", error);
+    return NextResponse.json({ error: "Failed to update competition" }, { status: 500 });
   }
 
   void writeAuditLog({
@@ -174,6 +178,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 // ── DELETE /api/competitions/[formId] — delete form ─────
 export async function DELETE(request: NextRequest, { params }: Params) {
   const { formId } = await params;
+  if (!UUID_RE.test(formId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   const auth = await authenticateRequest(request);
   if (auth.type === "unauthenticated") {
     return NextResponse.json({ error: auth.error }, { status: 401 });
@@ -208,7 +213,8 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     .eq("id", formId);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to delete competition form:", error);
+    return NextResponse.json({ error: "Failed to delete competition" }, { status: 500 });
   }
 
   void writeAuditLog({

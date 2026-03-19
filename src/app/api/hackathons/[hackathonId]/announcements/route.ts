@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { profileToPublicUser } from "@/lib/supabase/mappers";
-import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { UUID_RE } from "@/lib/constants";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
+import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { profileToPublicUser } from "@/lib/supabase/mappers";
+
+const VALID_AUDIENCES = [
+  "all",
+  "accepted",
+  "waitlisted",
+  "rejected",
+  "confirmed",
+  "pending",
+  "eligible",
+  "ineligible",
+] as const;
+
+type Audience = (typeof VALID_AUDIENCES)[number];
 
 export async function GET(
   request: NextRequest,
@@ -13,6 +27,10 @@ export async function GET(
 ) {
   try {
     const { hackathonId } = await params;
+
+    if (!UUID_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -73,6 +91,7 @@ export async function GET(
         hackathonId: row.hackathon_id as string,
         title: row.title as string,
         message: row.message as string,
+        audience: (row.audience as string) || "all",
         sentBy: senderProfile ? profileToPublicUser(senderProfile) : null,
         recipientCount: (row.recipient_count as number) || 0,
         sentAt: row.sent_at as string,
@@ -94,20 +113,11 @@ export async function POST(
   { params }: { params: Promise<{ hackathonId: string }> }
 ) {
   try {
-    const ip = getClientIp(request);
-    const rl = checkRateLimit(ip, {
-      namespace: "hackathon-announcements",
-      limit: 10,
-      windowMs: 60 * 60 * 1000,
-    });
-    if (rl.limited) {
-      return NextResponse.json(
-        { error: "Too many announcements sent. Please try again later." },
-        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
-      );
-    }
-
     const { hackathonId } = await params;
+
+    if (!UUID_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -134,6 +144,19 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Rate limit: 5 announcements per organizer per 10 minutes
+    const rl = checkRateLimit(`${auth.userId}:${hackathonId}`, {
+      namespace: "announcements",
+      limit: 5,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many announcements sent. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
+
     const { data: hackathon } = await supabase
       .from("hackathons")
       .select("organizer_id, name")
@@ -147,38 +170,57 @@ export async function POST(
       );
     }
 
-    const { title, message } = await request.json();
+    const body = await request.json();
+    const { title, message, audience: rawAudience } = body;
 
-    if (!title || !message) {
+    // Validate title
+    if (!title || typeof title !== "string" || !title.trim()) {
       return NextResponse.json(
-        { error: "title and message are required" },
+        { error: "Title is required" },
+        { status: 400 }
+      );
+    }
+    if (title.length > 200) {
+      return NextResponse.json(
+        { error: "Title must be under 200 characters" },
         { status: 400 }
       );
     }
 
-    if (typeof title !== "string" || title.length > 200) {
+    // Validate message
+    if (!message || typeof message !== "string" || !message.trim()) {
       return NextResponse.json(
-        { error: "Title must be a string under 200 characters" },
+        { error: "Message is required" },
+        { status: 400 }
+      );
+    }
+    if (message.length > 5000) {
+      return NextResponse.json(
+        { error: "Message must be under 5,000 characters" },
         { status: 400 }
       );
     }
 
-    if (typeof message !== "string" || message.length > 10000) {
-      return NextResponse.json(
-        { error: "Message must be a string under 10,000 characters" },
-        { status: 400 }
-      );
-    }
+    // Validate audience
+    const audience: Audience = VALID_AUDIENCES.includes(rawAudience as Audience)
+      ? (rawAudience as Audience)
+      : "all";
 
-    // Get all registered participants' emails
-    const { data: registrations, error: regError } = await supabase
+    // Query hackathon_registrations filtered by audience status to get recipient emails
+    const adminClient = getSupabaseAdminClient();
+    let registrationsQuery = adminClient
       .from("hackathon_registrations")
       .select("user:profiles!hackathon_registrations_user_id_fkey(email, name)")
-      .eq("hackathon_id", hackathonId)
-      .in("status", ["confirmed", "approved"]);
+      .eq("hackathon_id", hackathonId);
+
+    if (audience !== "all") {
+      registrationsQuery = registrationsQuery.eq("status", audience);
+    }
+
+    const { data: registrations, error: regError } = await registrationsQuery;
 
     if (regError) {
-      return NextResponse.json({ error: "Failed to send announcement" }, { status: 400 });
+      return NextResponse.json({ error: "Failed to query recipients" }, { status: 400 });
     }
 
     const recipients = (registrations || [])
@@ -188,64 +230,62 @@ export async function POST(
       })
       .filter(Boolean) as { email: string; name: string }[];
 
-    // Insert the announcement
-    const { data: announcement, error: insertError } = await supabase
+    // Insert the announcement record using admin client (bypasses RLS for the write)
+    const { data: announcement, error: insertError } = await adminClient
       .from("hackathon_announcements")
       .insert({
         hackathon_id: hackathonId,
-        title,
-        message,
+        title: title.trim(),
+        message: message.trim(),
+        audience,
         sent_by: auth.userId,
         recipient_count: recipients.length,
       })
-      .select("*, sender:profiles!hackathon_announcements_sent_by_fkey(*)")
+      .select("id, title, audience, recipient_count")
       .single();
 
     if (insertError) {
       return NextResponse.json(
-        { error: "Failed to send announcement" },
+        { error: "Failed to save announcement" },
         { status: 400 }
       );
     }
 
-    // Send emails to all participants in parallel and count actual successes
+    // Send emails in batches of 50 using Promise.allSettled
     const hackathonName = hackathon.name as string;
+    const BATCH_SIZE = 50;
 
-    const emailResults = await Promise.allSettled(
-      recipients.map((recipient) =>
-        sendEmail({
-          to: recipient.email,
-          subject: `[${hackathonName}] ${title}`,
-          html: emailWrapper(`
-          <h1 style="margin:0 0 8px;color:#fff;font-size:22px;font-weight:700;">${escapeHtml(title)}</h1>
-          <p style="margin:0 0 4px;color:#a1a1aa;font-size:13px;">Announcement from <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong></p>
-          <hr style="border:none;border-top:1px solid #27272a;margin:16px 0;" />
-          <div style="color:#d4d4d8;font-size:15px;line-height:1.7;white-space:pre-wrap;">${escapeHtml(message)}</div>
-          <hr style="border:none;border-top:1px solid #27272a;margin:24px 0 16px;" />
-          <p style="margin:0;color:#71717a;font-size:12px;">
-            You are receiving this because you are registered for ${escapeHtml(hackathonName)}.
-          </p>
-        `),
-        })
-      )
-    );
-
-    const emailsSent = emailResults.filter((r) => r.status === "fulfilled").length;
-
-    const senderProfile = (announcement as Record<string, unknown>)
-      .sender as Record<string, unknown>;
+    for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+      const batch = recipients.slice(i, i + BATCH_SIZE);
+      await Promise.allSettled(
+        batch.map((recipient) =>
+          sendEmail({
+            to: recipient.email,
+            subject: `[${hackathonName}] ${title.trim()}`,
+            html: emailWrapper(`
+            <div style="padding:28px 32px;">
+              <h1 style="margin:0 0 8px;color:#fff;font-size:22px;font-weight:700;">${escapeHtml(title.trim())}</h1>
+              <p style="margin:0 0 4px;color:#a1a1aa;font-size:13px;">Announcement from <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong></p>
+              <hr style="border:none;border-top:1px solid #27272a;margin:16px 0;" />
+              <div style="color:#d4d4d8;font-size:15px;line-height:1.7;white-space:pre-wrap;">${escapeHtml(message.trim())}</div>
+              <hr style="border:none;border-top:1px solid #27272a;margin:24px 0 16px;" />
+              <p style="margin:0;color:#71717a;font-size:12px;">
+                You are receiving this because you are registered for ${escapeHtml(hackathonName)}.
+              </p>
+            </div>
+          `),
+          })
+        )
+      );
+    }
 
     return NextResponse.json({
       data: {
         id: announcement.id,
-        hackathonId: announcement.hackathon_id,
         title: announcement.title,
-        message: announcement.message,
-        sentBy: senderProfile ? profileToPublicUser(senderProfile) : null,
+        audience: announcement.audience,
         recipientCount: announcement.recipient_count,
-        sentAt: announcement.sent_at,
       },
-      emailsSent,
     });
   } catch (err) {
     console.error(err);

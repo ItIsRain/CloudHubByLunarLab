@@ -82,6 +82,8 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
     minTeamSize: 1,
     maxTeamSize: 4,
     allowSolo: true,
+    teamsEnabled: true,
+    submissionsEnabled: true,
     rules: "",
     eligibility: [] as string[],
     registrationFields: [] as FormField[],
@@ -113,6 +115,8 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
       minTeamSize: hackathon.minTeamSize || 1,
       maxTeamSize: hackathon.maxTeamSize || 4,
       allowSolo: hackathon.allowSolo ?? true,
+      teamsEnabled: hackathon.teamsEnabled ?? true,
+      submissionsEnabled: hackathon.submissionsEnabled ?? true,
       rules: hackathon.rules || "",
       eligibility: hackathon.eligibility || [],
       registrationFields: hackathon.registrationFields || [],
@@ -386,48 +390,92 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
           </CardContent>
         </Card>
 
-        {/* Team Settings */}
+        {/* Team & Submission Settings */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Teams</CardTitle>
+            <CardTitle className="text-lg">Teams &amp; Submissions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Min Team Size</label>
-                <Input
-                  type="number"
-                  name="minTeamSize"
-                  value={formData.minTeamSize}
-                  onChange={handleChange}
-                  min={1}
-                  max={10}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Max Team Size</label>
-                <Input
-                  type="number"
-                  name="maxTeamSize"
-                  value={formData.maxTeamSize}
-                  onChange={handleChange}
-                  min={1}
-                  max={10}
-                />
-              </div>
-            </div>
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
-                id="allowSolo"
-                name="allowSolo"
-                checked={formData.allowSolo}
+                id="teamsEnabled"
+                name="teamsEnabled"
+                checked={formData.teamsEnabled}
                 onChange={handleChange}
                 className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
               />
-              <label htmlFor="allowSolo" className="text-sm font-medium">
-                Allow solo participation
-              </label>
+              <div>
+                <label htmlFor="teamsEnabled" className="text-sm font-medium">
+                  Enable Teams
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Allow participants to form and join teams
+                </p>
+              </div>
+            </div>
+
+            {formData.teamsEnabled && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Min Team Size</label>
+                    <Input
+                      type="number"
+                      name="minTeamSize"
+                      value={formData.minTeamSize}
+                      onChange={handleChange}
+                      min={1}
+                      max={10}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Max Team Size</label>
+                    <Input
+                      type="number"
+                      name="maxTeamSize"
+                      value={formData.maxTeamSize}
+                      onChange={handleChange}
+                      min={1}
+                      max={10}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="allowSolo"
+                    name="allowSolo"
+                    checked={formData.allowSolo}
+                    onChange={handleChange}
+                    className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                  />
+                  <label htmlFor="allowSolo" className="text-sm font-medium">
+                    Allow solo participation
+                  </label>
+                </div>
+              </>
+            )}
+
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="submissionsEnabled"
+                  name="submissionsEnabled"
+                  checked={formData.submissionsEnabled}
+                  onChange={handleChange}
+                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                />
+                <div>
+                  <label htmlFor="submissionsEnabled" className="text-sm font-medium">
+                    Enable Submissions
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Allow teams to submit projects for judging
+                  </p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

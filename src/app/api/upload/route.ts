@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/api-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import crypto from "crypto";
 
 const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME!;
@@ -44,6 +45,11 @@ export async function POST(request: NextRequest) {
     const auth = await authenticateRequest(request);
     if (auth.type === "unauthenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    const rl = checkRateLimit(auth.userId, { namespace: "upload", limit: 30, windowMs: 60 * 60 * 1000 });
+    if (rl.limited) {
+      return NextResponse.json({ error: "Upload rate limit exceeded. Try again later." }, { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } });
     }
 
     const formData = await request.formData();

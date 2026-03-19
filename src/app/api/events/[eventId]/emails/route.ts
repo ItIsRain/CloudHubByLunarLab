@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { UUID_RE } from "@/lib/constants";
 
 export async function GET(
   request: NextRequest,
@@ -11,6 +12,7 @@ export async function GET(
 ) {
   try {
     const { eventId } = await params;
+    if (!UUID_RE.test(eventId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -82,6 +84,7 @@ export async function POST(
 ) {
   try {
     const { eventId } = await params;
+    if (!UUID_RE.test(eventId)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
