@@ -73,7 +73,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!auth) return authError;
 
     const supabase =
-      auth.type === "api_key" ? getSupabaseAdminClient() : await getSupabaseServerClient();
+      getSupabaseAdminClient();
 
     // Verify hackathon + phase exist
     const { data: hackathon } = await supabase
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!auth) return authError;
 
     const supabase =
-      auth.type === "api_key" ? getSupabaseAdminClient() : await getSupabaseServerClient();
+      getSupabaseAdminClient();
 
     const ownership = await verifyOrganizerOwnership(supabase, hackathonId, phaseId, auth.userId);
     if (!ownership.ok) return ownership.res;
@@ -230,7 +230,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!auth) return authError;
 
     const supabase =
-      auth.type === "api_key" ? getSupabaseAdminClient() : await getSupabaseServerClient();
+      getSupabaseAdminClient();
 
     const ownership = await verifyOrganizerOwnership(supabase, hackathonId, phaseId, auth.userId);
     if (!ownership.ok) return ownership.res;
@@ -442,7 +442,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!auth) return authError;
 
     const supabase =
-      auth.type === "api_key" ? getSupabaseAdminClient() : await getSupabaseServerClient();
+      getSupabaseAdminClient();
 
     const ownership = await verifyOrganizerOwnership(supabase, hackathonId, phaseId, auth.userId);
     if (!ownership.ok) return ownership.res;

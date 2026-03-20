@@ -34,10 +34,7 @@ async function authenticateOrganizer(
     }
   }
 
-  const supabase =
-    auth.type === "api_key"
-      ? getSupabaseAdminClient()
-      : await getSupabaseServerClient();
+  const supabase = getSupabaseAdminClient();
 
   const { data: hackathon } = await supabase
     .from("hackathons")

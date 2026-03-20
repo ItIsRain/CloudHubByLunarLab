@@ -431,8 +431,8 @@ export function AssignmentsSection({
       toast.success(
         `Auto-assigned ${data?.created ?? 0} reviewer assignments (${data?.total ?? 0} total).`
       );
-    } catch {
-      toast.error("Failed to auto-assign reviewers.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to auto-assign reviewers.");
     }
   };
 

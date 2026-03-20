@@ -50,10 +50,10 @@ async function authenticateOrganizer(
     }
   }
 
-  const supabase =
-    auth.type === "api_key"
-      ? getSupabaseAdminClient()
-      : await getSupabaseServerClient();
+  // Always use admin client — API-level ownership check below is the auth gate.
+  // Server client RLS can fail when the session JWT is expired even though
+  // getUser() succeeds (it verifies with the auth server, not the JWT).
+  const supabase = getSupabaseAdminClient();
 
   const { data: hackathon } = await supabase
     .from("hackathons")
@@ -110,10 +110,9 @@ export async function GET(
       if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
     }
 
-    const supabase =
-      auth.type === "api_key"
-        ? getSupabaseAdminClient()
-        : await getSupabaseServerClient();
+    // Use admin client — API-level auth checks gate access; server client
+    // RLS can silently fail when the session JWT expires mid-request.
+    const supabase = getSupabaseAdminClient();
 
     const { data: hackathon } = await supabase
       .from("hackathons")

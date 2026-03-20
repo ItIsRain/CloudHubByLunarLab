@@ -29,10 +29,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
     }
 
-    const supabase =
-      auth.type === "api_key"
-        ? getSupabaseAdminClient()
-        : await getSupabaseServerClient();
+    // Use admin client — API-level ownership check is the auth gate.
+    const supabase = getSupabaseAdminClient();
 
     // Verify caller is the hackathon organizer
     const { data: hackathon } = await supabase
@@ -119,10 +117,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
     }
 
-    const supabase =
-      auth.type === "api_key"
-        ? getSupabaseAdminClient()
-        : await getSupabaseServerClient();
+    const supabase = getSupabaseAdminClient();
 
     // Rate limit: 20 reviewer invites per organizer per 15 minutes
     const rl = checkRateLimit(auth.userId, { namespace: "phase-reviewer-invite", limit: 20, windowMs: 15 * 60 * 1000 });
@@ -301,10 +296,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
     }
 
-    const supabase =
-      auth.type === "api_key"
-        ? getSupabaseAdminClient()
-        : await getSupabaseServerClient();
+    const supabase = getSupabaseAdminClient();
 
     // Verify caller is the hackathon organizer
     const { data: hackathon } = await supabase

@@ -49,10 +49,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
     }
 
-    const supabase =
-      auth.type === "api_key"
-        ? getSupabaseAdminClient()
-        : await getSupabaseServerClient();
+    const supabase = getSupabaseAdminClient();
 
     // Verify user is either the organizer or a reviewer
     const { data: hackathon } = await supabase
@@ -181,10 +178,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
     }
 
-    const supabase =
-      auth.type === "api_key"
-        ? getSupabaseAdminClient()
-        : await getSupabaseServerClient();
+    const supabase = getSupabaseAdminClient();
 
     // Verify user is either the organizer or an accepted reviewer
     const { data: hackathon } = await supabase

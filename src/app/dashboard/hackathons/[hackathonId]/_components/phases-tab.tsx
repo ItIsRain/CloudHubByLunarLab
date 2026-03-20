@@ -275,8 +275,8 @@ function PhaseCard({ hackathonId, hackathon, phase, onEdit }: PhaseCardProps) {
     try {
       await updatePhase.mutateAsync({ status: nextStatus });
       toast.success(`Phase status changed to "${nextStatus}".`);
-    } catch {
-      toast.error("Failed to update phase status.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update phase status.");
     }
   };
 
