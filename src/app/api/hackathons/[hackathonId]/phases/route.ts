@@ -43,10 +43,9 @@ async function authenticateOrganizer(
     }
   }
 
-  const supabase =
-    auth.type === "api_key"
-      ? getSupabaseAdminClient()
-      : await getSupabaseServerClient();
+  // Always use admin client — API-level auth + RBAC is the gate.
+  // RLS on competition_phases has circular dependency with phase_reviewers.
+  const supabase = getSupabaseAdminClient();
 
   // Check access via RBAC (canEdit check is done by caller)
   const access = await checkHackathonAccess(supabase, hackathonId, auth.userId);

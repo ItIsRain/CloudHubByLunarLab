@@ -18,35 +18,43 @@ import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn, formatDate } from "@/lib/utils";
-import { useHackathons } from "@/hooks/use-hackathons";
-import { useMyReviewerPhases } from "@/hooks/use-phase-scoring";
+import { cn } from "@/lib/utils";
+import { useMyReviewerPhases, useJudgeScoreHistory } from "@/hooks/use-phase-scoring";
 import { useAuthStore } from "@/store/auth-store";
 
 export default function JudgeDashboardPage() {
   const user = useAuthStore((state) => state.user);
-  const { data: hackathonsData, isLoading: hackathonsLoading } = useHackathons();
   const { data: reviewerPhasesData, isLoading: phasesLoading } = useMyReviewerPhases();
-  const hackathons = hackathonsData?.data || [];
-  const assignedHackathons = hackathons.filter(
-    (h) => h.status === "judging" || h.status === "submission"
-  );
+  const { data: scoreHistoryData, isLoading: historyLoading } = useJudgeScoreHistory();
+
   const reviewerPhases = reviewerPhasesData?.data || [];
   const acceptedPhases = reviewerPhases.filter((p) => p.reviewerStatus === "accepted");
   const invitedPhases = reviewerPhases.filter((p) => p.reviewerStatus === "invited");
 
+  const historyPhases = scoreHistoryData?.data?.phases || [];
+  const historyStats = scoreHistoryData?.data?.stats;
+
+  // Compute real stats from score history
+  const totalAssigned = historyPhases.reduce((sum, p) => sum + p.totalAssigned, 0);
+  const totalScored = historyPhases.reduce((sum, p) => sum + p.totalScored, 0);
+  const totalPending = totalAssigned - totalScored;
+  const uniqueHackathons = new Set(historyPhases.map((p) => p.hackathonId)).size;
+  const avgScore = historyStats?.averageScore ?? 0;
+
   const stats = [
-    { label: "Assigned Hackathons", value: assignedHackathons.length, icon: ClipboardCheck, color: "text-blue-500" },
-    { label: "Completed", value: 0, icon: Gavel, color: "text-green-500" },
-    { label: "Pending", value: assignedHackathons.length, icon: Clock, color: "text-amber-500" },
-    { label: "Avg Score", value: "-", icon: Star, color: "text-primary" },
+    { label: "Assigned Hackathons", value: uniqueHackathons, icon: ClipboardCheck, color: "text-blue-500" },
+    { label: "Completed", value: totalScored, icon: Gavel, color: "text-green-500" },
+    { label: "Pending", value: totalPending, icon: Clock, color: "text-amber-500" },
+    { label: "Avg Score", value: totalScored > 0 ? avgScore.toFixed(1) : "-", icon: Star, color: "text-primary" },
   ];
 
-  const reviewed = 0;
-  const total = assignedHackathons.length || 1;
+  const reviewed = totalScored;
+  const total = totalAssigned || 1;
   const progressPercent = total > 0 ? Math.round((reviewed / total) * 100) : 0;
 
-  if (hackathonsLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
+  const isLoading = phasesLoading || historyLoading;
+
+  if (isLoading) return <><Navbar /><main className="min-h-screen bg-background pt-24 pb-16"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="shimmer rounded-xl h-96 w-full" /></div></main></>;
 
   return (
     <>
@@ -65,7 +73,7 @@ export default function JudgeDashboardPage() {
               <div>
                 <h1 className="font-display text-3xl font-bold">Judge Dashboard</h1>
                 <p className="text-muted-foreground">
-                  Welcome back! You have submissions waiting for your review.
+                  Welcome back!{totalPending > 0 ? ` You have ${totalPending} applicant${totalPending !== 1 ? "s" : ""} waiting for your review.` : " All caught up."}
                 </p>
               </div>
             </div>
@@ -109,7 +117,7 @@ export default function JudgeDashboardPage() {
                     <BarChart3 className="h-5 w-5 text-primary" />
                     Overall Progress
                   </CardTitle>
-                  <Badge variant="secondary">{reviewed} of {total} submissions reviewed</Badge>
+                  <Badge variant="secondary">{reviewed} of {totalAssigned} applicants reviewed</Badge>
                 </div>
               </CardHeader>
               <CardContent>
@@ -185,6 +193,8 @@ export default function JudgeDashboardPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 {acceptedPhases.map((p, i) => {
                   const canScore = p.phaseStatus === "scoring" || p.phaseStatus === "active";
+                  const isCompleted = p.phaseStatus === "completed";
+                  const canAccess = canScore || isCompleted;
                   return (
                     <motion.div
                       key={p.reviewerId}
@@ -209,7 +219,7 @@ export default function JudgeDashboardPage() {
                               )}
                             </div>
                             <Badge
-                              variant={canScore ? "success" : "secondary"}
+                              variant={canScore ? "success" : isCompleted ? "secondary" : "outline"}
                               dot={canScore}
                             >
                               {p.phaseStatus}
@@ -226,14 +236,14 @@ export default function JudgeDashboardPage() {
                           </div>
                           <div className="mt-4">
                             <Button
-                              asChild={canScore}
+                              asChild={canAccess}
                               size="sm"
                               className="w-full"
-                              disabled={!canScore}
+                              disabled={!canAccess}
                             >
-                              {canScore ? (
+                              {canAccess ? (
                                 <Link href={`/judge/${p.hackathonId}/phases/${p.phaseId}/quick-score`}>
-                                  Start Scoring
+                                  {isCompleted ? "Review Scores" : "Start Scoring"}
                                   <ArrowRight className="ml-2 h-4 w-4" />
                                 </Link>
                               ) : (
@@ -249,77 +259,6 @@ export default function JudgeDashboardPage() {
               </div>
             </motion.div>
           )}
-
-          {/* Assigned Hackathons */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-8"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-xl font-bold">Assigned Hackathons</h2>
-              {assignedHackathons.length > 0 && (
-                <Badge variant="default" dot pulse>
-                  {assignedHackathons.length} active
-                </Badge>
-              )}
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              {assignedHackathons.map((h, i) => (
-                <motion.div
-                  key={h.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.35 + i * 0.05 }}
-                >
-                  <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="font-display text-lg font-bold group-hover:text-primary transition-colors">
-                              {h.name}
-                            </h3>
-                            <Badge
-                              variant={
-                                h.status === "hacking"
-                                  ? "warning"
-                                  : h.status === "judging"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
-                              {h.status}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {h.tagline}
-                          </p>
-                          <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
-                            <span>{h.participantCount} participants</span>
-                            <span>{h.teamCount} teams</span>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Judging: {formatDate(h.judgingStart)} - {formatDate(h.judgingEnd)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-4">
-                        <Button asChild size="sm" className="w-full">
-                          <Link href={`/judge/${h.id}`}>
-                            Review Submissions
-                            <ArrowRight className="ml-2 h-4 w-4" />
-                          </Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
 
           {/* Quick Links */}
           <motion.div

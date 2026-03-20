@@ -85,7 +85,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .eq("user_id", auth.userId)
         .maybeSingle();
 
-      if (!reviewerRecord || reviewerRecord.status !== "accepted") {
+      if (!reviewerRecord || (reviewerRecord.status !== "accepted" && reviewerRecord.status !== "invited")) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }
@@ -116,7 +116,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         flagged,
         submitted_at,
         updated_at,
-        reviewer:profiles!phase_scores_reviewer_id_fkey(id, name, email),
         registration:hackathon_registrations!phase_scores_registration_id_fkey(
           id,
           user_id,
@@ -213,7 +212,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .eq("user_id", auth.userId)
         .maybeSingle();
 
-      if (!reviewerRecord || reviewerRecord.status !== "accepted") {
+      if (!reviewerRecord || (reviewerRecord.status !== "accepted" && reviewerRecord.status !== "invited")) {
         return NextResponse.json(
           { error: "You must be an accepted reviewer or the organizer to submit scores" },
           { status: 403 }

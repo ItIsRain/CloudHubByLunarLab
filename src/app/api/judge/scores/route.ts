@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 
@@ -29,10 +28,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: scopeError }, { status: 403 });
     }
 
-    const supabase =
-      auth.type === "api_key"
-        ? getSupabaseAdminClient()
-        : await getSupabaseServerClient();
+    // Use admin client — auth is already verified above; RLS on competition_phases
+    // can block FK joins for reviewers with non-"accepted" status.
+    const supabase = getSupabaseAdminClient();
 
     // 1. Fetch all phases where the user is a reviewer (any status)
     const { data: reviewerRows, error: reviewerError } = await supabase
@@ -59,7 +57,7 @@ export async function GET(request: NextRequest) {
             name,
             tagline,
             status,
-            banner_url
+            cover_image
           )
         )
       `
@@ -191,7 +189,7 @@ export async function GET(request: NextRequest) {
           hackathonName: hackathon?.name,
           hackathonTagline: hackathon?.tagline,
           hackathonStatus: hackathon?.status,
-          hackathonBanner: hackathon?.banner_url,
+          hackathonBanner: hackathon?.cover_image,
           totalAssigned: assignmentCounts[pid] || 0,
           totalScored: phaseScores.length,
           averageScore:

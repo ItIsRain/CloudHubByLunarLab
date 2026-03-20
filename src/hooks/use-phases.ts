@@ -139,9 +139,10 @@ export function usePhaseAssignments(hackathonId: string | undefined, phaseId: st
 export function useAutoAssign(hackathonId: string, phaseId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      mutate<{ data: { created: number; total: number } }>(
-        `/api/hackathons/${hackathonId}/phases/${phaseId}/assignments`, "POST", {}
+    mutationFn: (opts?: { reviewerId?: string; mode?: "auto" | "all" | "single"; registrationId?: string }) =>
+      mutate<{ data: { created: number; totalApplicants: number; totalReviewers: number } }>(
+        `/api/hackathons/${hackathonId}/phases/${phaseId}/assignments`, "POST",
+        opts ?? {}
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["phase-assignments", hackathonId, phaseId] });
@@ -156,6 +157,21 @@ export function useClearAssignments(hackathonId: string, phaseId: string) {
     mutationFn: () =>
       mutate(
         `/api/hackathons/${hackathonId}/phases/${phaseId}/assignments`, "DELETE", {}
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["phase-assignments", hackathonId, phaseId] });
+      qc.invalidateQueries({ queryKey: ["phases", hackathonId] });
+    },
+  });
+}
+
+export function useRemoveAssignment(hackathonId: string, phaseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (assignmentId: string) =>
+      mutate(
+        `/api/hackathons/${hackathonId}/phases/${phaseId}/assignments`, "DELETE",
+        { assignmentId }
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["phase-assignments", hackathonId, phaseId] });

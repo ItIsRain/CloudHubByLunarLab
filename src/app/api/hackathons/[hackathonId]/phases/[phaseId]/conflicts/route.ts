@@ -12,6 +12,7 @@ interface ConflictInsert {
   registration_id: string;
   conflict_type: "self_registration" | "same_team";
   resolved: boolean;
+  detected_at: string;
 }
 
 /** POST - Detect conflicts for a phase (organizer triggers this) */
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const conflicts: ConflictInsert[] = [];
+    const now = new Date().toISOString();
     let selfRegistrationCount = 0;
     let sameTeamCount = 0;
 
@@ -108,6 +110,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             registration_id: regId,
             conflict_type: "self_registration",
             resolved: false,
+            detected_at: now,
           });
           selfRegistrationCount++;
         }
@@ -170,6 +173,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                   registration_id: regId,
                   conflict_type: "same_team",
                   resolved: false,
+                  detected_at: now,
                 });
                 sameTeamCount++;
               }
@@ -185,7 +189,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const { data: inserted, error: insertError } = await supabase
         .from("reviewer_conflicts")
         .upsert(conflicts, {
-          onConflict: "phase_id,reviewer_id,registration_id,conflict_type",
+          onConflict: "phase_id,reviewer_id,registration_id",
           ignoreDuplicates: true,
         })
         .select("id");
@@ -199,7 +203,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       data: {
-        detected: insertedCount,
+        detected: conflicts.length,
+        newConflicts: insertedCount,
         selfRegistration: selfRegistrationCount,
         sameTeam: sameTeamCount,
       },
@@ -260,7 +265,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Phase not found in this hackathon" }, { status: 404 });
     }
 
-    // Fetch conflicts with reviewer profile info
+    // Fetch conflicts (no FK on reviewer_id, so enrich manually)
     const { data: conflicts, error } = await supabase
       .from("reviewer_conflicts")
       .select(`
@@ -272,17 +277,57 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         resolved,
         resolved_by,
         resolved_at,
-        created_at,
-        reviewer:profiles!reviewer_conflicts_reviewer_id_fkey(id, name, email, avatar)
+        detected_at
       `)
       .eq("phase_id", phaseId)
-      .order("created_at", { ascending: false });
+      .order("detected_at", { ascending: false });
 
     if (error) {
+      console.error("Failed to fetch conflicts:", error);
       return NextResponse.json({ error: "Failed to fetch conflicts" }, { status: 500 });
     }
 
-    return NextResponse.json({ data: conflicts || [] });
+    // Enrich with reviewer profile + applicant profile
+    const reviewerIds = [...new Set((conflicts || []).map((c) => c.reviewer_id))];
+    const registrationIds = [...new Set((conflicts || []).map((c) => c.registration_id))];
+
+    let reviewerMap: Record<string, { id: string; name: string; email: string; avatar: string | null }> = {};
+    let applicantMap: Record<string, { id: string; name: string; email: string }> = {};
+
+    if (reviewerIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email, avatar")
+        .in("id", reviewerIds);
+      if (profiles) {
+        for (const p of profiles) {
+          reviewerMap[p.id] = p as typeof reviewerMap[string];
+        }
+      }
+    }
+
+    if (registrationIds.length > 0) {
+      const { data: regs } = await supabase
+        .from("hackathon_registrations")
+        .select("id, user_id, applicant:profiles!hackathon_registrations_user_id_fkey(id, name, email)")
+        .in("id", registrationIds);
+      if (regs) {
+        for (const r of regs) {
+          const applicant = r.applicant as unknown as { id: string; name: string; email: string } | null;
+          if (applicant) {
+            applicantMap[r.id] = applicant;
+          }
+        }
+      }
+    }
+
+    const enrichedConflicts = (conflicts || []).map((c) => ({
+      ...c,
+      reviewer: reviewerMap[c.reviewer_id] || null,
+      applicant: applicantMap[c.registration_id] || null,
+    }));
+
+    return NextResponse.json({ data: enrichedConflicts });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

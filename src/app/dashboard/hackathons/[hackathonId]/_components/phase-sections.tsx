@@ -54,6 +54,7 @@ import {
   usePhaseAssignments,
   useAutoAssign,
   useClearAssignments,
+  useRemoveAssignment,
   usePhaseScores,
   usePhaseDecisions,
   useRunDecisions,
@@ -415,24 +416,63 @@ export function AssignmentsSection({
     hackathonId,
     phase.id
   );
+  const { data: reviewersData } = usePhaseReviewers(hackathonId, phase.id);
   const autoAssign = useAutoAssign(hackathonId, phase.id);
   const clearAssignments = useClearAssignments(hackathonId, phase.id);
+  const removeAssignment = useRemoveAssignment(hackathonId, phase.id);
 
   const assignments: ReviewerAssignment[] = assignmentsData?.data ?? [];
+  const reviewers: PhaseReviewer[] = reviewersData?.data ?? [];
 
   const canClear =
     phase.status === "draft" || phase.status === "active";
 
+  // Group assignments by reviewer for display
+  const assignmentsByReviewer = React.useMemo(() => {
+    const map = new Map<string, ReviewerAssignment[]>();
+    for (const a of assignments) {
+      const key = a.reviewerId;
+      const list = map.get(key) ?? [];
+      list.push(a);
+      map.set(key, list);
+    }
+    return map;
+  }, [assignments]);
+
   const handleAutoAssign = async () => {
     try {
-      const result = await autoAssign.mutateAsync();
-      const data = (result as { data?: { created?: number; total?: number } })
+      const result = await autoAssign.mutateAsync({});
+      const data = (result as { data?: { created?: number; totalApplicants?: number; totalReviewers?: number } })
         ?.data;
       toast.success(
-        `Auto-assigned ${data?.created ?? 0} reviewer assignments (${data?.total ?? 0} total).`
+        `Auto-assigned ${data?.created ?? 0} new assignments across ${data?.totalReviewers ?? 0} reviewers and ${data?.totalApplicants ?? 0} participants.`
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to auto-assign reviewers.");
+    }
+  };
+
+  const handleAssignAll = async (reviewerUserId: string, reviewerName: string) => {
+    try {
+      const result = await autoAssign.mutateAsync({
+        reviewerId: reviewerUserId,
+        mode: "all",
+      });
+      const data = (result as { data?: { created?: number } })?.data;
+      toast.success(
+        `Assigned ${data?.created ?? 0} new participants to ${reviewerName}.`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign all.");
+    }
+  };
+
+  const handleRemoveAssignment = async (assignmentId: string) => {
+    try {
+      await removeAssignment.mutateAsync(assignmentId);
+      toast.success("Assignment removed.");
+    } catch {
+      toast.error("Failed to remove assignment.");
     }
   };
 
@@ -458,7 +498,7 @@ export function AssignmentsSection({
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
           onClick={handleAutoAssign}
@@ -469,7 +509,7 @@ export function AssignmentsSection({
           ) : (
             <Shuffle className="h-4 w-4 mr-2" />
           )}
-          Auto-Assign
+          Auto-Assign (Round Robin)
         </Button>
         {canClear && assignments.length > 0 && (
           <Button
@@ -492,46 +532,93 @@ export function AssignmentsSection({
         <div className="flex items-center justify-center py-6">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : assignments.length === 0 ? (
+      ) : reviewers.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center">
-          No assignments yet. Click &quot;Auto-Assign&quot; to distribute
-          applicants among reviewers.
+          Add reviewers first, then assign them to participants.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="pb-2 font-medium text-muted-foreground">
-                  Applicant
-                </th>
-                <th className="pb-2 font-medium text-muted-foreground">
-                  Reviewer
-                </th>
-                <th className="pb-2 font-medium text-muted-foreground">
-                  Assigned
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {assignments.slice(0, 50).map((a) => (
-                <tr key={a.id} className="border-b last:border-0">
-                  <td className="py-2 pr-4">
-                    {a.applicantName ?? a.registrationId.slice(0, 8)}
-                  </td>
-                  <td className="py-2 pr-4">
-                    {a.reviewer?.name ?? a.reviewerId.slice(0, 8)}
-                  </td>
-                  <td className="py-2 text-muted-foreground text-xs">
-                    {new Date(a.assignedAt).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {assignments.length > 50 && (
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              Showing 50 of {assignments.length} assignments.
+        <div className="space-y-4">
+          {/* Per-reviewer breakdown with "Assign All" */}
+          {reviewers.map((reviewer) => {
+            const reviewerAssignments =
+              assignmentsByReviewer.get(reviewer.userId) ?? [];
+            return (
+              <div
+                key={reviewer.id}
+                className="rounded-lg border bg-card/50 overflow-hidden"
+              >
+                {/* Reviewer header */}
+                <div className="flex items-center gap-3 px-4 py-3 border-b bg-muted/30">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {reviewer.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {reviewer.email}
+                    </p>
+                  </div>
+                  <Badge variant="muted" className="shrink-0">
+                    {reviewerAssignments.length} assigned
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      handleAssignAll(reviewer.userId, reviewer.name)
+                    }
+                    disabled={autoAssign.isPending}
+                    className="gap-1.5 shrink-0"
+                  >
+                    {autoAssign.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Users className="h-3.5 w-3.5" />
+                    )}
+                    Assign All
+                  </Button>
+                </div>
+
+                {/* Assigned participants list */}
+                {reviewerAssignments.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-3 px-4 text-center">
+                    No participants assigned yet.
+                  </p>
+                ) : (
+                  <div className="divide-y max-h-48 overflow-y-auto">
+                    {reviewerAssignments.map((a) => (
+                      <div
+                        key={a.id}
+                        className="flex items-center gap-3 px-4 py-2 text-sm group hover:bg-muted/20 transition-colors"
+                      >
+                        <span className="flex-1 truncate">
+                          {a.applicantName ?? a.registrationId.slice(0, 8)}
+                        </span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {new Date(a.assignedAt).toLocaleDateString()}
+                        </span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={() => handleRemoveAssignment(a.id)}
+                          disabled={removeAssignment.isPending}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Summary */}
+          {assignments.length > 0 && (
+            <p className="text-xs text-muted-foreground text-center">
+              {assignments.length} total assignments across{" "}
+              {assignmentsByReviewer.size} reviewer
+              {assignmentsByReviewer.size !== 1 ? "s" : ""}
             </p>
           )}
         </div>
@@ -833,7 +920,7 @@ export function DecisionsSection({
                       <div>
                         <p className="font-medium">
                           {d.applicantName ??
-                            d.registrationId.slice(0, 8)}
+                            d.registrationId?.slice(0, 8) ?? "Unknown"}
                         </p>
                         {d.applicantEmail && (
                           <p className="text-xs text-muted-foreground">

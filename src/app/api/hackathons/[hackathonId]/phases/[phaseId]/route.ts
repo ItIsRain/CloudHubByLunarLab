@@ -126,7 +126,7 @@ export async function GET(
 
     const isOrganizer = hackathon.organizer_id === auth.userId;
 
-    // If not organizer, check if they are an accepted reviewer for this phase
+    // If not organizer, check if they are an accepted or invited reviewer for this phase
     if (!isOrganizer) {
       const { data: reviewerRecord } = await supabase
         .from("phase_reviewers")
@@ -135,7 +135,7 @@ export async function GET(
         .eq("user_id", auth.userId)
         .maybeSingle();
 
-      if (!reviewerRecord || reviewerRecord.status !== "accepted") {
+      if (!reviewerRecord || (reviewerRecord.status !== "accepted" && reviewerRecord.status !== "invited")) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }
@@ -197,6 +197,14 @@ export async function GET(
       phase as Record<string, unknown>
     );
 
+    // Fetch registration field definitions so the reviewer can display
+    // human-readable labels for form_data keys.
+    const { data: hackathonFields } = await supabase
+      .from("hackathons")
+      .select("registration_fields")
+      .eq("id", hackathonId)
+      .single();
+
     return NextResponse.json({
       data: {
         id: mappedPhase.id,
@@ -210,6 +218,7 @@ export async function GET(
         blindReview: mappedPhase.blindReview,
         reviewerCount: mappedPhase.reviewerCount,
         campusFilter: null, // Hide from reviewers
+        registrationFields: hackathonFields?.registration_fields || [],
       },
     });
   } catch (err) {

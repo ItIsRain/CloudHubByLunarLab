@@ -81,17 +81,84 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           id,
           user_id,
           applicant:profiles!hackathon_registrations_user_id_fkey(id, name, email)
-        ),
-        decided_by_user:profiles!phase_decisions_decided_by_fkey(id, name, email)
+        )
       `)
       .eq("phase_id", phaseId)
       .order("created_at", { ascending: false });
 
     if (error) {
+      console.error("Failed to fetch decisions:", error);
       return NextResponse.json({ error: "Failed to fetch decisions" }, { status: 400 });
     }
 
-    return NextResponse.json({ data: decisions || [] });
+    // Enrich decided_by with profile data (FK goes to auth.users, not profiles)
+    const deciderIds = [...new Set((decisions || []).map((d) => d.decided_by).filter(Boolean))];
+    let deciderMap: Record<string, { id: string; name: string; email: string }> = {};
+    if (deciderIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email")
+        .in("id", deciderIds);
+      if (profiles) {
+        for (const p of profiles) {
+          deciderMap[p.id] = p as typeof deciderMap[string];
+        }
+      }
+    }
+
+    // Normalize: Supabase FK joins may return object OR array
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const normalizeJoin = (val: any) => (Array.isArray(val) ? val[0] : val) ?? null;
+
+    // Manual profile enrichment fallback (in case FK join doesn't return applicant)
+    const registrationUserIds = [...new Set(
+      (decisions || []).map((d) => {
+        const reg = normalizeJoin(d.registration);
+        return reg?.user_id as string | undefined;
+      }).filter(Boolean)
+    )] as string[];
+
+    let profileMap: Record<string, { id: string; name: string; email: string }> = {};
+    if (registrationUserIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email")
+        .in("id", registrationUserIds);
+      if (profiles) {
+        for (const p of profiles) {
+          profileMap[p.id] = { id: p.id, name: p.name || "", email: p.email || "" };
+        }
+      }
+    }
+
+    // Map to camelCase and extract applicant data from FK join
+    const enriched = (decisions || []).map((d) => {
+      const reg = normalizeJoin(d.registration);
+      const fkApplicant = reg ? normalizeJoin(reg.applicant) : null;
+      const userId = reg?.user_id as string | undefined;
+      const profile = userId ? profileMap[userId] : null;
+      const applicant = profile || (fkApplicant ? { id: fkApplicant.id, name: fkApplicant.name, email: fkApplicant.email } : null);
+
+      return {
+        id: d.id,
+        phaseId: d.phase_id,
+        registrationId: d.registration_id,
+        decision: d.decision,
+        recommendationCount: d.recommendation_count,
+        totalReviewers: d.total_reviewers,
+        averageScore: d.average_score,
+        decidedBy: d.decided_by,
+        rationale: d.rationale,
+        isOverride: d.is_override,
+        createdAt: d.created_at,
+        updatedAt: d.updated_at,
+        applicantName: applicant?.name || null,
+        applicantEmail: applicant?.email || null,
+        decidedByUser: deciderMap[d.decided_by] || null,
+      };
+    });
+
+    return NextResponse.json({ data: enriched });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

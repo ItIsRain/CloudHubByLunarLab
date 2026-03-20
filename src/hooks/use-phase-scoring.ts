@@ -17,6 +17,18 @@ interface ScoringCriteria {
   weight: number;
 }
 
+interface RegistrationField {
+  id: string;
+  type: string;
+  label: string;
+  placeholder?: string;
+  description?: string;
+  required: boolean;
+  options?: { label: string; value: string }[];
+  order: number;
+  sectionId?: string;
+}
+
 interface PhaseConfig {
   id: string;
   name: string;
@@ -28,15 +40,20 @@ interface PhaseConfig {
   blindReview: boolean;
   reviewerCount: number;
   campusFilter: string | null;
+  registrationFields?: RegistrationField[];
 }
 
 interface ReviewerAssignment {
   id: string;
-  phase_id: string;
-  reviewer_id: string;
-  registration_id: string;
-  assigned_at: string;
-  registration: {
+  phaseId: string;
+  reviewerId: string;
+  registrationId: string;
+  assignedAt: string;
+  applicantName: string | null;
+  applicantEmail: string | null;
+  reviewer?: { name: string; email: string } | null;
+  // Raw registration data when available (reviewer ?mine=true with full data)
+  registration?: {
     id: string;
     user_id: string;
     status: string;
@@ -389,6 +406,7 @@ export type {
   CriteriaScore,
   ScoringCriteria,
   PhaseConfig,
+  RegistrationField,
   ReviewerAssignment,
   PhaseScore,
   ReviewerPhase,

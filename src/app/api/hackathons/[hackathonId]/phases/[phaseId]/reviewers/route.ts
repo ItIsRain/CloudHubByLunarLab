@@ -85,7 +85,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const enrichedReviewers = (reviewers || []).map((r) => ({
-      ...r,
+      id: r.id,
+      phaseId: r.phase_id,
+      userId: r.user_id,
+      name: r.name,
+      email: r.email,
+      status: r.status,
+      invitedAt: r.invited_at,
+      acceptedAt: r.accepted_at,
       user: profileMap[r.user_id] || null,
     }));
 

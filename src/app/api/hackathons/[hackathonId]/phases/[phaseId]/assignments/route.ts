@@ -62,7 +62,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     if (!isOrganizer) {
-      // Verify the caller is an accepted reviewer
+      // Verify the caller is an accepted or invited reviewer
       const { data: reviewerRecord } = await supabase
         .from("phase_reviewers")
         .select("id, status")
@@ -70,14 +70,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .eq("user_id", auth.userId)
         .maybeSingle();
 
-      if (!reviewerRecord || reviewerRecord.status !== "accepted") {
+      if (!reviewerRecord || (reviewerRecord.status !== "accepted" && reviewerRecord.status !== "invited")) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }
 
     const isBlindReview = phase.blind_review === true;
 
-    // Build query — reviewer sees only their own assignments
+    // Build query — no FK join on reviewer_id (no FK constraint exists)
     let query = supabase
       .from("reviewer_assignments")
       .select(`
@@ -92,13 +92,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           status,
           form_data,
           applicant:profiles!hackathon_registrations_user_id_fkey(id, name, email)
-        ),
-        reviewer:phase_reviewers!reviewer_assignments_reviewer_id_fkey(
-          id,
-          user_id,
-          name,
-          email,
-          status
         )
       `)
       .eq("phase_id", phaseId)
@@ -111,18 +104,93 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { data: assignments, error } = await query;
 
     if (error) {
+      console.error("Failed to fetch assignments:", error);
       return NextResponse.json({ error: "Failed to fetch assignments" }, { status: 400 });
     }
 
-    // Strip applicant identity for blind review (reviewer only)
+    // Enrich with reviewer data from phase_reviewers (no FK, manual lookup)
+    const reviewerIds = [...new Set((assignments || []).map((a) => a.reviewer_id))];
+    let reviewerMap: Record<string, { id: string; user_id: string; name: string; email: string; status: string }> = {};
+    if (reviewerIds.length > 0) {
+      const { data: reviewerRows } = await supabase
+        .from("phase_reviewers")
+        .select("id, user_id, name, email, status")
+        .eq("phase_id", phaseId)
+        .in("user_id", reviewerIds);
+      if (reviewerRows) {
+        for (const r of reviewerRows) {
+          reviewerMap[r.user_id] = r as typeof reviewerMap[string];
+        }
+      }
+    }
+
+    // Normalize: Supabase FK joins may return object OR array — always unwrap
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let responseData: any[] = assignments || [];
+    const normalizeJoin = (val: any) => (Array.isArray(val) ? val[0] : val) ?? null;
+
+    // Manually enrich with applicant profiles (separate query — most reliable)
+    const registrationUserIds = [...new Set(
+      (assignments || []).map((a) => {
+        const reg = normalizeJoin(a.registration);
+        return reg?.user_id as string | undefined;
+      }).filter(Boolean)
+    )] as string[];
+
+    let profileMap: Record<string, { id: string; name: string; email: string }> = {};
+    if (registrationUserIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email")
+        .in("id", registrationUserIds);
+      if (profiles) {
+        for (const p of profiles) {
+          profileMap[p.id] = { id: p.id, name: p.name || "", email: p.email || "" };
+        }
+      }
+    }
+
+    // Map to camelCase for the frontend
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let responseData = (assignments || []).map((a) => {
+      const reg = normalizeJoin(a.registration);
+
+      // Use manually enriched profile (more reliable than FK join)
+      const userId = reg?.user_id as string | undefined;
+      const profile = userId ? profileMap[userId] : null;
+
+      // Also try the FK join result as a fallback
+      const fkApplicant = normalizeJoin(reg?.applicant);
+      const applicant = profile || (fkApplicant ? { id: fkApplicant.id, name: fkApplicant.name, email: fkApplicant.email } : null);
+
+      // Include full registration data for reviewer ?mine=true queries (needed for form data review)
+      const registration = reg ? {
+        id: reg.id,
+        user_id: reg.user_id,
+        status: reg.status,
+        form_data: isMineQuery ? (reg.form_data || null) : null,
+        applicant,
+      } : null;
+
+      return {
+        id: a.id,
+        phaseId: a.phase_id,
+        reviewerId: a.reviewer_id,
+        registrationId: a.registration_id,
+        assignedAt: a.assigned_at,
+        reviewer: reviewerMap[a.reviewer_id] || null,
+        applicantName: applicant?.name || null,
+        applicantEmail: applicant?.email || null,
+        registration,
+      };
+    });
+
+    // Strip applicant identity for blind review (reviewer only)
     if (!isOrganizer && isBlindReview) {
-      responseData = responseData.map((a: Record<string, unknown>) => ({
+      responseData = responseData.map((a) => ({
         ...a,
-        registration: a.registration
-          ? { ...(a.registration as Record<string, unknown>), applicant: null, form_data: null }
-          : null,
+        applicantName: null,
+        applicantEmail: null,
+        registration: a.registration ? { ...a.registration, applicant: null } : null,
       }));
     }
 
@@ -193,12 +261,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const reviewerCount = (phase.reviewer_count as number) || 2;
 
-    // 1. Get all accepted reviewers for this phase
+    const body = await request.json().catch(() => ({}));
+    const manualReviewerId = (body as Record<string, unknown>).reviewerId as string | undefined;
+    const assignMode = (body as Record<string, unknown>).mode as string | undefined;
+
+    // 1. Get all available reviewers for this phase (invited + accepted)
     const { data: reviewers, error: reviewersError } = await supabase
       .from("phase_reviewers")
       .select("id, user_id, name")
       .eq("phase_id", phaseId)
-      .eq("status", "accepted");
+      .in("status", ["accepted", "invited"]);
 
     if (reviewersError) {
       return NextResponse.json({ error: "Failed to fetch reviewers" }, { status: 400 });
@@ -220,7 +292,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .from("hackathon_registrations")
       .select("id, user_id, form_data")
       .eq("hackathon_id", hackathonId)
-      .in("status", ["accepted", "eligible"]);
+      .in("status", ["accepted", "eligible", "confirmed"]);
 
     const { data: registrations, error: regError } = await regQuery;
 
@@ -274,7 +346,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       reviewerLoad.set(a.reviewer_id as string, current + 1);
     }
 
-    // 4. Round-robin assignment with load balancing
+    // 4. Build assignments based on mode
     const newAssignments: {
       phase_id: string;
       reviewer_id: string;
@@ -282,37 +354,78 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       assigned_at: string;
     }[] = [];
 
-    for (const reg of filteredRegistrations) {
-      // Sort reviewers by current load (ascending) for load balancing
-      const sortedReviewers = [...reviewers].sort((a, b) => {
-        const loadA = reviewerLoad.get(a.user_id) || 0;
-        const loadB = reviewerLoad.get(b.user_id) || 0;
-        return loadA - loadB;
-      });
+    if (assignMode === "all" && manualReviewerId) {
+      // ── "Assign All" mode: assign one reviewer to ALL participants ──
+      const targetReviewer = reviewers.find((r) => r.user_id === manualReviewerId);
+      if (!targetReviewer) {
+        return NextResponse.json(
+          { error: "Reviewer not found in this phase" },
+          { status: 404 }
+        );
+      }
 
-      let assigned = 0;
-      for (const reviewer of sortedReviewers) {
-        if (assigned >= reviewerCount) break;
-
-        const pairKey = `${reviewer.user_id}:${reg.id}`;
-        if (existingPairs.has(pairKey)) {
-          // Already assigned, count it toward the target
-          assigned++;
-          continue;
-        }
+      for (const reg of filteredRegistrations) {
+        const pairKey = `${manualReviewerId}:${reg.id}`;
+        if (existingPairs.has(pairKey)) continue;
 
         newAssignments.push({
           phase_id: phaseId,
-          reviewer_id: reviewer.user_id,
+          reviewer_id: manualReviewerId,
           registration_id: reg.id,
           assigned_at: new Date().toISOString(),
         });
-
-        // Update load tracking
-        const currentLoad = reviewerLoad.get(reviewer.user_id) || 0;
-        reviewerLoad.set(reviewer.user_id, currentLoad + 1);
         existingPairs.add(pairKey);
-        assigned++;
+      }
+    } else if (assignMode === "single" && manualReviewerId && (body as Record<string, unknown>).registrationId) {
+      // ── Single manual assignment ──
+      const registrationId = (body as Record<string, unknown>).registrationId as string;
+      const targetReviewer = reviewers.find((r) => r.user_id === manualReviewerId);
+      if (!targetReviewer) {
+        return NextResponse.json(
+          { error: "Reviewer not found in this phase" },
+          { status: 404 }
+        );
+      }
+      const pairKey = `${manualReviewerId}:${registrationId}`;
+      if (!existingPairs.has(pairKey)) {
+        newAssignments.push({
+          phase_id: phaseId,
+          reviewer_id: manualReviewerId,
+          registration_id: registrationId,
+          assigned_at: new Date().toISOString(),
+        });
+      }
+    } else {
+      // ── Default: Round-robin auto-assign with load balancing ──
+      for (const reg of filteredRegistrations) {
+        const sortedReviewers = [...reviewers].sort((a, b) => {
+          const loadA = reviewerLoad.get(a.user_id) || 0;
+          const loadB = reviewerLoad.get(b.user_id) || 0;
+          return loadA - loadB;
+        });
+
+        let assigned = 0;
+        for (const reviewer of sortedReviewers) {
+          if (assigned >= reviewerCount) break;
+
+          const pairKey = `${reviewer.user_id}:${reg.id}`;
+          if (existingPairs.has(pairKey)) {
+            assigned++;
+            continue;
+          }
+
+          newAssignments.push({
+            phase_id: phaseId,
+            reviewer_id: reviewer.user_id,
+            registration_id: reg.id,
+            assigned_at: new Date().toISOString(),
+          });
+
+          const currentLoad = reviewerLoad.get(reviewer.user_id) || 0;
+          reviewerLoad.set(reviewer.user_id, currentLoad + 1);
+          existingPairs.add(pairKey);
+          assigned++;
+        }
       }
     }
 
@@ -398,13 +511,43 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     const phaseStatus = phase.status as string;
+
+    // Support single assignment removal via body { assignmentId }
+    const body = await request.json().catch(() => ({}));
+    const assignmentId = (body as Record<string, unknown>).assignmentId as string | undefined;
+
+    if (assignmentId) {
+      // Individual removal allowed in draft, active, or scoring phases
+      if (phaseStatus !== "draft" && phaseStatus !== "active" && phaseStatus !== "scoring") {
+        return NextResponse.json(
+          { error: `Cannot remove assignments when phase status is '${phaseStatus}'.` },
+          { status: 400 }
+        );
+      }
+
+      const { error } = await supabase
+        .from("reviewer_assignments")
+        .delete()
+        .eq("id", assignmentId)
+        .eq("phase_id", phaseId);
+
+      if (error) {
+        console.error("Failed to remove assignment:", error);
+        return NextResponse.json({ error: "Failed to remove assignment" }, { status: 400 });
+      }
+
+      return NextResponse.json({ data: { deleted: true, assignmentId } });
+    }
+
+    // Bulk clear only allowed in draft or active
     if (phaseStatus !== "draft" && phaseStatus !== "active") {
       return NextResponse.json(
-        { error: `Cannot clear assignments when phase status is '${phaseStatus}'. Only 'draft' or 'active' phases allowed.` },
+        { error: `Cannot clear all assignments when phase status is '${phaseStatus}'. Only 'draft' or 'active' phases allowed.` },
         { status: 400 }
       );
     }
 
+    // Clear ALL assignments for this phase
     const { error, count } = await supabase
       .from("reviewer_assignments")
       .delete()
