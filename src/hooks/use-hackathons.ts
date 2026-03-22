@@ -54,7 +54,7 @@ export function useActiveHackathons() {
     queryFn: () =>
       fetchJson<PaginatedResponse<Hackathon>>(
         `/api/hackathons${buildHackathonParams({
-          status: ["published", "registration-open", "hacking", "submission", "judging"],
+          status: ["published", "registration-open", "hacking", "submission", "judging", "completed"],
           pageSize: 6,
         })}`
       ),

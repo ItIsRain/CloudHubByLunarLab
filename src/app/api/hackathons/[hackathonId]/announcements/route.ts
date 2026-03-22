@@ -210,7 +210,7 @@ export async function POST(
     const adminClient = getSupabaseAdminClient();
     let registrationsQuery = adminClient
       .from("hackathon_registrations")
-      .select("user:profiles!hackathon_registrations_user_id_fkey(email, name)")
+      .select("user_id, user:profiles!hackathon_registrations_user_id_fkey(email, name)")
       .eq("hackathon_id", hackathonId);
 
     if (audience !== "all") {
@@ -277,6 +277,26 @@ export async function POST(
           })
         )
       );
+    }
+
+    // Create in-app notifications for all recipients
+    const notifPayloads = (registrations || [])
+      .map((r: Record<string, unknown>) => {
+        const uid = r.user_id as string | undefined;
+        if (!uid) return null;
+        return {
+          user_id: uid,
+          type: "hackathon-update" as const,
+          title: `Announcement: ${title.trim().slice(0, 100)}`,
+          message: `New announcement from ${hackathonName}: ${message.trim().slice(0, 200)}`,
+          link: `/hackathons/${hackathonId}`,
+        };
+      })
+      .filter(Boolean);
+
+    if (notifPayloads.length > 0) {
+      adminClient.from("notifications").insert(notifPayloads)
+        .then(() => {}, (err: unknown) => console.error("Failed to insert announcement notifications:", err));
     }
 
     return NextResponse.json({

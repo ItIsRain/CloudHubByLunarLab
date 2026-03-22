@@ -58,8 +58,9 @@ import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
 import { useHackathonRegistration, useRegisterForHackathon, useCancelHackathonRegistration, useSaveHackathonDraft, useEditHackathonRegistration, useRespondRsvp } from "@/hooks/use-registrations";
 import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
 import { usePhases } from "@/hooks/use-phases";
+import { usePublicWinners, type PublicWinner } from "@/hooks/use-winners";
 import { useAuthStore } from "@/store/auth-store";
-import { cn, formatDate, formatCurrency, formatPrizeValue, getTimeRemaining } from "@/lib/utils";
+import { cn, formatDate, formatCurrency, formatPrizeValue, getTimeRemaining, safeHref } from "@/lib/utils";
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   "draft": { label: "Draft", color: "bg-muted" },
@@ -69,7 +70,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   "hacking": { label: "Hacking in Progress", color: "bg-primary" },
   "submission": { label: "Submissions Open", color: "bg-orange-500" },
   "judging": { label: "Judging", color: "bg-purple-500" },
-  "completed": { label: "Completed", color: "bg-muted" },
+  "completed": { label: "Completed", color: "bg-green-600" },
 };
 
 function CountdownDisplay({ deadline }: { deadline: string }) {
@@ -112,6 +113,7 @@ export default function HackathonDetailPage() {
   const { data: teamsData } = useHackathonTeams(hackathon?.id);
   const { data: submissionsData } = useHackathonSubmissions(hackathon?.id);
   const { data: phasesData } = usePhases(hackathon?.id);
+  const { data: winnersData } = usePublicWinners(hackathon?.id);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const { data: regData } = useHackathonRegistration(hackathon?.id);
@@ -146,6 +148,35 @@ export default function HackathonDetailPage() {
   const [directConsent, setDirectConsent] = React.useState({ dataProcessing: false, marketing: false, thirdParty: false });
   const [selectedTeam, setSelectedTeam] = React.useState<import("@/lib/types").Team | null>(null);
   const createTeamMutation = useCreateTeam();
+
+  // Derived winners state — must be before early returns (Rules of Hooks)
+  const winnersAnnounced = winnersData?.announced ?? false;
+  const publicWinners = winnersData?.data ?? [];
+  const winnersByTrack = React.useMemo(() => {
+    const groups: { trackName: string; trackDescription: string | null; winners: PublicWinner[] }[] = [];
+    const trackMap = new Map<string, { trackName: string; trackDescription: string | null; winners: PublicWinner[] }>();
+
+    for (const w of publicWinners) {
+      const key = w.track?.id ?? "__general__";
+      const existing = trackMap.get(key);
+      if (existing) {
+        existing.winners.push(w);
+      } else {
+        const group = {
+          trackName: w.track?.name ?? "General Awards",
+          trackDescription: w.track?.description ?? null,
+          winners: [w],
+        };
+        trackMap.set(key, group);
+        groups.push(group);
+      }
+    }
+
+    for (const g of groups) {
+      g.winners.sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
+    }
+    return groups;
+  }, [publicWinners]);
 
   if (isLoading) {
     return (
@@ -223,6 +254,27 @@ export default function HackathonDetailPage() {
         campusFilter: p.campusFilter,
         phaseType: p.phaseType,
       })),
+    // Add submission windows for submission-mode phases
+    ...competitionPhases
+      .filter((p) => p.evaluationMode === "submission" && p.submissionStart)
+      .flatMap((p) => {
+        const entries: typeof timeline = [];
+        if (p.submissionStart) {
+          entries.push({
+            label: `${p.name}: Submissions Open`,
+            date: p.submissionStart,
+            isPhase: false,
+          });
+        }
+        if (p.submissionEnd) {
+          entries.push({
+            label: `${p.name}: Submissions Close`,
+            date: p.submissionEnd,
+            isPhase: false,
+          });
+        }
+        return entries;
+      }),
   ]
     .filter((item) => item.date)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -499,13 +551,19 @@ export default function HackathonDetailPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <Tabs defaultValue="overview">
+            <Tabs defaultValue={winnersAnnounced && publicWinners.length > 0 && hackathon.status === "completed" ? "winners" : "overview"}>
               <TabsList className="flex-wrap">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="tracks">Tracks ({hackathon.tracks.length})</TabsTrigger>
                 <TabsTrigger value="schedule">Schedule</TabsTrigger>
                 {hackathon.teamsEnabled !== false && <TabsTrigger value="teams">Teams ({hackTeams.length})</TabsTrigger>}
                 {hackathon.submissionsEnabled !== false && <TabsTrigger value="submissions">Submissions ({hackSubs.length})</TabsTrigger>}
+                {winnersAnnounced && publicWinners.length > 0 && (
+                  <TabsTrigger value="winners">
+                    <Trophy className="h-3.5 w-3.5 mr-1.5" />
+                    Winners ({publicWinners.length})
+                  </TabsTrigger>
+                )}
                 {hackathon.mentors.length > 0 && <TabsTrigger value="mentors">Mentors</TabsTrigger>}
                 <TabsTrigger value="sponsors">Sponsors</TabsTrigger>
                 <TabsTrigger value="faq">FAQ</TabsTrigger>
@@ -522,6 +580,59 @@ export default function HackathonDetailPage() {
                     />
                   </CardContent>
                 </Card>
+
+                {/* Winners Highlight (when announced) */}
+                {winnersAnnounced && publicWinners.length > 0 && (
+                  <Card className="overflow-hidden border-amber-500/30">
+                    <CardHeader className="bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-transparent">
+                      <CardTitle className="flex items-center gap-2">
+                        <Trophy className="h-5 w-5 text-amber-500" />
+                        Winners
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="flex flex-wrap gap-3">
+                        {publicWinners
+                          .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+                          .slice(0, 6)
+                          .map((w) => {
+                            const rankLabel: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd" };
+                            return (
+                              <div key={w.id} className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
+                                {w.rank != null ? (
+                                  <span className={cn(
+                                    "font-display text-sm font-bold",
+                                    w.rank === 1 ? "text-amber-500" : w.rank === 2 ? "text-gray-400" : "text-orange-600"
+                                  )}>
+                                    {rankLabel[w.rank] ?? `#${w.rank}`}
+                                  </span>
+                                ) : (
+                                  <Trophy className="h-4 w-4 text-amber-500 shrink-0" />
+                                )}
+                                {w.participant && (
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarImage src={w.participant.avatar ?? undefined} />
+                                    <AvatarFallback className="text-[9px]">
+                                      {(w.participant.name ?? "?").charAt(0)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{w.participant?.name ?? "Anonymous"}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate">{w.awardLabel}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                      {publicWinners.length > 6 && (
+                        <p className="text-xs text-muted-foreground mt-3">
+                          +{publicWinners.length - 6} more — see Winners tab for all results
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Timeline */}
                 <Card>
@@ -838,6 +949,134 @@ export default function HackathonDetailPage() {
                 )}
               </TabsContent>}
 
+              {/* Winners */}
+              {winnersAnnounced && publicWinners.length > 0 && (
+                <TabsContent value="winners" className="mt-6">
+                  {/* Winners banner */}
+                  <Card className="mb-6 overflow-hidden border-amber-500/30 bg-gradient-to-r from-amber-500/5 via-yellow-500/5 to-orange-500/5">
+                    <CardContent className="p-6 flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+                        <Trophy className="h-6 w-6 text-amber-500" />
+                      </div>
+                      <div>
+                        <h3 className="font-display text-xl font-bold">Winners Announced</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Congratulations to all participants and winners of {hackathon.name}!
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {winnersByTrack.map((group, gi) => (
+                    <motion.div
+                      key={gi}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: gi * 0.1 }}
+                      className="mb-8 last:mb-0"
+                    >
+                      <div className="mb-4">
+                        <h3 className="font-display text-lg font-bold">{group.trackName}</h3>
+                        {group.trackDescription && (
+                          <p className="text-sm text-muted-foreground">{group.trackDescription}</p>
+                        )}
+                      </div>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {group.winners.map((winner, wi) => {
+                          const rankColors: Record<number, string> = {
+                            1: "border-amber-500 bg-amber-500/5",
+                            2: "border-gray-400 bg-gray-400/5",
+                            3: "border-orange-600 bg-orange-600/5",
+                          };
+                          const rankIcons: Record<number, string> = {
+                            1: "text-amber-500",
+                            2: "text-gray-400",
+                            3: "text-orange-600",
+                          };
+                          const rankClass = winner.rank ? rankColors[winner.rank] ?? "" : "";
+                          const iconClass = winner.rank ? rankIcons[winner.rank] ?? "text-primary" : "text-primary";
+
+                          return (
+                            <motion.div
+                              key={winner.id}
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: gi * 0.1 + wi * 0.05 }}
+                            >
+                              <Card className={cn("hover:shadow-md transition-shadow", rankClass)}>
+                                <CardContent className="p-5">
+                                  <div className="flex items-start gap-3">
+                                    {/* Rank badge */}
+                                    <div className={cn(
+                                      "flex items-center justify-center h-10 w-10 rounded-full shrink-0",
+                                      winner.rank && winner.rank <= 3
+                                        ? "bg-gradient-to-br from-amber-500/20 to-orange-500/20"
+                                        : "bg-muted"
+                                    )}>
+                                      {winner.rank ? (
+                                        <span className={cn("font-display text-lg font-bold", iconClass)}>
+                                          #{winner.rank}
+                                        </span>
+                                      ) : (
+                                        <Trophy className={cn("h-5 w-5", iconClass)} />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      {/* Award label */}
+                                      <Badge
+                                        variant={winner.rank === 1 ? "default" : "outline"}
+                                        className={cn(
+                                          "mb-2 text-xs",
+                                          winner.rank === 1 && "bg-amber-500 hover:bg-amber-600"
+                                        )}
+                                      >
+                                        <Award className="h-3 w-3 mr-1" />
+                                        {winner.awardLabel}
+                                      </Badge>
+                                      {/* Participant */}
+                                      {winner.participant && (
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <Avatar className="h-7 w-7">
+                                            <AvatarImage src={winner.participant.avatar ?? undefined} />
+                                            <AvatarFallback className="text-[10px]">
+                                              {(winner.participant.name ?? "?").charAt(0)}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <div className="min-w-0">
+                                            <p className="text-sm font-medium truncate">
+                                              {winner.participant.name ?? "Anonymous"}
+                                            </p>
+                                            {winner.participant.username && (
+                                              <Link
+                                                href={`/profile/${winner.participant.username}`}
+                                                className="text-xs text-primary hover:underline"
+                                              >
+                                                @{winner.participant.username}
+                                              </Link>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {/* Score */}
+                                      {winner.finalScore != null && (
+                                        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+                                          <Star className="h-3 w-3" />
+                                          Score: {winner.finalScore.toFixed(1)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  ))}
+                </TabsContent>
+              )}
+
               {/* Mentors */}
               {hackathon.mentors.length > 0 && (
                 <TabsContent value="mentors" className="mt-6">
@@ -904,7 +1143,7 @@ export default function HackathonDetailPage() {
                                 <p className="text-xs text-muted-foreground mt-1">{sponsor.description}</p>
                               )}
                               {sponsor.website && (
-                                <a href={sponsor.website} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-2 flex items-center gap-1">
+                                <a href={safeHref(sponsor.website)} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-2 flex items-center gap-1">
                                   Visit <ExternalLink className="h-3 w-3" />
                                 </a>
                               )}

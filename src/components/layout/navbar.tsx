@@ -36,6 +36,8 @@ import { useAuthStore } from "@/store/auth-store";
 import { useUIStore } from "@/store/ui-store";
 import { useTheme } from "@/providers/theme-provider";
 import { SearchSuggestions } from "@/components/layout/search-suggestions";
+import { NotificationPanel } from "@/components/special/notification-panel";
+import { useUnreadNotificationCount } from "@/hooks/use-notifications";
 import type { SearchSuggestions as SearchSuggestionsData } from "@/hooks/use-search";
 
 interface NavLink {
@@ -79,8 +81,11 @@ export function Navbar() {
   const logout = useAuthStore((s) => s.logout);
   const hasRole = useAuthStore((s) => s.hasRole);
   const toggleNotificationPanel = useUIStore((s) => s.toggleNotificationPanel);
+  const notificationPanelOpen = useUIStore((s) => s.notificationPanelOpen);
+  const setNotificationPanelOpen = useUIStore((s) => s.setNotificationPanelOpen);
   const toggleMobileMenu = useUIStore((s) => s.toggleMobileMenu);
   const mobileMenuOpen = useUIStore((s) => s.mobileMenuOpen);
+  const { data: unreadData } = useUnreadNotificationCount();
   const { setTheme, resolvedTheme } = useTheme();
   const router = useRouter();
   const [scrolled, setScrolled] = React.useState(false);
@@ -350,7 +355,11 @@ export function Navbar() {
                     onClick={toggleNotificationPanel}
                   >
                     <Bell className="h-4 w-4" />
-                    <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
+                    {(unreadData?.count ?? 0) > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                        {(unreadData?.count ?? 0) > 99 ? "99+" : unreadData?.count}
+                      </span>
+                    )}
                   </Button>
 
                   {/* Create Dropdown — organizers & admins only */}
@@ -501,6 +510,12 @@ export function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Notification Panel */}
+      <NotificationPanel
+        open={notificationPanelOpen}
+        onOpenChange={setNotificationPanelOpen}
+      />
     </>
   );
 }

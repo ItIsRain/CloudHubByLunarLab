@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CloudHub by Lunar Labs — a Next-Gen Event & Hackathon Management Platform combining event pages/ticketing (like Luma) with hackathon management/team formation/judging (like lablab.ai). The full feature spec lives in `event-platform-frontend-prompt.md`.
 
-**Current state:** Core platform is functional. Landing page, auth (Supabase), explore, dashboard, event/hackathon CRUD, registration with screening pipeline, phase-based judging system, and reviewer management are all implemented. Most data flows through Supabase with real API routes.
+**Current state:** Core platform is functional. Landing page, auth (Supabase), explore, dashboard, event/hackathon CRUD, registration with screening pipeline, phase-based judging system, reviewer management, winners system, real-time notifications, and email communications are all implemented. Most data flows through Supabase with real API routes.
 
 ## Commands
 
@@ -61,7 +61,7 @@ Supabase Auth with session cookies. `AuthProvider` at `src/providers/auth-provid
 All data flows through Supabase via API routes. Mappers at `src/lib/supabase/mappers.ts` convert between DB snake_case and frontend camelCase.
 
 ### Supabase Tables
-`profiles`, `events`, `hackathons`, `notifications`, `teams`, `team_members`, `testimonials`, `bookmarks`, `hackathon_registrations`, `competition_phases`, `phase_reviewers`, `reviewer_assignments`, `phase_scores`, `phase_decisions`, `reviewer_conflicts`, `phase_finalists`, `api_keys` — all with RLS enabled.
+`profiles`, `events`, `hackathons`, `notifications`, `teams`, `team_members`, `testimonials`, `bookmarks`, `hackathon_registrations`, `competition_phases`, `phase_reviewers`, `reviewer_assignments`, `phase_scores`, `phase_decisions`, `reviewer_conflicts`, `phase_finalists`, `api_keys`, `competition_winners`, `award_tracks`, `hackathon_announcements`, `email_templates`, `email_log`, `scheduled_emails`, `judge_invitations` — all with RLS enabled.
 
 ## Phase-Based Judging System
 
@@ -98,6 +98,60 @@ Use manual profile enrichment (separate `profiles` query) as a fallback when FK 
 
 ### Admin client usage
 Phase-related API routes use `getSupabaseAdminClient()` instead of `getSupabaseServerClient()` because RLS on `competition_phases` can block FK joins for reviewers. Auth is verified independently at the API level.
+
+## Winners System
+
+### Overview
+Hackathons can have **competition winners** tied to award tracks. Winners are managed in the dashboard Winners tab and displayed publicly after the `winners_announcement` date.
+
+### Key API routes
+- `GET/POST/PATCH/DELETE /api/hackathons/[id]/winners` — CRUD for competition winners
+- `GET /api/hackathons/[id]/winners/public` — Public endpoint (no auth required), only returns winners after `winners_announcement` date
+- `POST /api/hackathons/[id]/winners/email` — Send bulk emails to all winners with template placeholders
+
+### Public winners
+The public hackathon page (`page-client.tsx`) uses `usePublicWinners()` to fetch winners. When `winnersAnnounced` is true, a "Winners" tab appears and winners are highlighted in the Overview tab. Completed hackathons default to the Winners tab.
+
+### Winner email placeholders
+`{{winner_name}}`, `{{award_label}}`, `{{rank}}`, `{{hackathon_name}}`, `{{organizer_name}}`, `{{hackathon_url}}`, `{{dashboard_url}}`
+
+## Notification System
+
+### Overview
+Real-time in-app notifications displayed in a slide-over panel from the navbar. Bell icon shows unread count badge (auto-refreshes every 30s).
+
+### Notification types
+`event-reminder`, `hackathon-update`, `team-invite`, `team-message`, `submission-feedback`, `winner-announcement`, `system`
+
+### Events that trigger notifications
+| Event | Type | Route |
+|-------|------|-------|
+| User registers for hackathon | `hackathon-update` | `register/route.ts` |
+| Registration status change | `hackathon-update` | `participants/route.ts`, `screen/route.ts` |
+| Winner declared | `winner-announcement` | `winners/route.ts` |
+| Announcement sent | `hackathon-update` | `announcements/route.ts` |
+| Judge invited (if has account) | `hackathon-update` | `judges/invite/route.ts` |
+| Application scored (first review) | `submission-feedback` | `phases/[phaseId]/scores/route.ts` |
+| Waitlist promotion | `hackathon-update` | `register/route.ts`, `rsvp/route.ts` |
+| Team auto-matching | `team-invite` | `teams/match/route.ts` |
+
+### Key files
+- `src/components/special/notification-panel.tsx` — Slide-over UI with icons per type
+- `src/hooks/use-notifications.ts` — TanStack Query hooks (`useNotifications`, `useUnreadNotificationCount`, `useMarkAllNotificationsRead`)
+- `src/components/layout/navbar.tsx` — Renders `NotificationPanel`, shows real unread count
+
+## Email System
+
+### Email helpers (`src/lib/resend.ts`)
+- `emailWrapper(content: string)` — Full HTML email template wrapper (takes a **string**, not an object)
+- Helper functions: `statusBanner`, `bodySection`, `greeting`, `paragraph`, `ctaButton`, `eventName`, `divider`, `infoBox`, `COLORS`
+- All exported for use in API routes
+- Email body content supports HTML formatting (bold, italic, lists, etc.) — do NOT `escapeHtml()` the body, only escape user names
+
+### Bulk email routes
+- `PUT /api/hackathons/[id]/email-templates` — Send to registrants filtered by status
+- `POST /api/hackathons/[id]/winners/email` — Send to all winners
+- `POST /api/hackathons/[id]/announcements` — Send announcements + create in-app notifications
 
 ## Design System
 
@@ -140,3 +194,6 @@ Phase-related API routes use `getSupabaseAdminClient()` instead of `getSupabaseS
 - UUID vs slug detection in API routes: use `UUID_RE` regex to choose `id.eq.` vs `slug.eq.` filter
 - API responses should use camelCase (mappers convert from snake_case DB columns)
 - Hackathon column is `cover_image` (not `banner_url`)
+- Completed hackathons show in explore/landing with green "Completed" badge; active hackathons always sort before completed
+- For nested FK joins that may silently fail, use separate queries with lookup maps instead (see `winners/email/route.ts` pattern)
+- Notification panel is rendered in `navbar.tsx` and connected to `notificationPanelOpen` in ui-store

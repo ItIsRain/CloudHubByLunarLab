@@ -4,7 +4,7 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Mail, Pencil, Trash2, Send, Eye, FileText, Clock, X,
-  CalendarClock, Ban, ChevronDown, ChevronUp, Users,
+  CalendarClock, Ban, ChevronDown, ChevronUp, Users, Trophy, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +24,7 @@ import {
 } from "@/hooks/use-email-templates";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
+import { SafeHtml } from "@/components/ui/safe-html";
 import { RemindersSection } from "./reminders-section";
 
 const RichTextEditor = dynamic(
@@ -132,6 +133,8 @@ export function EmailTemplatesTab({ hackathon, hackathonId }: { hackathon: Hacka
   const [sendBody, setSendBody] = React.useState("");
   const [selectedTemplateId, setSelectedTemplateId] = React.useState("");
   const [recipientStatuses, setRecipientStatuses] = React.useState<string[]>([]);
+  const [sendToWinners, setSendToWinners] = React.useState(false);
+  const [isSending, setIsSending] = React.useState(false);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [scheduleMode, setScheduleMode] = React.useState(false);
   const [scheduledAt, setScheduledAt] = React.useState("");
@@ -221,10 +224,37 @@ export function EmailTemplatesTab({ hackathon, hackathonId }: { hackathon: Hacka
   async function handleSendEmail(e: React.FormEvent) {
     e.preventDefault();
     if (!sendSubject.trim() || !sendBody.trim()) { toast.error("Subject and body are required."); return; }
-    if (recipientStatuses.length === 0) { toast.error("Select at least one recipient status."); return; }
+    if (!sendToWinners && recipientStatuses.length === 0) { toast.error("Select at least one recipient group."); return; }
     if (scheduleMode && !scheduledAt) { toast.error("Select a date and time to schedule."); return; }
     if (scheduleMode && new Date(scheduledAt) <= new Date()) { toast.error("Scheduled time must be in the future."); return; }
+
+    setIsSending(true);
     try {
+      // If sending to winners, use the winners email endpoint
+      if (sendToWinners) {
+        try {
+          const res = await fetch(`/api/hackathons/${hackathonId}/winners/email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subject: sendSubject.trim(), body: sendBody.trim() }),
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || "Failed to send");
+          const { sent, failed } = json.data;
+          if (failed > 0) {
+            toast.warning(`Sent to ${sent} winner(s), ${failed} failed.`);
+          } else {
+            toast.success(`Email sent to ${sent} winner(s)!`);
+          }
+          setSendSubject(""); setSendBody(""); setSelectedTemplateId("");
+          setRecipientStatuses([]); setSendToWinners(false);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Failed to send emails to winners.");
+        }
+        // Also send to registrations if statuses selected
+        if (recipientStatuses.length === 0) return;
+      }
+
       await sendBulkEmail.mutateAsync({
         subject: sendSubject.trim(), body: sendBody.trim(),
         recipientFilter: { status: recipientStatuses },
@@ -233,9 +263,11 @@ export function EmailTemplatesTab({ hackathon, hackathonId }: { hackathon: Hacka
       });
       toast.success(scheduleMode ? "Email scheduled!" : "Emails sent!");
       setSendSubject(""); setSendBody(""); setSelectedTemplateId(""); setRecipientStatuses([]);
-      setScheduleMode(false); setScheduledAt("");
+      setSendToWinners(false); setScheduleMode(false); setScheduledAt("");
     } catch {
       toast.error(scheduleMode ? "Failed to schedule email." : "Failed to send emails.");
+    } finally {
+      setIsSending(false);
     }
   }
 
@@ -547,6 +579,28 @@ export function EmailTemplatesTab({ hackathon, hackathonId }: { hackathon: Hacka
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Recipients</label>
                 <div className="flex flex-wrap gap-2">
+                  {/* Winners option */}
+                  <label className={cn(
+                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs cursor-pointer transition-all duration-200",
+                    sendToWinners ? "border-amber-500 bg-amber-500/5 text-amber-600 font-medium" : "border-input hover:bg-muted/50"
+                  )}>
+                    <input type="checkbox" checked={sendToWinners} onChange={() => setSendToWinners((v) => !v)} className="sr-only" />
+                    <div className={cn(
+                      "h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                      sendToWinners ? "bg-amber-500 border-amber-500" : "border-input"
+                    )}>
+                      {sendToWinners && (
+                        <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24"
+                          stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <Trophy className="h-3 w-3" />
+                    Winners
+                  </label>
+                  {/* Divider */}
+                  <div className="w-px h-6 bg-border self-center" />
                   {RECIPIENT_STATUSES.map((status) => {
                     const checked = recipientStatuses.includes(status);
                     return (
@@ -613,9 +667,11 @@ export function EmailTemplatesTab({ hackathon, hackathonId }: { hackathon: Hacka
                   disabled={!sendSubject.trim() || !sendBody.trim()} className="gap-2">
                   <Eye className="h-4 w-4" />Preview
                 </Button>
-                <Button type="submit" variant="gradient" disabled={sendBulkEmail.isPending} className="gap-2">
-                  {scheduleMode ? <Clock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-                  {sendBulkEmail.isPending
+                <Button type="submit" variant="gradient" disabled={isSending || sendBulkEmail.isPending} className="gap-2">
+                  {isSending || sendBulkEmail.isPending
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : scheduleMode ? <Clock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+                  {isSending || sendBulkEmail.isPending
                     ? (scheduleMode ? "Scheduling..." : "Sending...")
                     : (scheduleMode ? "Schedule Email" : "Send Email")}
                 </Button>
@@ -723,14 +779,14 @@ export function EmailTemplatesTab({ hackathon, hackathonId }: { hackathon: Hacka
             </div>
             <div className="border-t pt-3">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Body</span>
-              <div
-                className="mt-2 prose prose-sm dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{
-                  __html: sendBody
-                    ? replacePlaceholders(sendBody, hackathon)
-                    : "<p class='text-muted-foreground italic'>(empty)</p>",
-                }}
-              />
+              {sendBody ? (
+                <SafeHtml
+                  content={replacePlaceholders(sendBody, hackathon)}
+                  className="mt-2 prose prose-sm dark:prose-invert max-w-none"
+                />
+              ) : (
+                <p className="mt-2 text-muted-foreground italic text-sm">(empty)</p>
+              )}
             </div>
             {recipientStatuses.length > 0 && (
               <div className="border-t pt-3">

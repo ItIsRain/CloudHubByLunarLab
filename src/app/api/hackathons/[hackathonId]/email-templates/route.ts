@@ -283,7 +283,12 @@ export async function PATCH(
     const result = await authenticateAndAuthorize(request, hackathonId);
     if ("error" in result) return result.error;
 
-    const { supabase } = result;
+    const { supabase, role } = result;
+
+    // PATCH requires owner/admin/editor
+    if (!canEdit(role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const body = await request.json();
 
@@ -553,7 +558,12 @@ export async function DELETE(
     const result = await authenticateAndAuthorize(request, hackathonId);
     if ("error" in result) return result.error;
 
-    const { supabase } = result;
+    const { supabase, role } = result;
+
+    // DELETE requires owner/admin/editor
+    if (!canEdit(role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const body = await request.json();
     const { templateId } = body;
@@ -769,7 +779,7 @@ export async function PUT(
                   Hi <strong style="color:#ffffff;">${escapeHtml(recipientName)}</strong>,
                 </p>
                 <div style="color:#e4e4e7;font-size:15px;line-height:1.7;margin:0 0 16px;">
-                  ${finalBody}
+                  ${finalBody.replace(/\n/g, "<br/>")}
                 </div>
                 <div style="text-align:center;padding:16px 0;">
                   <a href="${siteUrl}/hackathons/${hackathonId}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#e8440a,#ff5722);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;">

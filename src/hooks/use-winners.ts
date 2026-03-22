@@ -129,6 +129,40 @@ export function useUpdateWinner(hackathonId: string) {
   });
 }
 
+// =====================================================
+// Public winners — no auth required, only returns data
+// after winners_announcement date has passed
+// =====================================================
+export interface PublicWinner {
+  id: string;
+  awardLabel: string;
+  rank: number | null;
+  finalScore: number | null;
+  track: {
+    id: string;
+    name: string;
+    description: string | null;
+    trackType: string;
+  } | null;
+  participant: {
+    id: string;
+    name: string | null;
+    username: string | null;
+    avatar: string | null;
+  } | null;
+}
+
+export function usePublicWinners(hackathonId: string | undefined) {
+  return useQuery<{ data: PublicWinner[]; announced: boolean }>({
+    queryKey: ["public-winners", hackathonId],
+    queryFn: () =>
+      fetchJson<{ data: PublicWinner[]; announced: boolean }>(
+        `/api/hackathons/${hackathonId}/winners/public`
+      ),
+    enabled: !!hackathonId,
+  });
+}
+
 export function useRemoveWinner(hackathonId: string) {
   const qc = useQueryClient();
   return useMutation({

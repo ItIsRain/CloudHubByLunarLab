@@ -9,6 +9,7 @@ import {
   Trash2,
   Lock,
   Unlock,
+  Mail,
   CheckCircle2,
   Search,
   Sparkles,
@@ -937,6 +938,10 @@ export function WinnersTab({ hackathon, hackathonId }: WinnersTabProps) {
   const [showAddWinnerDialog, setShowAddWinnerDialog] = React.useState(false);
   const [selectedTrackFilter, setSelectedTrackFilter] = React.useState<string>("all");
   const [activeSection, setActiveSection] = React.useState<"tracks" | "selection" | "summary">("tracks");
+  const [showEmailDialog, setShowEmailDialog] = React.useState(false);
+  const [emailSubject, setEmailSubject] = React.useState("");
+  const [emailBody, setEmailBody] = React.useState("");
+  const [isSendingEmail, setIsSendingEmail] = React.useState(false);
 
   const tracks = tracksData?.data ?? [];
   const winners = winnersData?.data ?? [];
@@ -1045,6 +1050,38 @@ export function WinnersTab({ hackathon, hackathonId }: WinnersTabProps) {
     }
   };
 
+  const handleSendEmailToWinners = async () => {
+    if (!emailSubject.trim() || !emailBody.trim()) {
+      toast.error("Subject and body are required.");
+      return;
+    }
+    setIsSendingEmail(true);
+    try {
+      const res = await fetch(`/api/hackathons/${hackathonId}/winners/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: emailSubject, body: emailBody }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to send emails");
+      }
+      const { sent, failed: emailFailed } = json.data;
+      if (emailFailed > 0) {
+        toast.warning(`Sent ${sent} email(s), ${emailFailed} failed.`);
+      } else {
+        toast.success(`Email sent to ${sent} winner(s) successfully!`);
+      }
+      setShowEmailDialog(false);
+      setEmailSubject("");
+      setEmailBody("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send emails");
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
   const isLoading = tracksLoading || winnersLoading;
 
   if (isLoading) {
@@ -1085,6 +1122,21 @@ export function WinnersTab({ hackathon, hackathonId }: WinnersTabProps) {
           <Badge variant="secondary">
             {winners.length} Winner{winners.length !== 1 ? "s" : ""}
           </Badge>
+          {winners.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEmailSubject(`Congratulations! You are a winner of ${hackathon.name}`);
+                setEmailBody(`Dear {{winner_name}},\n\nCongratulations! You have been selected as a winner of ${hackathon.name}!\n\nYour award: {{award_label}}\n\nThank you for participating and making this competition a success.\n\nBest regards,\n${hackathon.organizer?.name || "The Organizer"}`);
+                setShowEmailDialog(true);
+              }}
+              className="gap-1.5"
+            >
+              <Mail className="h-4 w-4" />
+              Email Winners
+            </Button>
+          )}
         </div>
       </motion.div>
 
@@ -1472,6 +1524,67 @@ export function WinnersTab({ hackathon, hackathonId }: WinnersTabProps) {
             : null
         }
       />
+
+      {/* Send Email to Winners Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Email Winners
+            </DialogTitle>
+            <DialogDescription>
+              Send an email to all {winners.length} winner{winners.length !== 1 ? "s" : ""}.
+              Use placeholders like {"{{winner_name}}"}, {"{{award_label}}"}, {"{{hackathon_name}}"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Subject</label>
+              <Input
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                placeholder="Congratulations! You are a winner..."
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Body</label>
+              <textarea
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                className={textareaClasses}
+                rows={8}
+                placeholder="Dear {{winner_name}},&#10;&#10;Congratulations on winning..."
+              />
+            </div>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p className="font-medium">Available placeholders:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {["{{winner_name}}", "{{award_label}}", "{{rank}}", "{{hackathon_name}}", "{{organizer_name}}", "{{hackathon_url}}"].map((p) => (
+                  <Badge key={p} variant="outline" className="text-[10px] font-mono">{p}</Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmailDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendEmailToWinners}
+              disabled={isSendingEmail || !emailSubject.trim() || !emailBody.trim()}
+              className="gap-1.5"
+            >
+              {isSendingEmail ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Mail className="h-4 w-4" />
+              )}
+              {isSendingEmail ? "Sending..." : `Send to ${winners.length} Winner${winners.length !== 1 ? "s" : ""}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

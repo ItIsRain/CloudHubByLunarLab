@@ -26,7 +26,7 @@ const statusConfig: Record<string, { label: string; variant: "muted" | "success"
   "hacking": { label: "Hacking in Progress", variant: "gradient", dot: true, pulse: true },
   "submission": { label: "Submissions Open", variant: "warning", dot: true },
   "judging": { label: "Judging", variant: "secondary" },
-  "completed": { label: "Completed", variant: "muted" },
+  "completed": { label: "Completed", variant: "success" },
 };
 
 const CountdownTimer = React.memo(function CountdownTimer({ deadline }: { deadline: string }) {

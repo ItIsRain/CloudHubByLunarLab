@@ -14,7 +14,7 @@ import {
   AlertCircle,
   CheckCheck,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, safeInternalLink } from "@/lib/utils";
 import {
   useNotifications,
   useMarkAllNotificationsRead,
@@ -183,7 +183,7 @@ export function NotificationPanel({
                       transition={{ delay: index * 0.03 }}
                     >
                       <Link
-                        href={notification.link || "#"}
+                        href={safeInternalLink(notification.link)}
                         className={cn(
                           "flex gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50",
                           !notification.isRead && "bg-primary/[0.03]"

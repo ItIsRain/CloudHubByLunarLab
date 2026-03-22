@@ -262,6 +262,23 @@ export async function POST(
       });
     }
 
+    // Notify user of successful registration
+    const regStatus = data?.status || initialStatus;
+    const statusLabels: Record<string, string> = {
+      confirmed: "confirmed",
+      pending: "submitted and is under review",
+      waitlisted: "been waitlisted",
+      accepted: "been accepted",
+    };
+    const adminClient = getSupabaseAdminClient();
+    adminClient.from("notifications").insert({
+      user_id: user.id,
+      type: "hackathon-update",
+      title: `Registration ${regStatus === "confirmed" ? "Confirmed" : "Received"} — ${hackOrg?.name || "Hackathon"}`,
+      message: `Your registration for ${hackOrg?.name || "this hackathon"} has ${statusLabels[regStatus] || "been received"}. ${regStatus === "confirmed" ? "You're all set to participate!" : "We'll notify you when there's an update."}`,
+      link: `/hackathons/${hackathonId}`,
+    }).then(() => {}, () => {});
+
     // Update participant_count on the hackathon
     const { count: participantCount } = await supabase
       .from("hackathon_registrations")
@@ -535,15 +552,22 @@ export async function PUT(
           .select("id, status, form_data, created_at")
           .single());
       } else {
-        // Active registration exists (not cancelled/rejected/ineligible/declined)
-        const inactiveStatuses = ["cancelled", "rejected", "ineligible", "declined"];
+        // Block re-registration for rejected/ineligible applicants (same as POST handler)
+        if (existing.status === "rejected" || existing.status === "ineligible") {
+          return NextResponse.json(
+            { error: "Your application has been rejected. You cannot re-register for this hackathon." },
+            { status: 403 }
+          );
+        }
+        // Active registration exists (not cancelled/declined)
+        const inactiveStatuses = ["cancelled", "declined"];
         if (!inactiveStatuses.includes(existing.status)) {
           return NextResponse.json(
             { error: "Already registered" },
             { status: 409 }
           );
         }
-        // For rejected/ineligible/declined — allow re-creating as draft
+        // For cancelled/declined — allow re-creating as draft
         ({ data, error } = await supabase
           .from("hackathon_registrations")
           .update({ status: "draft", is_draft: true, form_data: formData })

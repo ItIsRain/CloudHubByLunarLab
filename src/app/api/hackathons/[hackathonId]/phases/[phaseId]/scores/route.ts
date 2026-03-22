@@ -134,20 +134,41 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Failed to fetch scores" }, { status: 400 });
     }
 
-    // Strip applicant identifying info for non-organizer reviewers during blind review
+    // Normalize FK joins (may return object or array)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let responseData: any[] = scores || [];
-    if (!isOrganizer && isBlindReview) {
-      responseData = responseData.map((score) => {
-        const reg = score.registration as Record<string, unknown> | null;
-        return {
-          ...score,
-          registration: reg
-            ? { id: reg.id, applicant: null }
-            : null,
-        };
-      });
-    }
+    const normalizeJoin = (val: any) => (Array.isArray(val) ? val[0] : val) ?? null;
+
+    // Map to camelCase for the frontend
+    const responseData = (scores || []).map((s) => {
+      const reg = normalizeJoin(s.registration);
+      const applicant = reg ? normalizeJoin(reg.applicant) : null;
+
+      // Strip applicant identity for non-organizer reviewers during blind review
+      const registrationData = reg
+        ? {
+            id: reg.id,
+            user_id: reg.user_id,
+            applicant: !isOrganizer && isBlindReview ? null : applicant
+              ? { id: applicant.id, name: applicant.name, email: applicant.email }
+              : null,
+          }
+        : null;
+
+      return {
+        id: s.id,
+        phaseId: s.phase_id,
+        reviewerId: s.reviewer_id,
+        registrationId: s.registration_id,
+        criteriaScores: s.criteria_scores,
+        totalScore: s.total_score,
+        recommendation: s.recommendation,
+        overallFeedback: s.overall_feedback,
+        flagged: s.flagged,
+        submittedAt: s.submitted_at,
+        updatedAt: s.updated_at,
+        registration: registrationData,
+      };
+    });
 
     return NextResponse.json({ data: responseData });
   } catch (err) {
@@ -381,6 +402,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           { status: 400 }
         );
       }
+      // Validate per-criterion feedback length
+      if (cs.feedback !== undefined && typeof cs.feedback === "string" && cs.feedback.length > 2000) {
+        return NextResponse.json(
+          { error: `Feedback for "${def?.name || cs.criteriaId}" must be under 2000 characters` },
+          { status: 400 }
+        );
+      }
     }
 
     // If recommendation is required, validate it
@@ -444,6 +472,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (error) {
       return NextResponse.json({ error: "Failed to submit score" }, { status: 400 });
+    }
+
+    // Notify applicant on first score only (not re-submissions)
+    if (!existingScore) {
+      const adminClient = getSupabaseAdminClient();
+      const { data: reg } = await adminClient
+        .from("hackathon_registrations")
+        .select("user_id")
+        .eq("id", registrationId)
+        .single();
+
+      if (reg?.user_id) {
+        const { data: hackInfo } = await adminClient
+          .from("hackathons")
+          .select("name")
+          .eq("id", hackathonId)
+          .single();
+
+        adminClient.from("notifications").insert({
+          user_id: reg.user_id,
+          type: "submission-feedback",
+          title: `Your application has been reviewed`,
+          message: `A reviewer has scored your application for ${(hackInfo?.name as string) || "the hackathon"}. Results will be shared when all reviews are complete.`,
+          link: `/hackathons/${hackathonId}`,
+        }).then(() => {}, () => {});
+      }
     }
 
     return NextResponse.json({ data: score }, { status: 201 });

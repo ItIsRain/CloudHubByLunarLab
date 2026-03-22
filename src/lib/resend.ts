@@ -378,4 +378,4 @@ export async function sendApplicationDeclinedEmail({ to, applicantName, hackatho
   });
 }
 
-export { emailWrapper };
+export { emailWrapper, statusBanner, bodySection, greeting, paragraph, ctaButton, eventName, divider, infoBox, COLORS };

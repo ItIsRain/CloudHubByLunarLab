@@ -251,6 +251,29 @@ export async function POST(
       );
     }
 
+    // Notify each winner
+    const { data: hackInfo } = await supabase
+      .from("hackathons")
+      .select("name")
+      .eq("id", hackathonId)
+      .single();
+    const hackName = (hackInfo?.name as string) || "Hackathon";
+
+    for (const w of winners || []) {
+      const reg = Array.isArray(w.registration) ? w.registration[0] : w.registration;
+      const userId = (reg as Record<string, unknown>)?.user_id as string | undefined;
+      if (!userId) continue;
+      const awardLabel = (w.award_label as string) || "Winner";
+
+      supabase.from("notifications").insert({
+        user_id: userId,
+        type: "winner-announcement",
+        title: `You won "${awardLabel}" at ${hackName}!`,
+        message: `Congratulations! You've been named a winner at ${hackName} for "${awardLabel}". Check the hackathon page for details.`,
+        link: `/hackathons/${hackathonId}`,
+      }).then(() => {}, () => {});
+    }
+
     return NextResponse.json({ data: winners }, { status: 201 });
   } catch (err) {
     console.error(err);

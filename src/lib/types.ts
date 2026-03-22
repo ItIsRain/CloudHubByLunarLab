@@ -279,6 +279,8 @@ export interface Hackathon {
   submissionsEnabled: boolean;
   registrationFields: FormField[];
   registrationSections: FormSection[];
+  submissionFields: FormField[];
+  submissionSections: FormSection[];
   screeningRules: ScreeningRule[];
   screeningConfig: HackathonScreeningConfig;
   organizer: User;
@@ -342,6 +344,7 @@ export interface Submission {
   demoUrl?: string;
   techStack: string[];
   readme?: string;
+  formData?: Record<string, unknown>;
   status: SubmissionStatus;
   scores: Score[];
   averageScore?: number;
@@ -954,6 +957,7 @@ export interface CompetitionPhase {
   name: string;
   description?: string;
   phaseType: PhaseType;
+  evaluationMode: 'application' | 'submission';
   campusFilter?: string | null;
   scoringCriteria: PhaseScoringCriteria[];
   scoringScaleMax: number;
@@ -963,6 +967,8 @@ export interface CompetitionPhase {
   blindReview: boolean;
   startDate?: string | null;
   endDate?: string | null;
+  submissionStart?: string | null;
+  submissionEnd?: string | null;
   location?: string | null;
   sortOrder: number;
   status: PhaseStatus;
@@ -970,8 +976,11 @@ export interface CompetitionPhase {
   sourcePhaseIds?: string[];
   createdAt: string;
   updatedAt: string;
-  // Populated on fetch
+  // Populated on fetch (aggregate counts from API)
   reviewers?: PhaseReviewer[];
+  reviewerCount_agg?: number;
+  reviewerAcceptedCount?: number;
+  reviewerInvitedCount?: number;
   scoreCount?: number;
   assignmentCount?: number;
   applicantCount?: number;

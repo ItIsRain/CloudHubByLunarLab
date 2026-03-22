@@ -72,6 +72,9 @@ export async function GET(request: NextRequest) {
     if (status) {
       const statuses = status.split(",");
       query = query.in("status", statuses);
+    } else if (!organizerId) {
+      // Exclude drafts from public listings by default
+      query = query.neq("status", "draft");
     }
     if (featured === "true") {
       query = query.eq("is_featured", true);
@@ -153,6 +156,18 @@ export async function GET(request: NextRequest) {
           ? { ...row, status: computedPhase }
           : row;
       return dbRowToHackathon(effectiveRow);
+    });
+
+    // Active hackathons always come before completed ones.
+    // Within each group, preserve the DB sort order.
+    const ACTIVE_STATUSES = new Set([
+      "published", "registration-open", "registration_open",
+      "hacking", "submission", "judging",
+    ]);
+    hackathons.sort((a, b) => {
+      const aActive = ACTIVE_STATUSES.has(a.status) ? 0 : 1;
+      const bActive = ACTIVE_STATUSES.has(b.status) ? 0 : 1;
+      return aActive - bActive;
     });
 
     // Only use public cache headers when response contains exclusively public data

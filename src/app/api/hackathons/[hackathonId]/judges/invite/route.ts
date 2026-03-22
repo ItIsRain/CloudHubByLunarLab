@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
+import { UUID_RE } from "@/lib/constants";
 
 export async function POST(
   request: NextRequest,
@@ -11,6 +12,9 @@ export async function POST(
 ) {
   try {
     const { hackathonId } = await params;
+    if (!UUID_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -137,6 +141,24 @@ export async function POST(
         </p>
       `),
     });
+
+    // If invited judge has an account, create in-app notification
+    const adminClient = getSupabaseAdminClient();
+    const { data: judgeProfile } = await adminClient
+      .from("profiles")
+      .select("id")
+      .eq("email", email.toLowerCase().trim())
+      .single();
+
+    if (judgeProfile?.id) {
+      adminClient.from("notifications").insert({
+        user_id: judgeProfile.id,
+        type: "hackathon-update",
+        title: `You're invited to judge ${hackathon.name as string}`,
+        message: `You've been invited to serve as a judge for ${hackathon.name as string}. Check your email for the invitation link.`,
+        link: `/judge/${hackathonId}`,
+      }).then(() => {}, () => {});
+    }
 
     return NextResponse.json({
       success: true,
