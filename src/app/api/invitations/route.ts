@@ -3,6 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToEntityInvitation } from "@/lib/supabase/mappers";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { UUID_RE } from "@/lib/constants";
 
 export async function POST(request: NextRequest) {
   try {
@@ -179,6 +180,12 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (!UUID_RE.test(entityId)) {
+      return NextResponse.json({ error: "Invalid entity ID" }, { status: 400 });
+    }
+    if (entityType !== "event" && entityType !== "hackathon") {
+      return NextResponse.json({ error: "Invalid entity type" }, { status: 400 });
+    }
 
     // Verify caller is organizer
     const table = entityType === "event" ? "events" : "hackathons";
@@ -233,9 +240,9 @@ export async function DELETE(request: NextRequest) {
 
     const { invitationId } = await request.json();
 
-    if (!invitationId) {
+    if (!invitationId || !UUID_RE.test(invitationId)) {
       return NextResponse.json(
-        { error: "invitationId is required" },
+        { error: "Valid invitationId is required" },
         { status: 400 }
       );
     }

@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, safeHref } from "@/lib/utils";
 import type { Sponsor } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -81,7 +81,7 @@ export function SponsorCard({ sponsor, className }: SponsorCardProps) {
 
           {sponsor.website && (
             <a
-              href={sponsor.website}
+              href={safeHref(sponsor.website)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"

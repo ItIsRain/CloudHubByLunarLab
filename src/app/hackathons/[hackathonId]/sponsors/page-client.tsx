@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { mockSponsors } from "@/lib/mock-data";
 import { useHackathon } from "@/hooks/use-hackathons";
-import { cn, getInitials } from "@/lib/utils";
+import { cn, getInitials, safeHref } from "@/lib/utils";
 
 const tierConfig: Record<
   string,
@@ -249,7 +249,7 @@ export default function HackathonSponsorsPage() {
                             {/* Website Link */}
                             {sponsor.website && tier !== "community" && (
                               <a
-                                href={sponsor.website}
+                                href={safeHref(sponsor.website)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-3"

@@ -115,10 +115,36 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Failed to fetch finalists" }, { status: 500 });
     }
 
+    // Look up competition_winners for these registrations to merge award labels
+    const finalistRegIds = (finalists || []).map((f) => f.registration_id as string);
+    let winnerAwardMap: Record<string, { awardLabel: string; trackName: string | null }> = {};
+    if (finalistRegIds.length > 0) {
+      const { data: winners } = await supabase
+        .from("competition_winners")
+        .select("registration_id, award_label, track:award_tracks(name)")
+        .eq("hackathon_id", hackathonId)
+        .in("registration_id", finalistRegIds);
+
+      for (const w of winners || []) {
+        const row = w as Record<string, unknown>;
+        const regId = row.registration_id as string;
+        const track = Array.isArray(row.track) ? row.track[0] : row.track;
+        winnerAwardMap[regId] = {
+          awardLabel: row.award_label as string,
+          trackName: (track as Record<string, unknown> | null)?.name as string | null,
+        };
+      }
+    }
+
     const data = (finalists || []).map((f) => {
       const reg = f.registration as unknown as Record<string, unknown> | null;
       const applicant = reg?.applicant as unknown as Record<string, unknown> | null;
       const srcPhase = f.source_phase as unknown as Record<string, unknown> | null;
+      // Merge: prefer finalist's own award_label, fallback to winner's award
+      const winnerAward = winnerAwardMap[f.registration_id as string];
+      const resolvedAwardLabel = (f.award_label as string | null)
+        || winnerAward?.awardLabel
+        || null;
       return {
         id: f.id,
         phaseId: f.phase_id,
@@ -127,7 +153,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         sourceScore: f.source_score,
         rank: f.rank,
         awardCategoryId: f.award_category_id,
-        awardLabel: f.award_label,
+        awardLabel: resolvedAwardLabel,
         selectedAt: f.selected_at,
         selectedBy: f.selected_by,
         applicantName: applicant?.name || "Unknown",

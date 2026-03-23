@@ -23,11 +23,16 @@ async function mutate<T>(url: string, method: string, body?: unknown): Promise<T
 
 // ── Phase CRUD ────────────────────────────────────────────
 
+export interface PhasesResponse {
+  data: CompetitionPhase[];
+  meta?: { uniqueReviewerCount: number };
+}
+
 export function usePhases(hackathonId: string | undefined) {
-  return useQuery<{ data: CompetitionPhase[] }>({
+  return useQuery<PhasesResponse>({
     queryKey: ["phases", hackathonId],
     queryFn: () =>
-      fetchJson<{ data: CompetitionPhase[] }>(
+      fetchJson<PhasesResponse>(
         `/api/hackathons/${hackathonId}/phases`
       ),
     enabled: !!hackathonId,

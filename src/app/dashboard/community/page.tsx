@@ -22,7 +22,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn, formatDate, formatNumber } from "@/lib/utils";
+import { cn, formatDate, formatNumber, safeHref } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
 import { useMyCommunities } from "@/hooks/use-communities";
 import { useEvents } from "@/hooks/use-events";
@@ -362,7 +362,7 @@ export default function CommunityDashboardPage() {
                         Website
                       </p>
                       <a
-                        href={community.website}
+                        href={safeHref(community.website)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm text-primary hover:underline"
@@ -395,7 +395,7 @@ export default function CommunityDashboardPage() {
                           ([platform, url]) => (
                             <a
                               key={platform}
-                              href={url}
+                              href={safeHref(url)}
                               target="_blank"
                               rel="noopener noreferrer"
                             >

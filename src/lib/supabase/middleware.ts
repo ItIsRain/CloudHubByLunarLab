@@ -61,7 +61,7 @@ export async function updateSession(request: NextRequest) {
     url.pathname = "/login";
     // Only set redirect for relative paths to prevent open redirect attacks
     const redirectPath = pathname + request.nextUrl.search;
-    if (redirectPath.startsWith("/") && !redirectPath.startsWith("//")) {
+    if (redirectPath.startsWith("/") && !redirectPath.startsWith("//") && !redirectPath.includes("\\")) {
       url.searchParams.set("redirect", redirectPath);
     }
     return NextResponse.redirect(url);

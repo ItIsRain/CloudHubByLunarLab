@@ -24,7 +24,7 @@ import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
 import { useAuthStore } from "@/store/auth-store";
 import { toast } from "sonner";
-import { cn, formatDate, formatCurrency } from "@/lib/utils";
+import { cn, formatDate, formatCurrency, safeInternalLink } from "@/lib/utils";
 import { useMyEvents } from "@/hooks/use-events";
 import { useMyHackathons } from "@/hooks/use-hackathons";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -439,7 +439,7 @@ export default function DashboardPage() {
                     ) : recentNotifications.map((notification) => (
                       <Link
                         key={notification.id}
-                        href={notification.link || "#"}
+                        href={safeInternalLink(notification.link)}
                         className={cn(
                           "block p-3 rounded-lg transition-colors",
                           notification.isRead

@@ -29,7 +29,7 @@ import { useEvents } from "@/hooks/use-events";
 import { useHackathons } from "@/hooks/use-hackathons";
 import { useSubmissions } from "@/hooks/use-submissions";
 import { useQuery } from "@tanstack/react-query";
-import { getInitials, formatDate } from "@/lib/utils";
+import { getInitials, formatDate, safeHref } from "@/lib/utils";
 import type { User } from "@/lib/types";
 
 export default function PublicProfilePage() {
@@ -145,7 +145,7 @@ export default function PublicProfilePage() {
                   </span>
                 )}
                 {user.website && (
-                  <a href={user.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-foreground">
+                  <a href={safeHref(user.website)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-foreground">
                     <Globe className="h-3.5 w-3.5" /> Website
                   </a>
                 )}

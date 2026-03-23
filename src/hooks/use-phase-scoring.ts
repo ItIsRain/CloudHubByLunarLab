@@ -40,7 +40,9 @@ interface PhaseConfig {
   blindReview: boolean;
   reviewerCount: number;
   campusFilter: string | null;
+  evaluationMode?: 'application' | 'submission';
   registrationFields?: RegistrationField[];
+  submissionFields?: RegistrationField[];
 }
 
 interface ReviewerAssignment {
@@ -60,20 +62,30 @@ interface ReviewerAssignment {
     form_data: Record<string, unknown> | null;
     applicant: { id: string; name: string; email: string } | null;
   } | null;
+  // Submission data when phase evaluationMode is 'submission'
+  submission?: {
+    id: string;
+    project_name: string;
+    form_data: Record<string, unknown> | null;
+    description?: string;
+    github_url?: string;
+    demo_url?: string;
+    tech_stack?: string[];
+  } | null;
 }
 
 interface PhaseScore {
   id: string;
-  phase_id: string;
-  reviewer_id: string;
-  registration_id: string;
-  criteria_scores: CriteriaScore[];
-  total_score: number;
+  phaseId: string;
+  reviewerId: string;
+  registrationId: string;
+  criteriaScores: CriteriaScore[];
+  totalScore: number;
   recommendation: string | null;
-  overall_feedback: string | null;
+  overallFeedback: string | null;
   flagged: boolean;
-  submitted_at: string;
-  updated_at: string;
+  submittedAt: string;
+  updatedAt: string;
   registration?: {
     id: string;
     applicant: { id: string; name: string; email: string } | null;

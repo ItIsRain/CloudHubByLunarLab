@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useSubmission } from "@/hooks/use-submissions";
-import { cn, getInitials } from "@/lib/utils";
+import { cn, getInitials, safeHref } from "@/lib/utils";
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -312,7 +312,7 @@ export default function ProjectDetailPage() {
                   <CardContent className="space-y-3">
                     {submission.githubUrl && (
                       <a
-                        href={submission.githubUrl}
+                        href={safeHref(submission.githubUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors"
@@ -329,7 +329,7 @@ export default function ProjectDetailPage() {
                     )}
                     {submission.demoUrl && (
                       <a
-                        href={submission.demoUrl}
+                        href={safeHref(submission.demoUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors"

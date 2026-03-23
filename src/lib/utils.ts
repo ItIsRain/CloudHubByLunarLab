@@ -157,6 +157,24 @@ export function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
+/** Sanitise a user-supplied URL for use in `href`. Returns "#" for dangerous protocols. */
+export function safeHref(url: string | undefined | null): string {
+  if (!url) return "#";
+  try {
+    const parsed = new URL(url, "https://placeholder.invalid");
+    return ["http:", "https:", "mailto:"].includes(parsed.protocol) ? url : "#";
+  } catch {
+    return "#";
+  }
+}
+
+/** Validate an internal link (must be a relative path starting with /). */
+export function safeInternalLink(link: string | undefined | null): string {
+  if (!link) return "#";
+  if (link.startsWith("/") && !link.startsWith("//") && !link.includes("\\")) return link;
+  return "#";
+}
+
 export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number

@@ -54,14 +54,13 @@ export async function GET(request: NextRequest) {
       entitySlug = entity?.slug || "";
     }
 
+    // Only return minimal info needed for the accept page — do NOT expose
+    // the invitee's email/name to unauthenticated callers (prevents enumeration)
     return NextResponse.json({
       data: {
         id: invitation.id,
-        email: invitation.email,
-        name: invitation.name,
         status: invitation.status,
         entityType: invitation.entity_type,
-        entityId: invitation.entity_id,
         entityName,
         entitySlug,
       },

@@ -83,8 +83,18 @@ export async function PATCH(
     const body = await request.json();
     const updates: Record<string, unknown> = {};
 
-    if (body.name !== undefined) updates.name = body.name;
-    if (body.description !== undefined) updates.description = body.description;
+    if (body.name !== undefined) {
+      if (typeof body.name !== "string" || body.name.trim().length === 0 || body.name.length > 200) {
+        return NextResponse.json({ error: "Team name must be between 1 and 200 characters" }, { status: 400 });
+      }
+      updates.name = body.name;
+    }
+    if (body.description !== undefined) {
+      if (typeof body.description !== "string" || body.description.length > 2000) {
+        return NextResponse.json({ error: "Description must be at most 2000 characters" }, { status: 400 });
+      }
+      updates.description = body.description;
+    }
     if (body.track !== undefined) updates.track = body.track;
     if (body.looking_for_roles !== undefined)
       updates.looking_for_roles = body.looking_for_roles;

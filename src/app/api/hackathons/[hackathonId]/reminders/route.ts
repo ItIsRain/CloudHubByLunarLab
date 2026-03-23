@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { UUID_RE } from "@/lib/constants";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const VALID_REMINDER_TYPES = [
   "incomplete_application",
@@ -145,6 +146,19 @@ export async function POST(
 
     // ── Manual trigger ──
     if (body.action === "trigger" && body.ruleId) {
+      // Rate limit: max 5 triggers per 10 minutes to prevent email spam
+      const ip = getClientIp(request);
+      const rl = checkRateLimit(`${ip}:reminder-trigger:${hackathonId}`, {
+        namespace: "reminder-trigger",
+        limit: 5,
+        windowMs: 10 * 60 * 1000,
+      });
+      if (rl.limited) {
+        return NextResponse.json(
+          { error: "Too many trigger requests. Please try again later." },
+          { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+        );
+      }
       if (!UUID_RE.test(body.ruleId)) {
         return NextResponse.json(
           { error: "Invalid rule ID" },
@@ -301,8 +315,8 @@ export async function POST(
                   <p style="color:#e4e4e7;font-size:15px;line-height:1.7;margin:0 0 16px;">
                     Hi <strong style="color:#ffffff;">${escapeHtml(recipientName)}</strong>,
                   </p>
-                  <div style="color:#e4e4e7;font-size:15px;line-height:1.7;margin:0 0 16px;">
-                    ${finalBody}
+                  <div style="color:#e4e4e7;font-size:15px;line-height:1.7;margin:0 0 16px;white-space:pre-wrap;">
+                    ${escapeHtml(finalBody)}
                   </div>
                   <div style="text-align:center;padding:16px 0;">
                     <a href="${siteUrl}/hackathons/${hackathonId}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#e8440a,#ff5722);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;">

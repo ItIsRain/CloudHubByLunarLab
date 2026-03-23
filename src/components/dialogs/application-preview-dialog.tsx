@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, safeHref } from "@/lib/utils";
 import type { FormField, FormSection } from "@/lib/types";
 
 // ── Types ────────────────────────────────────────────────
@@ -362,7 +362,7 @@ function PreviewField({
       if (typeof file === "object" && file.url) {
         return (
           <a
-            href={file.url}
+            href={safeHref(file.url)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 text-sm text-primary hover:underline transition-colors"
@@ -383,7 +383,7 @@ function PreviewField({
       if (typeof file === "string") {
         return (
           <a
-            href={file}
+            href={safeHref(file)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
@@ -467,7 +467,7 @@ function PreviewField({
     if (field.type === "url" && value) {
       return (
         <a
-          href={String(value)}
+          href={safeHref(String(value))}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm text-primary hover:underline inline-flex items-center gap-1"

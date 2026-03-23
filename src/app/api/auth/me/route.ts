@@ -124,11 +124,14 @@ export async function DELETE() {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    // Revoke all API keys before deleting the user
+    const supabaseAdmin = getSupabaseAdminClient();
+    await supabaseAdmin.from("api_keys").delete().eq("user_id", user.id);
+
     // Delete profile (cascade will handle related rows)
     await supabase.from("profiles").delete().eq("id", user.id);
 
     // Delete the Supabase Auth user using service-role admin client
-    const supabaseAdmin = getSupabaseAdminClient();
     await supabaseAdmin.auth.admin.deleteUser(user.id);
 
     // Sign out the current session

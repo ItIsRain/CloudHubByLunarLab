@@ -27,7 +27,8 @@ import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { cn, safeHref } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   usePhaseConfig,
   useMyPhaseAssignments,
@@ -94,7 +95,7 @@ function QuickScoreContent() {
   const scoreMap = React.useMemo(() => {
     const m = new Map<string, PhaseScore>();
     for (const s of existingScores) {
-      if (s.registration_id) m.set(s.registration_id, s);
+      if (s.registrationId) m.set(s.registrationId, s);
     }
     return m;
   }, [existingScores]);
@@ -150,6 +151,8 @@ function QuickScoreContent() {
       .catch(() => setInvitationState("error"));
   }, [reviewerToken, hackathonId, phaseId, router]);
 
+  const queryClient = useQueryClient();
+
   const handleAcceptInvitation = async () => {
     if (!reviewerToken) return;
     setInvitationState("accepting");
@@ -165,6 +168,15 @@ function QuickScoreContent() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to accept");
       toast.success("Invitation accepted! Welcome aboard as a reviewer.");
+
+      // Invalidate all phase-related queries so fresh data is fetched
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["phase-config", hackathonId, phaseId] }),
+        queryClient.invalidateQueries({ queryKey: ["phase-assignments-mine", hackathonId, phaseId] }),
+        queryClient.invalidateQueries({ queryKey: ["phase-scores-mine", hackathonId, phaseId] }),
+        queryClient.invalidateQueries({ queryKey: ["my-reviewer-phases"] }),
+      ]);
+
       setInvitationState("accepted");
       router.replace(`/judge/${hackathonId}/phases/${phaseId}/quick-score`);
     } catch (err) {
@@ -207,13 +219,13 @@ function QuickScoreContent() {
     if (existing) {
       const scoreObj: Record<string, number> = {};
       const feedbackObj: Record<string, string> = {};
-      for (const cs of existing.criteria_scores) {
+      for (const cs of existing.criteriaScores) {
         scoreObj[cs.criteriaId] = cs.score;
         if (cs.feedback) feedbackObj[cs.criteriaId] = cs.feedback;
       }
       setScores(scoreObj);
       setFeedbacks(feedbackObj);
-      setOverallFeedback(existing.overall_feedback || "");
+      setOverallFeedback(existing.overallFeedback || "");
       setRecommendation(existing.recommendation);
       setFlagged(existing.flagged);
     } else {
@@ -464,6 +476,19 @@ function QuickScoreContent() {
   }
 
   if (!phase) {
+    // If we just accepted an invitation, queries are refetching — show loader instead of error
+    if (invitationState === "accepted") {
+      return (
+        <>
+          <Navbar />
+          <main className="min-h-screen bg-background pt-24 pb-16">
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          </main>
+        </>
+      );
+    }
     return (
       <>
         <Navbar />
@@ -592,6 +617,14 @@ function QuickScoreContent() {
                   : new Map<string, { label: string; order: number }>();
                 const previewFields = getPreviewFields(formData, fieldMap);
 
+                // Resolve applicant name: submission project_name → profile → API field → form_data → fallback
+                const resolvedName =
+                  (phase.evaluationMode === "submission" && assignment.submission?.project_name) ||
+                  applicant?.name ||
+                  assignment.applicantName ||
+                  extractNameFromFormData(formData, phase.registrationFields) ||
+                  `Applicant ${index + 1}`;
+
                 return (
                   <motion.div
                     key={assignment.id}
@@ -614,9 +647,7 @@ function QuickScoreContent() {
                             </div>
                             <div className="min-w-0">
                               <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">
-                                {applicant?.name ||
-                                  assignment.applicantName ||
-                                  `Applicant ${index + 1}`}
+                                {resolvedName}
                               </p>
                               {(applicant?.email || assignment.applicantEmail) && (
                                 <p className="text-xs text-muted-foreground truncate">
@@ -677,7 +708,7 @@ function QuickScoreContent() {
                               <span className="font-display text-sm font-bold text-green-500">
                                 {scoreMap
                                   .get(assignment.registrationId)
-                                  ?.total_score?.toFixed(1)}
+                                  ?.totalScore?.toFixed(1)}
                               </span>
                             </div>
                           </div>
@@ -711,9 +742,12 @@ function QuickScoreContent() {
   }
 
   // ── JUDGING VIEW: Two-page flow ──
+  const currentFormData = (currentAssignment?.registration?.form_data || {}) as Record<string, unknown>;
   const applicantName =
+    (phase.evaluationMode === "submission" && currentAssignment?.submission?.project_name) ||
     currentAssignment?.registration?.applicant?.name ||
     currentAssignment?.applicantName ||
+    extractNameFromFormData(currentFormData, phase.registrationFields) ||
     `Applicant ${selectedIndex + 1}`;
   const isAlreadyScored = currentRegId
     ? scoreMap.has(currentRegId)
@@ -815,7 +849,7 @@ function QuickScoreContent() {
                           </h2>
                           <p className="text-sm text-muted-foreground mt-0.5">
                             <FileText className="inline h-3.5 w-3.5 mr-1" />
-                            Application Data
+                            {phase.evaluationMode === "submission" ? "Submission Data" : "Application Data"}
                           </p>
                           {isAlreadyScored && (
                             <Badge
@@ -839,11 +873,31 @@ function QuickScoreContent() {
                       </div>
 
                       {/* Form data display */}
-                      <FormDataDisplay
-                        registration={currentAssignment?.registration}
-                        blindReview={phase.blindReview}
-                        registrationFields={phase.registrationFields}
-                      />
+                      {phase.evaluationMode === "submission" && currentAssignment?.submission ? (
+                        <FormDataDisplay
+                          registration={{
+                            id: currentAssignment.submission.id || currentAssignment.registrationId,
+                            user_id: currentAssignment.registration?.user_id || "",
+                            status: "submitted",
+                            form_data: {
+                              ...(currentAssignment.submission.form_data || {}),
+                              ...(currentAssignment.submission.project_name ? { _project_name: currentAssignment.submission.project_name } : {}),
+                              ...(currentAssignment.submission.description ? { _description: currentAssignment.submission.description } : {}),
+                              ...(currentAssignment.submission.github_url ? { _github_url: currentAssignment.submission.github_url } : {}),
+                              ...(currentAssignment.submission.demo_url ? { _demo_url: currentAssignment.submission.demo_url } : {}),
+                            },
+                            applicant: currentAssignment.registration?.applicant || null,
+                          }}
+                          blindReview={phase.blindReview}
+                          registrationFields={phase.submissionFields}
+                        />
+                      ) : (
+                        <FormDataDisplay
+                          registration={currentAssignment?.registration}
+                          blindReview={phase.blindReview}
+                          registrationFields={phase.registrationFields}
+                        />
+                      )}
                     </CardContent>
                   </Card>
 
@@ -1178,7 +1232,7 @@ function FormFieldDisplay({
         </p>
         {url ? (
           <a
-            href={url}
+            href={safeHref(url)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
@@ -1282,7 +1336,7 @@ function FormFieldDisplay({
       </p>
       {isUrl ? (
         <a
-          href={strValue}
+          href={safeHref(strValue)}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm text-primary hover:underline break-all"
@@ -1457,6 +1511,54 @@ function formatFileSize(bytes: number): string {
  * Extract preview fields from form_data for the grid card.
  * Returns [key, displayValue, label] tuples.
  */
+/** Extract a name from form_data by searching for name-like fields */
+function extractNameFromFormData(
+  formData: Record<string, unknown> | null | undefined,
+  registrationFields?: RegistrationField[]
+): string | null {
+  if (!formData) return null;
+
+  // First try matching by registration field labels
+  if (registrationFields) {
+    const nameField = registrationFields.find((f) => {
+      const label = f.label.toLowerCase();
+      return (
+        label === "full name" ||
+        label === "name" ||
+        label === "applicant name" ||
+        label === "your name" ||
+        label.includes("full name")
+      );
+    });
+    if (nameField) {
+      const val = formData[nameField.id];
+      if (val && typeof val === "string" && val.trim()) return val.trim();
+    }
+  }
+
+  // Fallback: check common key patterns
+  const nameKeys = ["full_name", "fullName", "name", "applicant_name", "applicantName"];
+  for (const key of nameKeys) {
+    const val = formData[key];
+    if (val && typeof val === "string" && val.trim()) return val.trim();
+  }
+
+  // Last resort: search all keys for name-like labels
+  for (const [key, val] of Object.entries(formData)) {
+    if (
+      typeof val === "string" &&
+      val.trim() &&
+      /name/i.test(key) &&
+      !key.toLowerCase().includes("team") &&
+      !key.toLowerCase().includes("project")
+    ) {
+      return val.trim();
+    }
+  }
+
+  return null;
+}
+
 function getPreviewFields(
   formData: Record<string, unknown>,
   fieldMap: Map<string, { label: string; order: number }>

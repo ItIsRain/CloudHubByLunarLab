@@ -22,7 +22,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import dynamic from "next/dynamic";
 const InviteTeamMemberDialog = dynamic(() => import("@/components/dialogs/invite-team-member-dialog").then(m => m.InviteTeamMemberDialog), { ssr: false });
 const EditTeamDialog = dynamic(() => import("@/components/dialogs/edit-team-dialog").then(m => m.EditTeamDialog), { ssr: false });
-import { cn, getInitials, formatDate } from "@/lib/utils";
+import { cn, getInitials, formatDate, safeHref } from "@/lib/utils";
 import { useTeam } from "@/hooks/use-teams";
 import { useHackathons } from "@/hooks/use-hackathons";
 import type { TeamStatus } from "@/lib/types";
@@ -207,7 +207,7 @@ export default function TeamWorkspacePage() {
                       <div className="flex gap-2">
                         {team.submission.githubUrl && (
                           <Button variant="outline" size="sm" asChild className="gap-1.5">
-                            <a href={team.submission.githubUrl} target="_blank" rel="noopener noreferrer">
+                            <a href={safeHref(team.submission.githubUrl)} target="_blank" rel="noopener noreferrer">
                               <Code className="h-3.5 w-3.5" />
                               GitHub
                               <ExternalLink className="h-3 w-3" />

@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToBlogPost } from "@/lib/supabase/mappers";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
-import { UUID_RE } from "@/lib/constants";
+import { UUID_RE, SAFE_SLUG_RE } from "@/lib/constants";
 
 function postFilter(idOrSlug: string) {
   return UUID_RE.test(idOrSlug) ? `id.eq.${idOrSlug}` : `slug.eq.${idOrSlug}`;
@@ -15,6 +15,10 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
+
+    if (!UUID_RE.test(slug) && !SAFE_SLUG_RE.test(slug)) {
+      return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
+    }
 
     const auth = await authenticateRequest(request);
 
@@ -87,6 +91,10 @@ export async function PATCH(
 ) {
   try {
     const { slug } = await params;
+
+    if (!UUID_RE.test(slug) && !SAFE_SLUG_RE.test(slug)) {
+      return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
+    }
 
     const auth = await authenticateRequest(request);
 
@@ -195,6 +203,10 @@ export async function DELETE(
 ) {
   try {
     const { slug } = await params;
+
+    if (!UUID_RE.test(slug) && !SAFE_SLUG_RE.test(slug)) {
+      return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
+    }
 
     const auth = await authenticateRequest(request);
 

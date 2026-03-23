@@ -60,7 +60,7 @@ function LoginForm() {
         toast.success("Welcome back!");
         const raw = searchParams.get("redirect") || "/dashboard";
         // Prevent open redirect: only allow relative paths
-        const redirect = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+        const redirect = raw.startsWith("/") && !raw.startsWith("//") && !raw.includes("\\") ? raw : "/dashboard";
         router.push(redirect);
       }
     } catch (err) {
@@ -99,7 +99,7 @@ function LoginForm() {
       setOauthLoading(true);
       const supabase = getSupabaseBrowserClient();
       // Validate redirect before passing to OAuth callback
-      const safeRedirect = redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//") ? redirectParam : "/dashboard";
+      const safeRedirect = redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//") && !redirectParam.includes("\\") ? redirectParam : "/dashboard";
       const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeRedirect)}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "github",

@@ -133,6 +133,8 @@ export function dbRowToHackathon(
     submissionsEnabled: (row.submissions_enabled as boolean) ?? true,
     registrationFields: (row.registration_fields as Hackathon["registrationFields"]) || [],
     registrationSections: (row.registration_sections as Hackathon["registrationSections"]) || [],
+    submissionFields: (row.submission_fields as Hackathon["submissionFields"]) || [],
+    submissionSections: (row.submission_sections as Hackathon["submissionSections"]) || [],
     screeningRules: (row.screening_rules as Hackathon["screeningRules"]) || [],
     screeningConfig: (row.screening_config as Hackathon["screeningConfig"]) || {},
     organizer: org ? (profileToPublicUser(org) as User) : ({} as User),
@@ -326,6 +328,7 @@ export function dbRowToSubmission(row: Record<string, unknown>): Submission {
     demoUrl: (row.demo_url as string) || undefined,
     techStack: (row.tech_stack as string[]) || [],
     readme: (row.readme as string) || undefined,
+    formData: (row.form_data as Record<string, unknown>) || undefined,
     status: (row.status as SubmissionStatus) || "draft",
     scores: rawScores.map(dbRowToScore),
     averageScore: (row.average_score as number) || undefined,
@@ -369,6 +372,8 @@ export function submissionFormToDbRow(form: Record<string, unknown>): Record<str
     status: "status",
     submittedAt: "submitted_at",
     submitted_at: "submitted_at",
+    formData: "form_data",
+    form_data: "form_data",
   };
 
   const result: Record<string, unknown> = {};
@@ -420,6 +425,8 @@ export function hackathonFormToDbRow(
     submissionsEnabled?: boolean;
     visibility?: string;
     registrationFields?: unknown[];
+    submissionFields?: unknown[];
+    submissionSections?: unknown[];
   },
   organizerId: string,
   slug: string
@@ -468,6 +475,8 @@ export function hackathonFormToDbRow(
     sponsors: form.sponsors,
     judging_criteria: form.judgingCriteria,
     registration_fields: form.registrationFields || [],
+    ...(form.submissionFields !== undefined && { submission_fields: form.submissionFields }),
+    ...(form.submissionSections !== undefined && { submission_sections: form.submissionSections }),
   };
 }
 
@@ -476,7 +485,7 @@ export function hackathonFormToDbRow(
 // =====================================================
 
 export function dbRowToCompetitionForm(row: Record<string, unknown>): CompetitionForm {
-  const organizer = row.organizer ? profileToUser(row.organizer as Record<string, unknown>) : undefined;
+  const organizer = row.organizer ? profileToPublicUser(row.organizer as Record<string, unknown>) : undefined;
   return {
     id: row.id as string,
     organizerId: row.organizer_id as string,
@@ -950,6 +959,7 @@ export function dbRowToCompetitionPhase(row: Record<string, unknown>): Competiti
     name: row.name as string,
     description: (row.description as string) || undefined,
     phaseType: (row.phase_type as PhaseType) || "bootcamp",
+    evaluationMode: (row.evaluation_mode as CompetitionPhase["evaluationMode"]) || "application",
     campusFilter: (row.campus_filter as string) || null,
     scoringCriteria: (row.scoring_criteria as PhaseScoringCriteria[]) || [],
     scoringScaleMax: (row.scoring_scale_max as number) || 3,
@@ -959,6 +969,8 @@ export function dbRowToCompetitionPhase(row: Record<string, unknown>): Competiti
     blindReview: row.blind_review !== false,
     startDate: (row.start_date as string) || null,
     endDate: (row.end_date as string) || null,
+    submissionStart: (row.submission_start as string) || null,
+    submissionEnd: (row.submission_end as string) || null,
     location: (row.location as string) || null,
     sortOrder: (row.sort_order as number) || 0,
     status: (row.status as PhaseStatus) || "draft",
@@ -1020,6 +1032,7 @@ export function phaseFormToDbRow(phase: Partial<CompetitionPhase>): Record<strin
   if (phase.name !== undefined) row.name = phase.name;
   if (phase.description !== undefined) row.description = phase.description;
   if (phase.phaseType !== undefined) row.phase_type = phase.phaseType;
+  if (phase.evaluationMode !== undefined) row.evaluation_mode = phase.evaluationMode;
   if (phase.campusFilter !== undefined) row.campus_filter = phase.campusFilter;
   if (phase.scoringCriteria !== undefined) row.scoring_criteria = phase.scoringCriteria;
   if (phase.scoringScaleMax !== undefined) row.scoring_scale_max = phase.scoringScaleMax;
@@ -1029,6 +1042,8 @@ export function phaseFormToDbRow(phase: Partial<CompetitionPhase>): Record<strin
   if (phase.blindReview !== undefined) row.blind_review = phase.blindReview;
   if (phase.startDate !== undefined) row.start_date = phase.startDate;
   if (phase.endDate !== undefined) row.end_date = phase.endDate;
+  if (phase.submissionStart !== undefined) row.submission_start = phase.submissionStart;
+  if (phase.submissionEnd !== undefined) row.submission_end = phase.submissionEnd;
   if (phase.location !== undefined) row.location = phase.location;
   if (phase.sortOrder !== undefined) row.sort_order = phase.sortOrder;
   if (phase.status !== undefined) row.status = phase.status;

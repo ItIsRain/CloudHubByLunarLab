@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
-import { checkHackathonAccess } from "@/lib/check-hackathon-access";
+import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
 
 // =====================================================
 // Valid export types
@@ -77,9 +77,9 @@ async function authenticateAndAuthorize(
       ? getSupabaseAdminClient()
       : await getSupabaseServerClient();
 
-  // Check access via RBAC (all collaborator roles can export)
+  // Check access via RBAC (only owner/admin/editor can export PII data)
   const access = await checkHackathonAccess(supabase, hackathonId, auth.userId);
-  if (!access.hasAccess) {
+  if (!access.hasAccess || !canEdit(access.role)) {
     return {
       error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
     };

@@ -149,6 +149,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (typeof name !== "string" || name.trim().length === 0 || name.length > 200) {
+      return NextResponse.json(
+        { error: "Team name must be between 1 and 200 characters" },
+        { status: 400 }
+      );
+    }
+
+    if (description !== undefined && (typeof description !== "string" || description.length > 2000)) {
+      return NextResponse.json(
+        { error: "Description must be at most 2000 characters" },
+        { status: 400 }
+      );
+    }
+
     if (!UUID_RE.test(hackathon_id)) {
       return NextResponse.json(
         { error: "Invalid hackathon_id format" },

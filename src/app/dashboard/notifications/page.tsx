@@ -18,7 +18,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn, formatRelativeTime, safeInternalLink } from "@/lib/utils";
 import {
   useNotifications,
   useMarkAllNotificationsRead,
@@ -167,7 +167,7 @@ export default function NotificationsPage() {
                             <div className="flex items-start justify-between gap-2">
                               <div>
                                 {notification.link ? (
-                                  <Link href={notification.link} className="hover:underline">
+                                  <Link href={safeInternalLink(notification.link)} className="hover:underline">
                                     <p className="text-sm font-medium">{notification.title}</p>
                                   </Link>
                                 ) : (

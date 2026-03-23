@@ -1,4 +1,5 @@
 import { buildMetadata, buildBlogListJsonLd } from "@/lib/seo";
+import { JsonLd } from "@/components/seo/json-ld";
 import BlogPage from "./page-client";
 
 export const metadata = buildMetadata({
@@ -11,12 +12,7 @@ export const metadata = buildMetadata({
 export default function Page() {
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(buildBlogListJsonLd()),
-        }}
-      />
+      <JsonLd data={buildBlogListJsonLd()} />
       <BlogPage />
     </>
   );

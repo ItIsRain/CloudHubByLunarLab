@@ -25,7 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventCard } from "@/components/cards/event-card";
 import { HackathonCard } from "@/components/cards/hackathon-card";
 import { useAuthStore } from "@/store/auth-store";
-import { cn, getInitials } from "@/lib/utils";
+import { cn, getInitials, safeHref } from "@/lib/utils";
 import { useMyEvents } from "@/hooks/use-events";
 import { useMyHackathons } from "@/hooks/use-hackathons";
 import { useMySubmissions } from "@/hooks/use-submissions";
@@ -110,7 +110,7 @@ export default function ProfilePage() {
                   </span>
                 )}
                 {user.website && (
-                  <a href={user.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-foreground">
+                  <a href={safeHref(user.website)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-foreground">
                     <Globe className="h-3.5 w-3.5" /> Website
                   </a>
                 )}

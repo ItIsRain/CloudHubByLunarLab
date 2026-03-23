@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { rowToTimeline, type HackathonTimeline } from "@/lib/hackathon-phases";
+import { UUID_RE } from "@/lib/constants";
 
 const TIMELINE_COLUMNS =
   "registration_start, registration_end, hacking_start, hacking_end, submission_deadline, judging_start, judging_end, winners_announcement, status";
@@ -95,6 +96,9 @@ export async function verifyIsJudge(
   hackathonId: string,
   userId: string
 ): Promise<boolean> {
+  // Validate inputs to prevent PostgREST filter injection
+  if (!UUID_RE.test(hackathonId) || !UUID_RE.test(userId)) return false;
+
   // Parallelize: check judge_invitations and fetch hackathon data simultaneously
   const [invitationRes, hackathonRes] = await Promise.all([
     supabase

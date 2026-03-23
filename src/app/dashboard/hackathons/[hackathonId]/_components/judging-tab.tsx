@@ -86,6 +86,7 @@ const reviewerStatusConfig: Record<
 export function JudgingTab({ hackathon, hackathonId }: JudgingTabProps) {
   const { data: phasesData, isLoading } = usePhases(hackathonId);
   const phases: CompetitionPhase[] = phasesData?.data ?? [];
+  const meta = phasesData?.meta;
 
   // Sort by sortOrder then by creation
   const sortedPhases = [...phases].sort(
@@ -145,7 +146,7 @@ export function JudgingTab({ hackathon, hackathonId }: JudgingTabProps) {
 
       {/* Global jury summary */}
       {!isLoading && sortedPhases.length > 0 && (
-        <JurySummary phases={sortedPhases} hackathonId={hackathonId} />
+        <JurySummary phases={sortedPhases} hackathonId={hackathonId} meta={meta} />
       )}
 
       {/* Per-phase jury breakdown */}
@@ -173,19 +174,22 @@ export function JudgingTab({ hackathon, hackathonId }: JudgingTabProps) {
 function JurySummary({
   phases,
   hackathonId,
+  meta,
 }: {
   phases: CompetitionPhase[];
   hackathonId: string;
+  meta?: { uniqueReviewerCount: number };
 }) {
-  // Collect unique reviewer user IDs across all phases
-  const allReviewers = phases.flatMap((p) => p.reviewers ?? []);
-  const uniqueReviewerIds = new Set(allReviewers.map((r) => r.userId));
-  const acceptedCount = allReviewers.filter(
-    (r) => r.status === "accepted"
-  ).length;
-  const invitedCount = allReviewers.filter(
-    (r) => r.status === "invited"
-  ).length;
+  // Use aggregate counts from the API instead of phase.reviewers (which is not populated)
+  const uniqueJudgeCount = meta?.uniqueReviewerCount ?? 0;
+  const acceptedCount = phases.reduce(
+    (sum, p) => sum + (p.reviewerAcceptedCount ?? 0),
+    0
+  );
+  const invitedCount = phases.reduce(
+    (sum, p) => sum + (p.reviewerInvitedCount ?? 0),
+    0
+  );
 
   const totalAssignments = phases.reduce(
     (sum, p) => sum + (p.assignmentCount ?? 0),
@@ -203,7 +207,7 @@ function JurySummary({
   const stats = [
     {
       label: "Unique Judges",
-      value: uniqueReviewerIds.size,
+      value: uniqueJudgeCount,
       icon: Users,
       color: "text-blue-500",
       bgColor: "bg-blue-500/10",
@@ -292,9 +296,8 @@ function PhaseJuryCard({
 }) {
   const [expanded, setExpanded] = React.useState(false);
 
-  const reviewerCount = phase.reviewers?.length ?? 0;
-  const acceptedReviewers =
-    phase.reviewers?.filter((r) => r.status === "accepted").length ?? 0;
+  const reviewerCount = phase.reviewerCount_agg ?? phase.reviewers?.length ?? 0;
+  const acceptedReviewers = phase.reviewerAcceptedCount ?? reviewerCount;
 
   return (
     <Card className="overflow-hidden">

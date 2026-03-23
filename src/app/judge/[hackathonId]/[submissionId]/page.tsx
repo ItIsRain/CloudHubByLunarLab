@@ -20,7 +20,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, safeHref } from "@/lib/utils";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useSubmission, useHackathonSubmissions, useSubmitScore } from "@/hooks/use-submissions";
 import { useHackathonPhase } from "@/hooks/use-hackathon-phase";
@@ -258,7 +258,7 @@ export default function ScoringPage() {
                     {submission.demoUrl && (
                       <Button variant="outline" size="sm" asChild>
                         <a
-                          href={submission.demoUrl}
+                          href={safeHref(submission.demoUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -270,7 +270,7 @@ export default function ScoringPage() {
                     {submission.githubUrl && (
                       <Button variant="outline" size="sm" asChild>
                         <a
-                          href={submission.githubUrl}
+                          href={safeHref(submission.githubUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
                         >

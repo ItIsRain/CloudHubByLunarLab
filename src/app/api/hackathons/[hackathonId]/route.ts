@@ -5,7 +5,7 @@ import { dbRowToHackathon } from "@/lib/supabase/mappers";
 import { getCurrentPhase, rowToTimeline } from "@/lib/hackathon-phases";
 import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
-import { UUID_RE } from "@/lib/constants";
+import { UUID_RE, SAFE_SLUG_RE } from "@/lib/constants";
 import { writeAuditLog } from "@/lib/audit";
 import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
 
@@ -21,6 +21,10 @@ export async function GET(
 ) {
   try {
     const { hackathonId } = await params;
+
+    if (!UUID_RE.test(hackathonId) && !SAFE_SLUG_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -123,6 +127,10 @@ export async function PATCH(
   try {
     const { hackathonId } = await params;
 
+    if (!UUID_RE.test(hackathonId) && !SAFE_SLUG_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
+
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
 
@@ -193,6 +201,8 @@ export async function PATCH(
       registration_sections: "registration_sections", registrationSections: "registration_sections",
       screening_rules: "screening_rules", screeningRules: "screening_rules",
       screening_config: "screening_config", screeningConfig: "screening_config",
+      submission_fields: "submission_fields", submissionFields: "submission_fields",
+      submission_sections: "submission_sections", submissionSections: "submission_sections",
       rsvp_deadline: "rsvp_deadline", rsvpDeadline: "rsvp_deadline",
       registration_editable_until: "registration_editable_until", registrationEditableUntil: "registration_editable_until",
     };
@@ -364,7 +374,7 @@ export async function PATCH(
     const { data, error } = await supabase
       .from("hackathons")
       .update(updates)
-      .or(hackathonFilter(hackathonId))
+      .eq("id", hackathonUuid)
       .select("*, organizer:profiles!organizer_id(*), teams(count), submissions(count)")
       .single();
 
@@ -398,6 +408,10 @@ export async function DELETE(
 ) {
   try {
     const { hackathonId } = await params;
+
+    if (!UUID_RE.test(hackathonId) && !SAFE_SLUG_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -441,7 +455,8 @@ export async function DELETE(
     const { error } = await supabase
       .from("hackathons")
       .delete()
-      .or(hackathonFilter(hackathonId));
+      .eq("id", delHackathonUuid)
+      .eq("organizer_id", auth.userId);
 
     if (error) {
       return NextResponse.json({ error: "Failed to delete hackathon" }, { status: 400 });

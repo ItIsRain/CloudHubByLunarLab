@@ -216,7 +216,7 @@ function PhaseCard({
   const scoredRegIds = React.useMemo(() => {
     const ids = new Set<string>();
     for (const s of scores) {
-      if (s.registration_id) ids.add(s.registration_id);
+      if (s.registrationId) ids.add(s.registrationId);
     }
     return ids;
   }, [scores]);

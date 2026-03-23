@@ -150,7 +150,7 @@ export async function GET(
       await Promise.all([
         adminSb
           .from("phase_reviewers")
-          .select("phase_id")
+          .select("phase_id, user_id, status")
           .in("phase_id", phaseIds),
         adminSb
           .from("phase_scores")
@@ -163,12 +163,21 @@ export async function GET(
       ]);
 
     const reviewerCounts: Record<string, number> = {};
+    const reviewerAcceptedCounts: Record<string, number> = {};
+    const reviewerInvitedCounts: Record<string, number> = {};
     const scoreCounts: Record<string, number> = {};
     const assignmentCounts: Record<string, number> = {};
 
     for (const r of reviewersResult.data || []) {
-      const pid = (r as Record<string, unknown>).phase_id as string;
+      const row = r as Record<string, unknown>;
+      const pid = row.phase_id as string;
+      const status = row.status as string;
       reviewerCounts[pid] = (reviewerCounts[pid] || 0) + 1;
+      if (status === "accepted") {
+        reviewerAcceptedCounts[pid] = (reviewerAcceptedCounts[pid] || 0) + 1;
+      } else if (status === "invited") {
+        reviewerInvitedCounts[pid] = (reviewerInvitedCounts[pid] || 0) + 1;
+      }
     }
     for (const s of scoresResult.data || []) {
       const pid = (s as Record<string, unknown>).phase_id as string;
@@ -233,19 +242,31 @@ export async function GET(
       }
     }
 
+    // Compute unique reviewer user IDs across all phases
+    const allReviewerUserIds = new Set(
+      (reviewersResult.data || []).map((r) => (r as Record<string, unknown>).user_id as string)
+    );
+
     const data = phases.map((p) => {
       const row = p as Record<string, unknown>;
       const phaseId = row.id as string;
       return {
         ...dbRowToCompetitionPhase(row),
         reviewerCount_agg: reviewerCounts[phaseId] || 0,
+        reviewerAcceptedCount: reviewerAcceptedCounts[phaseId] || 0,
+        reviewerInvitedCount: reviewerInvitedCounts[phaseId] || 0,
         scoreCount: scoreCounts[phaseId] || 0,
         assignmentCount: assignmentCounts[phaseId] || 0,
         applicantCount: applicantCounts[phaseId] || 0,
       };
     });
 
-    return NextResponse.json({ data });
+    // Attach global summary for the jury overview
+    const meta = {
+      uniqueReviewerCount: allReviewerUserIds.size,
+    };
+
+    return NextResponse.json({ data, meta });
   } catch (err) {
     console.error("GET /api/hackathons/[hackathonId]/phases error:", err);
     return NextResponse.json(
@@ -427,11 +448,51 @@ export async function POST(
       );
     }
 
+    // Validate evaluationMode if provided
+    const VALID_EVAL_MODES = ["application", "submission"] as const;
+    if (
+      body.evaluationMode !== undefined &&
+      !VALID_EVAL_MODES.includes(body.evaluationMode as (typeof VALID_EVAL_MODES)[number])
+    ) {
+      return NextResponse.json(
+        { error: `evaluationMode must be one of: ${VALID_EVAL_MODES.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    // Validate submission dates when in submission mode
+    if (body.evaluationMode === "submission" || body.submissionStart || body.submissionEnd) {
+      const subStart = body.submissionStart ? new Date(body.submissionStart).getTime() : null;
+      const subEnd = body.submissionEnd ? new Date(body.submissionEnd).getTime() : null;
+      const phaseStart = body.startDate ? new Date(body.startDate).getTime() : null;
+      const phaseEnd = body.endDate ? new Date(body.endDate).getTime() : null;
+
+      if (subStart && subEnd && subEnd <= subStart) {
+        return NextResponse.json(
+          { error: "submissionEnd must be after submissionStart" },
+          { status: 400 }
+        );
+      }
+      if (phaseStart && subStart && subStart < phaseStart) {
+        return NextResponse.json(
+          { error: "submissionStart cannot be before the phase startDate" },
+          { status: 400 }
+        );
+      }
+      if (phaseEnd && subEnd && subEnd > phaseEnd) {
+        return NextResponse.json(
+          { error: "submissionEnd cannot be after the phase endDate" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Build DB row from the form data using the mapper
     const dbRow = phaseFormToDbRow({
       name: body.name.trim(),
       description: body.description,
       phaseType: body.phaseType,
+      evaluationMode: body.evaluationMode ?? "application",
       campusFilter: body.campusFilter ?? null,
       scoringCriteria: body.scoringCriteria ?? [],
       scoringScaleMax: body.scoringScaleMax ?? 3,
@@ -441,6 +502,8 @@ export async function POST(
       blindReview: body.blindReview ?? true,
       startDate: body.startDate ?? null,
       endDate: body.endDate ?? null,
+      submissionStart: body.submissionStart ?? null,
+      submissionEnd: body.submissionEnd ?? null,
       location: body.location ?? null,
       sortOrder: body.sortOrder ?? 0,
     });

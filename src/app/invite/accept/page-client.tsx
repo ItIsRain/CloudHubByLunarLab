@@ -25,14 +25,16 @@ function AcceptInvitationContent() {
       const result = await acceptMutation.mutateAsync(token);
       const { entityType, entitySlug } = result.data;
       toast.success("Invitation accepted!");
-      router.push(`/${entityType}s/${entitySlug}`);
+      const validTypes = ["event", "hackathon"];
+      const safeType = validTypes.includes(entityType) ? entityType : "event";
+      router.push(`/${safeType}s/${entitySlug}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to accept invitation.");
     }
   };
 
   const handleSignIn = () => {
-    router.push(`/login?redirect=/invite/accept?token=${token}`);
+    router.push(`/login?redirect=${encodeURIComponent(`/invite/accept?token=${token}`)}`);
   };
 
   if (!token) {
@@ -134,13 +136,15 @@ function AcceptInvitationContent() {
               </p>
             </div>
 
-            <div className="w-full rounded-lg border p-4 text-left">
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Invited as</p>
-                <p className="text-sm font-medium">{invitation.name}</p>
-                <p className="text-xs text-muted-foreground">{invitation.email}</p>
+            {(invitation.name || invitation.email) && (
+              <div className="w-full rounded-lg border p-4 text-left">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Invited as</p>
+                  {invitation.name && <p className="text-sm font-medium">{invitation.name}</p>}
+                  {invitation.email && <p className="text-xs text-muted-foreground">{invitation.email}</p>}
+                </div>
               </div>
-            </div>
+            )}
 
             {user ? (
               <Button

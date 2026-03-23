@@ -24,6 +24,17 @@ function formatGoogleDate(iso: string): string {
   return new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
+/** Escape text values for iCalendar (RFC 5545) to prevent CRLF injection */
+function escapeICalText(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r\n/g, "\\n")
+    .replace(/\r/g, "\\n")
+    .replace(/\n/g, "\\n");
+}
+
 export function AddToCalendarDialog({
   open,
   onOpenChange,
@@ -66,9 +77,9 @@ export function AddToCalendarDialog({
           "BEGIN:VEVENT",
           `DTSTART:${formatGoogleDate(startDate)}`,
           `DTEND:${formatGoogleDate(endDate)}`,
-          `SUMMARY:${title}`,
-          `DESCRIPTION:${description}`,
-          `LOCATION:${location}`,
+          `SUMMARY:${escapeICalText(title)}`,
+          `DESCRIPTION:${escapeICalText(description)}`,
+          `LOCATION:${escapeICalText(location)}`,
           "END:VEVENT",
           "END:VCALENDAR",
         ].join("\r\n");
@@ -76,7 +87,8 @@ export function AddToCalendarDialog({
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${title.replace(/\s+/g, "_")}.ics`;
+        const safeFilename = title.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "event";
+        a.download = `${safeFilename}.ics`;
         a.click();
         URL.revokeObjectURL(url);
       },

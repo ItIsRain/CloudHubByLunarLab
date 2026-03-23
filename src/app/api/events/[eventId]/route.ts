@@ -4,7 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToEvent } from "@/lib/supabase/mappers";
 import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
-import { UUID_RE } from "@/lib/constants";
+import { UUID_RE, SAFE_SLUG_RE } from "@/lib/constants";
 import { writeAuditLog } from "@/lib/audit";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
@@ -19,6 +19,9 @@ export async function GET(
 ) {
   try {
     const { eventId } = await params;
+    if (!UUID_RE.test(eventId) && !SAFE_SLUG_RE.test(eventId)) {
+      return NextResponse.json({ error: "Invalid event ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -98,6 +101,9 @@ export async function PATCH(
 ) {
   try {
     const { eventId } = await params;
+    if (!UUID_RE.test(eventId) && !SAFE_SLUG_RE.test(eventId)) {
+      return NextResponse.json({ error: "Invalid event ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);
@@ -262,6 +268,9 @@ export async function DELETE(
 ) {
   try {
     const { eventId } = await params;
+    if (!UUID_RE.test(eventId) && !SAFE_SLUG_RE.test(eventId)) {
+      return NextResponse.json({ error: "Invalid event ID" }, { status: 400 });
+    }
 
     // Dual auth: session cookies OR API key
     const auth = await authenticateRequest(request);

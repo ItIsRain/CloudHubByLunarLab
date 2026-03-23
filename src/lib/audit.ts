@@ -29,7 +29,8 @@ export async function writeAuditLog(
     const ipHeader =
       request?.headers.get("x-forwarded-for") ??
       request?.headers.get("x-real-ip");
-    const ip = ipHeader?.split(",")[0]?.trim() || null;
+    // Use rightmost IP from x-forwarded-for (leftmost is client-spoofable)
+    const ip = ipHeader?.split(",").pop()?.trim() || null;
     const userAgent = request?.headers.get("user-agent")?.slice(0, 500) || null;
 
     await admin.from("audit_logs").insert({

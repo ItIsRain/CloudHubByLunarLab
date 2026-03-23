@@ -303,6 +303,9 @@ function PhaseCard({ hackathonId, hackathon, phase, onEdit }: PhaseCardProps) {
             {phase.campusFilter && (
               <Badge variant="outline">{phase.campusFilter}</Badge>
             )}
+            {phase.evaluationMode === "submission" && (
+              <Badge variant="secondary">Submission Mode</Badge>
+            )}
           </div>
 
           {/* Dates and location */}
@@ -319,6 +322,11 @@ function PhaseCard({ hackathonId, hackathon, phase, onEdit }: PhaseCardProps) {
                   : "?"}
               </span>
             )}
+            {phase.evaluationMode === "submission" && (phase.submissionStart || phase.submissionEnd) && (
+              <span className="flex items-center gap-1.5 text-xs">
+                Submissions: {phase.submissionStart ? new Date(phase.submissionStart).toLocaleDateString() : "?"} – {phase.submissionEnd ? new Date(phase.submissionEnd).toLocaleDateString() : "?"}
+              </span>
+            )}
             {phase.location && (
               <span className="flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5" />
@@ -331,7 +339,7 @@ function PhaseCard({ hackathonId, hackathon, phase, onEdit }: PhaseCardProps) {
           <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1">
               <Users className="h-3.5 w-3.5" />
-              {phase.reviewers?.length ?? 0} Reviewers
+              {phase.reviewerCount_agg ?? phase.reviewers?.length ?? 0} Reviewers
             </span>
             <span className="flex items-center gap-1">
               <Shuffle className="h-3.5 w-3.5" />
@@ -841,9 +849,12 @@ interface PhaseFormState {
   name: string;
   description: string;
   phaseType: PhaseType;
+  evaluationMode: 'application' | 'submission';
   campusFilter: string;
   startDate: string;
   endDate: string;
+  submissionStart: string;
+  submissionEnd: string;
   location: string;
   awardCategories: AwardCategory[];
   sourcePhaseIds: string[];
@@ -853,9 +864,12 @@ const defaultFormState: PhaseFormState = {
   name: "",
   description: "",
   phaseType: "bootcamp",
+  evaluationMode: "application",
   campusFilter: "",
   startDate: "",
   endDate: "",
+  submissionStart: "",
+  submissionEnd: "",
   location: "",
   awardCategories: [],
   sourcePhaseIds: [],
@@ -898,9 +912,12 @@ function CreatePhaseDialog({
         name: editingPhase.name,
         description: editingPhase.description ?? "",
         phaseType: editingPhase.phaseType,
+        evaluationMode: editingPhase.evaluationMode ?? "application",
         campusFilter: editingPhase.campusFilter ?? "",
         startDate: toDatetimeLocal(editingPhase.startDate),
         endDate: toDatetimeLocal(editingPhase.endDate),
+        submissionStart: toDatetimeLocal(editingPhase.submissionStart),
+        submissionEnd: toDatetimeLocal(editingPhase.submissionEnd),
         location: editingPhase.location ?? "",
         awardCategories: editingPhase.awardCategories ?? [],
         sourcePhaseIds: editingPhase.sourcePhaseIds ?? [],
@@ -923,13 +940,41 @@ function CreatePhaseDialog({
       return;
     }
 
+    // Validate submission dates fall within phase dates
+    if (form.evaluationMode === "submission") {
+      const phaseStart = form.startDate ? new Date(form.startDate).getTime() : null;
+      const phaseEnd = form.endDate ? new Date(form.endDate).getTime() : null;
+      const subStart = form.submissionStart ? new Date(form.submissionStart).getTime() : null;
+      const subEnd = form.submissionEnd ? new Date(form.submissionEnd).getTime() : null;
+
+      if (subStart && subEnd && subEnd <= subStart) {
+        toast.error("Submission deadline must be after submission opens.");
+        return;
+      }
+      if (phaseStart && subStart && subStart < phaseStart) {
+        toast.error("Submission opens cannot be before the phase start date.");
+        return;
+      }
+      if (phaseEnd && subEnd && subEnd > phaseEnd) {
+        toast.error("Submission deadline cannot be after the phase end date.");
+        return;
+      }
+      if (phaseEnd && subStart && subStart > phaseEnd) {
+        toast.error("Submission opens cannot be after the phase end date.");
+        return;
+      }
+    }
+
     const payload: Partial<CompetitionPhase> = {
       name: form.name.trim(),
       description: form.description.trim() || undefined,
       phaseType: form.phaseType,
+      evaluationMode: form.evaluationMode,
       campusFilter: form.campusFilter || null,
       startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
       endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
+      submissionStart: form.submissionStart ? new Date(form.submissionStart).toISOString() : null,
+      submissionEnd: form.submissionEnd ? new Date(form.submissionEnd).toISOString() : null,
       location: form.location.trim() || null,
       awardCategories: form.awardCategories.length > 0 ? form.awardCategories : undefined,
       sourcePhaseIds: form.sourcePhaseIds.length > 0 ? form.sourcePhaseIds : undefined,
@@ -1009,6 +1054,67 @@ function CreatePhaseDialog({
               <option value="custom">Custom</option>
             </select>
           </div>
+
+          {/* Evaluation Mode */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Evaluation Mode</label>
+            <select
+              className={selectClasses}
+              value={form.evaluationMode}
+              onChange={(e) =>
+                updateField("evaluationMode", e.target.value as 'application' | 'submission')
+              }
+            >
+              <option value="application">Application Data</option>
+              <option value="submission">Team Submission</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              {form.evaluationMode === "application"
+                ? "Judges review registration/application form responses."
+                : "Judges review team project submissions."}
+            </p>
+          </div>
+
+          {/* Submission window (only for submission mode) */}
+          {form.evaluationMode === "submission" && (
+            <>
+              {(hackathon.submissionFields?.length ?? 0) === 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                    No submission form fields configured yet. Go to the Submissions tab to set up the form teams will fill out.
+                  </p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Submission Opens</label>
+                  <Input
+                    type="datetime-local"
+                    value={form.submissionStart}
+                    onChange={(e) => updateField("submissionStart", e.target.value)}
+                    min={form.startDate || undefined}
+                    max={form.endDate || undefined}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Submission Deadline</label>
+                  <Input
+                    type="datetime-local"
+                    value={form.submissionEnd}
+                    onChange={(e) => updateField("submissionEnd", e.target.value)}
+                    min={form.submissionStart || form.startDate || undefined}
+                    max={form.endDate || undefined}
+                  />
+                </div>
+              </div>
+              {form.startDate && form.endDate && (
+                <p className="text-xs text-muted-foreground">
+                  Submission window must fall within the phase dates ({new Date(form.startDate).toLocaleDateString()} – {new Date(form.endDate).toLocaleDateString()}).
+                </p>
+              )}
+            </>
+          )}
 
           {/* Campus filter */}
           <div className="space-y-1">

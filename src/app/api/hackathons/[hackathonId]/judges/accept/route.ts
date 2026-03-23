@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
-import { PROFILE_PUBLIC_COLS } from "@/lib/constants";
+import { PROFILE_PUBLIC_COLS, UUID_RE } from "@/lib/constants";
 import type { User } from "@/lib/types";
 
 /** GET: Look up invitation details by token (read-only, no side effects) */
@@ -11,6 +11,9 @@ export async function GET(
 ) {
   try {
     const { hackathonId } = await params;
+    if (!UUID_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
     const token = request.nextUrl.searchParams.get("token");
 
     if (!token) {
@@ -41,10 +44,10 @@ export async function GET(
       .eq("id", hackathonId)
       .single();
 
+    // Only return minimal info — do NOT expose invitee email to unauthenticated callers
     return NextResponse.json({
       data: {
         id: invitation.id,
-        email: invitation.email,
         name: invitation.name,
         status: invitation.status,
         hackathonName: hackathon?.name || "Unknown Hackathon",
@@ -65,6 +68,9 @@ export async function POST(
 ) {
   try {
     const { hackathonId } = await params;
+    if (!UUID_RE.test(hackathonId)) {
+      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+    }
     const { token } = await request.json();
 
     if (!token) {

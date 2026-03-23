@@ -21,7 +21,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { SafeHtml } from "@/components/ui/safe-html";
 import dynamic from "next/dynamic";
 const ShareDialog = dynamic(() => import("@/components/dialogs/share-dialog").then(m => m.ShareDialog), { ssr: false });
-import { cn, formatDate, getInitials } from "@/lib/utils";
+import { cn, formatDate, getInitials, safeHref } from "@/lib/utils";
 import { useSubmission } from "@/hooks/use-submissions";
 import { useHackathons } from "@/hooks/use-hackathons";
 import { useState } from "react";
@@ -218,7 +218,7 @@ export default function SubmissionDetailPage() {
           <div className="flex flex-wrap gap-3">
             {submission.githubUrl && (
               <Button variant="outline" asChild className="gap-2">
-                <a href={submission.githubUrl} target="_blank" rel="noopener noreferrer">
+                <a href={safeHref(submission.githubUrl)} target="_blank" rel="noopener noreferrer">
                   <Github className="h-4 w-4" />
                   GitHub Repository
                   <ExternalLink className="h-3 w-3" />
@@ -227,7 +227,7 @@ export default function SubmissionDetailPage() {
             )}
             {submission.demoUrl && (
               <Button variant="outline" asChild className="gap-2">
-                <a href={submission.demoUrl} target="_blank" rel="noopener noreferrer">
+                <a href={safeHref(submission.demoUrl)} target="_blank" rel="noopener noreferrer">
                   <Globe className="h-4 w-4" />
                   Live Demo
                   <ExternalLink className="h-3 w-3" />

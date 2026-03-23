@@ -51,7 +51,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, formatDate, getInitials } from "@/lib/utils";
+import { cn, formatDate, getInitials, safeHref } from "@/lib/utils";
 import type { Hackathon, FormField } from "@/lib/types";
 import { fetchJson } from "@/lib/fetch-json";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -245,7 +245,7 @@ function renderFormValue(field: FormField, value: unknown): React.ReactNode {
     case "url":
       return (
         <a
-          href={String(value)}
+          href={safeHref(String(value))}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm text-primary underline hover:text-primary/80"
@@ -263,7 +263,7 @@ function renderFormValue(field: FormField, value: unknown): React.ReactNode {
         : "View file";
       return (
         <a
-          href={fileUrl}
+          href={safeHref(fileUrl)}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm text-primary underline hover:text-primary/80"

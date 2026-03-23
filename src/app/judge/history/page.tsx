@@ -126,7 +126,7 @@ export default function JudgingHistoryPage() {
       const allScores = group.phases.flatMap((p) => p.scores);
       if (allScores.length > 0) {
         const sum = allScores.reduce(
-          (acc, s) => acc + Number(s.total_score || 0),
+          (acc, s) => acc + Number(s.totalScore || 0),
           0
         );
         group.averageScore = Math.round((sum / allScores.length) * 100) / 100;
@@ -584,11 +584,11 @@ function ScoreRow({ score, index, phase, hackathonId }: ScoreRowProps) {
     ? `Applicant #${index + 1}`
     : registration?.applicant?.name || `Applicant #${index + 1}`;
 
-  const criteriaScores = score.criteria_scores || [];
-  const totalScore = Number(score.total_score || 0);
+  const criteriaScores = score.criteriaScores || [];
+  const totalScore = Number(score.totalScore || 0);
   const recommendation = score.recommendation;
   const flagged = score.flagged;
-  const overallFeedback = score.overall_feedback;
+  const overallFeedback = score.overallFeedback;
   const scoringCriteria = (phase.scoringCriteria || []) as ScoringCriteria[];
 
   // Build a lookup for criteria names

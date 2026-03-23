@@ -45,11 +45,19 @@ export async function POST(request: NextRequest) {
     if (error) {
       // If user already exists, check if they're unverified and resend OTP
       if (error.message?.includes("already been registered")) {
-        // First, try to find the user by primary email in auth.users
-        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-        const existingUser = existingUsers?.users?.find(
-          (u) => u.email?.toLowerCase() === email.toLowerCase()
-        );
+        // Find the user by email in the profiles table, then fetch auth user by ID.
+        // This avoids scanning all users (listUsers has pagination limits).
+        const { data: profileRow } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("email", email.toLowerCase())
+          .maybeSingle();
+
+        let existingUser: Awaited<ReturnType<typeof supabaseAdmin.auth.admin.getUserById>>["data"]["user"] | null = null;
+        if (profileRow) {
+          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(profileRow.id);
+          existingUser = authUser?.user ?? null;
+        }
 
         if (existingUser && !existingUser.email_confirmed_at) {
           // User exists but unverified — update password and resend OTP

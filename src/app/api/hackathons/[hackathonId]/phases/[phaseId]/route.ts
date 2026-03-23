@@ -197,11 +197,11 @@ export async function GET(
       phase as Record<string, unknown>
     );
 
-    // Fetch registration field definitions so the reviewer can display
+    // Fetch field definitions so the reviewer can display
     // human-readable labels for form_data keys.
     const { data: hackathonFields } = await supabase
       .from("hackathons")
-      .select("registration_fields")
+      .select("registration_fields, submission_fields")
       .eq("id", hackathonId)
       .single();
 
@@ -211,6 +211,7 @@ export async function GET(
         name: mappedPhase.name,
         description: mappedPhase.description,
         status: mappedPhase.status,
+        evaluationMode: mappedPhase.evaluationMode,
         scoringCriteria: mappedPhase.scoringCriteria,
         scoringScaleMax: mappedPhase.scoringScaleMax,
         requireRecommendation: mappedPhase.requireRecommendation,
@@ -219,6 +220,9 @@ export async function GET(
         reviewerCount: mappedPhase.reviewerCount,
         campusFilter: null, // Hide from reviewers
         registrationFields: hackathonFields?.registration_fields || [],
+        submissionFields: mappedPhase.evaluationMode === "submission"
+          ? (hackathonFields?.submission_fields || [])
+          : [],
       },
     });
   } catch (err) {
@@ -517,9 +521,9 @@ export async function PATCH(
             { status: 400 }
           );
         }
-        if (typeof cat.id !== "string" || cat.id.trim() === "") {
+        if (typeof cat.id !== "string" || !UUID_RE.test(cat.id)) {
           return NextResponse.json(
-            { error: "Each award category must have a non-empty id" },
+            { error: "Each award category must have a valid UUID id" },
             { status: 400 }
           );
         }
@@ -563,6 +567,44 @@ export async function PATCH(
       }
     }
 
+    // Validate evaluationMode if provided
+    if (body.evaluationMode !== undefined) {
+      if (!["application", "submission"].includes(body.evaluationMode)) {
+        return NextResponse.json(
+          { error: "evaluationMode must be 'application' or 'submission'" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate submission dates when provided
+    if (body.submissionStart !== undefined || body.submissionEnd !== undefined) {
+      const existingRow = existing as Record<string, unknown>;
+      const subStart = body.submissionStart ?? existingRow.submission_start;
+      const subEnd = body.submissionEnd ?? existingRow.submission_end;
+      const phaseStart = body.startDate ?? existingRow.start_date;
+      const phaseEnd = body.endDate ?? existingRow.end_date;
+
+      if (subStart && subEnd && new Date(subEnd as string) <= new Date(subStart as string)) {
+        return NextResponse.json(
+          { error: "submissionEnd must be after submissionStart" },
+          { status: 400 }
+        );
+      }
+      if (phaseStart && subStart && new Date(subStart as string) < new Date(phaseStart as string)) {
+        return NextResponse.json(
+          { error: "submissionStart cannot be before the phase startDate" },
+          { status: 400 }
+        );
+      }
+      if (phaseEnd && subEnd && new Date(subEnd as string) > new Date(phaseEnd as string)) {
+        return NextResponse.json(
+          { error: "submissionEnd cannot be after the phase endDate" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Build the update payload using the mapper (only includes provided fields)
     const updatePayload = phaseFormToDbRow({
       ...(body.name !== undefined && { name: body.name.trim() }),
@@ -570,6 +612,7 @@ export async function PATCH(
         description: body.description,
       }),
       ...(body.phaseType !== undefined && { phaseType: body.phaseType }),
+      ...(body.evaluationMode !== undefined && { evaluationMode: body.evaluationMode }),
       ...(body.campusFilter !== undefined && {
         campusFilter: body.campusFilter,
       }),
@@ -591,6 +634,8 @@ export async function PATCH(
       }),
       ...(body.startDate !== undefined && { startDate: body.startDate }),
       ...(body.endDate !== undefined && { endDate: body.endDate }),
+      ...(body.submissionStart !== undefined && { submissionStart: body.submissionStart }),
+      ...(body.submissionEnd !== undefined && { submissionEnd: body.submissionEnd }),
       ...(body.location !== undefined && { location: body.location }),
       ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
       ...(body.status !== undefined && { status: body.status }),

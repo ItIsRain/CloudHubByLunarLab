@@ -10,13 +10,22 @@ interface SafeHtmlProps {
 // Only allow http(s) and mailto protocols — blocks javascript:, data:, vbscript: etc.
 const SAFE_URI_RE = /^(?:https?|mailto):/i;
 
-// Configure DOMPurify once: force rel="noopener noreferrer" on all <a> tags
-// via afterSanitizeAttributes hook (safer than post-processing regex).
+// Allowlisted iframe domains for embedded content (YouTube only)
+const IFRAME_ALLOW_RE = /^https:\/\/(?:www\.)?(?:youtube\.com|youtube-nocookie\.com)\//i;
+
+// Configure DOMPurify once via afterSanitizeAttributes hook.
 if (typeof window !== "undefined") {
   DOMPurify.addHook("afterSanitizeAttributes", (node) => {
     if (node.tagName === "A") {
       node.setAttribute("rel", "noopener noreferrer");
       node.setAttribute("target", "_blank");
+    }
+    // Strip iframes whose src is not in the allowlist
+    if (node.tagName === "IFRAME") {
+      const src = node.getAttribute("src") || "";
+      if (!IFRAME_ALLOW_RE.test(src)) {
+        node.parentNode?.removeChild(node);
+      }
     }
   });
 }
@@ -38,7 +47,7 @@ export function SafeHtml({ content, className }: SafeHtmlProps) {
     ],
     ALLOWED_ATTR: [
       "href", "target", "rel", "src", "alt", "width", "height",
-      "class", "style",
+      "class",
       // iframe attrs for YouTube embeds
       "allowfullscreen", "frameborder", "allow",
     ],

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
+import { UUID_RE } from "@/lib/constants";
 import type { TeamSuggestion } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
@@ -17,9 +18,9 @@ export async function GET(request: NextRequest) {
 
     const hackathonId = request.nextUrl.searchParams.get("hackathon_id");
 
-    if (!hackathonId) {
+    if (!hackathonId || !UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "hackathon_id query parameter is required" },
+        { error: "Valid hackathon_id query parameter is required" },
         { status: 400 }
       );
     }

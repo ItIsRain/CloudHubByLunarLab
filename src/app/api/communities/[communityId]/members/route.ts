@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToCommunityMember } from "@/lib/supabase/mappers";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
-import { UUID_RE } from "@/lib/constants";
+import { UUID_RE, SAFE_SLUG_RE } from "@/lib/constants";
 
 function communityFilter(id: string) {
   return UUID_RE.test(id) ? `id.eq.${id}` : `slug.eq.${id}`;
@@ -15,6 +15,11 @@ export async function GET(
 ) {
   try {
     const { communityId } = await params;
+
+    if (!UUID_RE.test(communityId) && !SAFE_SLUG_RE.test(communityId)) {
+      return NextResponse.json({ error: "Invalid community ID" }, { status: 400 });
+    }
+
     const { searchParams } = new URL(request.url);
 
     const auth = await authenticateRequest(request);

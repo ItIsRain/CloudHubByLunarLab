@@ -104,8 +104,11 @@ export default function MentorSessionsPage() {
   };
 
   const handleJoin = (session: MentorSession) => {
-    if (session.meetingUrl) {
-      window.open(session.meetingUrl, "_blank");
+    const url = session.meetingUrl;
+    if (url?.startsWith("http://") || url?.startsWith("https://")) {
+      window.open(url, "_blank");
+    } else if (url) {
+      toast.error("Invalid meeting URL.");
     } else {
       toast.info("No meeting URL set for this session.");
     }

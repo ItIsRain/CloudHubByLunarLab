@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { SortableList } from "@/components/ui/sortable-list";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, safeHref } from "@/lib/utils";
 import type { Hackathon, Sponsor } from "@/lib/types";
 import { useUpdateHackathon } from "@/hooks/use-hackathons";
 import { toast } from "sonner";
@@ -90,7 +90,7 @@ function SponsorCard({ sponsor, dragHandle, onRemove, isPending }: SponsorCardPr
             )}
             {sponsor.website && (
               <a
-                href={sponsor.website}
+                href={safeHref(sponsor.website)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs text-primary hover:underline"

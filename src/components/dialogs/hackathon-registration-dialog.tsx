@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn, safeHref } from "@/lib/utils";
 import { toast } from "sonner";
 import type { FormField, FormSection } from "@/lib/types";
 
@@ -804,7 +804,7 @@ function ReviewField({
       const file = value as { originalFilename?: string; url?: string; format?: string } | null;
       if (!file?.url) return <span className="text-muted-foreground italic">No file</span>;
       return (
-        <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">
+        <a href={safeHref(file.url)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">
           <FileText className="h-3.5 w-3.5" />
           {file.originalFilename || "Uploaded file"}
         </a>
@@ -976,7 +976,7 @@ function FileUploadField({
               </p>
             </div>
             <div className="flex items-center gap-1">
-              <a href={uploaded.url} target="_blank" rel="noopener noreferrer">
+              <a href={safeHref(uploaded.url)} target="_blank" rel="noopener noreferrer">
                 <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0">
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Button>

@@ -137,6 +137,36 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const normalizeJoin = (val: any) => (Array.isArray(val) ? val[0] : val) ?? null;
+
+    // Helper: map a raw score row to camelCase
+    function mapScore(s: Record<string, unknown>, stripIdentity: boolean) {
+      const reg = normalizeJoin(s.registration);
+      const applicant = reg ? normalizeJoin(reg.applicant) : null;
+      return {
+        id: s.id,
+        phaseId: s.phase_id,
+        reviewerId: s.reviewer_id,
+        registrationId: s.registration_id,
+        criteriaScores: s.criteria_scores,
+        totalScore: s.total_score,
+        recommendation: s.recommendation,
+        overallFeedback: s.overall_feedback,
+        flagged: s.flagged,
+        submittedAt: s.submitted_at,
+        updatedAt: s.updated_at,
+        registration: reg
+          ? {
+              id: reg.id,
+              applicant: stripIdentity ? null : applicant
+                ? { id: applicant.id, name: applicant.name, email: applicant.email }
+                : null,
+            }
+          : null,
+      };
+    }
+
     // 4. Build score lookup by phase_id
     const scoresByPhase = new Map<string, Array<Record<string, unknown>>>();
     for (const s of scores) {
@@ -159,19 +189,6 @@ export async function GET(request: NextRequest) {
         const pid = phase.id as string;
         const phaseScores = scoresByPhase.get(pid) || [];
         const isBlindReview = phase.blind_review === true;
-
-        // Strip applicant info if blind review is on
-        const sanitizedScores = isBlindReview
-          ? phaseScores.map((s) => ({
-              ...s,
-              registration: s.registration
-                ? {
-                    id: (s.registration as Record<string, unknown>).id,
-                    applicant: null,
-                  }
-                : null,
-            }))
-          : phaseScores;
 
         return {
           reviewerId: r.id,
@@ -203,7 +220,7 @@ export async function GET(request: NextRequest) {
                     100
                 ) / 100
               : null,
-          scores: sanitizedScores,
+          scores: phaseScores.map((s) => mapScore(s, isBlindReview)),
         };
       });
 

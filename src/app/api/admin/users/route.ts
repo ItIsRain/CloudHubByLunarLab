@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
 
     // Search by name or email (case-insensitive)
     if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+      const safe = search.replace(/[%_,.()\\]/g, (c) => `\\${c}`);
+      query = query.or(`name.ilike.%${safe}%,email.ilike.%${safe}%`);
     }
 
     // Filter by role (roles is a JSONB array, use contains)

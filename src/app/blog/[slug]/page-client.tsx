@@ -17,6 +17,7 @@ import { useBlogPost, useBlogPosts } from "@/hooks/use-blog";
 import { SafeHtml } from "@/components/ui/safe-html";
 import { useBlogEngagement } from "@/hooks/use-blog-engagement";
 import { buildBlogPostJsonLd, buildBreadcrumbJsonLd, SITE_URL } from "@/lib/seo";
+import { JsonLd } from "@/components/seo/json-ld";
 
 export default function BlogPostPage() {
   const params = useParams();
@@ -88,40 +89,26 @@ export default function BlogPostPage() {
     <>
       <Navbar />
       {/* JSON-LD: BlogPosting */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
-            buildBlogPostJsonLd({
-              title: post.title,
-              excerpt: post.excerpt,
-              slug: post.slug,
-              coverImage: post.coverImage,
-              publishedAt: post.publishedAt,
-              updatedAt: post.updatedAt,
-              author: post.author
-                ? { name: post.author.name, avatar: post.author.avatar }
-                : undefined,
-              category: post.category,
-              tags: post.tags,
-              readTime: post.readTime,
-            })
-          ),
-        }}
-      />
+      <JsonLd data={buildBlogPostJsonLd({
+        title: post.title,
+        excerpt: post.excerpt,
+        slug: post.slug,
+        coverImage: post.coverImage,
+        publishedAt: post.publishedAt,
+        updatedAt: post.updatedAt,
+        author: post.author
+          ? { name: post.author.name, avatar: post.author.avatar }
+          : undefined,
+        category: post.category,
+        tags: post.tags,
+        readTime: post.readTime,
+      })} />
       {/* JSON-LD: Breadcrumbs */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
-            buildBreadcrumbJsonLd([
-              { name: "Home", path: "/" },
-              { name: "Blog", path: "/blog" },
-              { name: post.title },
-            ])
-          ),
-        }}
-      />
+      <JsonLd data={buildBreadcrumbJsonLd([
+        { name: "Home", path: "/" },
+        { name: "Blog", path: "/blog" },
+        { name: post.title },
+      ])} />
       <main className="min-h-screen bg-background">
         {/* Cover Image Hero */}
         {post.coverImage && (

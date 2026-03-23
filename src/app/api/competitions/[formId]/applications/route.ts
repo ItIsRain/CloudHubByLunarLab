@@ -81,7 +81,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (campus) query = query.eq("campus", campus);
   if (sector) query = query.eq("sector", sector);
   if (search) {
-    query = query.or(`applicant_name.ilike.%${search}%,applicant_email.ilike.%${search}%,startup_name.ilike.%${search}%`);
+    const safe = search.replace(/[%_,.()\\]/g, (c) => `\\${c}`);
+    query = query.or(`applicant_name.ilike.%${safe}%,applicant_email.ilike.%${safe}%,startup_name.ilike.%${safe}%`);
   }
 
   const from = (page - 1) * pageSize;

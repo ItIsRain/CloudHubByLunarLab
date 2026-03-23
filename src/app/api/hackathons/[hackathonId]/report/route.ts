@@ -5,7 +5,7 @@ import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { checkHackathonAccess } from "@/lib/check-hackathon-access";
+import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
 
 // Helper to get lastAutoTable.finalY from doc (jspdf-autotable augments the doc)
 function getLastTableY(doc: jsPDF, fallback: number): number {
@@ -26,9 +26,9 @@ async function authenticateAndAuthorize(request: NextRequest, hackathonId: strin
   }
   const supabase = auth.type === "api_key" ? getSupabaseAdminClient() : await getSupabaseServerClient();
 
-  // Check access via RBAC (all collaborator roles can view reports)
+  // Check access via RBAC (only owner/admin/editor can view full reports)
   const access = await checkHackathonAccess(supabase, hackathonId, auth.userId);
-  if (!access.hasAccess) {
+  if (!access.hasAccess || !canEdit(access.role)) {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
 

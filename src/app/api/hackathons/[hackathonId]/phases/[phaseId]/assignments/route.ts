@@ -43,7 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Verify phase belongs to this hackathon
     const { data: phase } = await supabase
       .from("competition_phases")
-      .select("id, blind_review")
+      .select("id, blind_review, evaluation_mode")
       .eq("id", phaseId)
       .eq("hackathon_id", hackathonId)
       .maybeSingle();
@@ -149,6 +149,55 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // ── Submission enrichment for submission-mode phases ──
+    const isSubmissionMode = (phase as Record<string, unknown>).evaluation_mode === "submission";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let submissionMap: Record<string, any> = {};
+    if (isSubmissionMode && isMineQuery) {
+      // Look up submissions via: registration.user_id → team_members.user_id → teams.id → submissions.team_id
+      const regUserIds = registrationUserIds; // already collected above
+      if (regUserIds.length > 0) {
+        // Get team memberships for these users within this hackathon
+        const { data: teamMemberships } = await supabase
+          .from("team_members")
+          .select("user_id, team_id, team:teams!team_members_team_id_fkey(id, hackathon_id)")
+          .in("user_id", regUserIds);
+
+        // Filter to teams belonging to this hackathon
+        const teamIds = new Set<string>();
+        const userToTeam: Record<string, string> = {};
+        for (const tm of teamMemberships || []) {
+          const team = normalizeJoin((tm as Record<string, unknown>).team);
+          if (team && team.hackathon_id === hackathonId) {
+            const teamId = (tm as Record<string, unknown>).team_id as string;
+            teamIds.add(teamId);
+            userToTeam[(tm as Record<string, unknown>).user_id as string] = teamId;
+          }
+        }
+
+        if (teamIds.size > 0) {
+          const { data: submissions } = await supabase
+            .from("submissions")
+            .select("id, team_id, project_name, form_data, description, github_url, demo_url, tech_stack")
+            .eq("hackathon_id", hackathonId)
+            .in("team_id", [...teamIds]);
+
+          // Map team_id → submission
+          const teamSubmission: Record<string, Record<string, unknown>> = {};
+          for (const sub of submissions || []) {
+            teamSubmission[(sub as Record<string, unknown>).team_id as string] = sub as Record<string, unknown>;
+          }
+
+          // Map registration user_id → submission
+          for (const [userId, teamId] of Object.entries(userToTeam)) {
+            if (teamSubmission[teamId]) {
+              submissionMap[userId] = teamSubmission[teamId];
+            }
+          }
+        }
+      }
+    }
+
     // Map to camelCase for the frontend
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let responseData = (assignments || []).map((a) => {
@@ -171,6 +220,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         applicant,
       } : null;
 
+      // Include submission data for submission-mode phases
+      const submission = (isSubmissionMode && userId && submissionMap[userId])
+        ? submissionMap[userId]
+        : null;
+
       return {
         id: a.id,
         phaseId: a.phase_id,
@@ -181,17 +235,49 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         applicantName: applicant?.name || null,
         applicantEmail: applicant?.email || null,
         registration,
+        submission,
       };
     });
 
     // Strip applicant identity for blind review (reviewer only)
     if (!isOrganizer && isBlindReview) {
-      responseData = responseData.map((a) => ({
-        ...a,
-        applicantName: null,
-        applicantEmail: null,
-        registration: a.registration ? { ...a.registration, applicant: null } : null,
-      }));
+      responseData = responseData.map((a) => {
+        // Also sanitize form_data to remove personally identifying fields
+        let sanitizedFormData = a.registration?.form_data ?? null;
+        if (sanitizedFormData && typeof sanitizedFormData === "object") {
+          const cleaned = { ...sanitizedFormData };
+          // Remove fields whose keys or labels suggest personal identity
+          for (const key of Object.keys(cleaned)) {
+            const lower = key.toLowerCase();
+            if (
+              lower.includes("name") ||
+              lower.includes("email") ||
+              lower.includes("phone") ||
+              lower.includes("mobile") ||
+              lower.includes("contact") ||
+              lower.includes("whatsapp") ||
+              lower.includes("linkedin") ||
+              lower.includes("twitter") ||
+              lower.includes("instagram") ||
+              lower.includes("github") ||
+              lower.includes("national_id") ||
+              lower.includes("passport") ||
+              lower.includes("emirates_id")
+            ) {
+              delete cleaned[key];
+            }
+          }
+          sanitizedFormData = cleaned;
+        }
+        return {
+          ...a,
+          applicantName: null,
+          applicantEmail: null,
+          registration: a.registration
+            ? { ...a.registration, applicant: null, form_data: sanitizedFormData }
+            : null,
+        };
+      });
     }
 
     return NextResponse.json({ data: responseData });
@@ -238,10 +324,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Get the phase configuration (reviewer_count, campus_filter) and verify it belongs to this hackathon
+    // Get the phase configuration (reviewer_count, campus_filter, source_phase_ids) and verify it belongs to this hackathon
     const { data: phase } = await supabase
       .from("competition_phases")
-      .select("id, reviewer_count, campus_filter, status")
+      .select("id, reviewer_count, campus_filter, status, source_phase_ids")
       .eq("id", phaseId)
       .eq("hackathon_id", hackathonId)
       .single();
@@ -264,6 +350,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const body = await request.json().catch(() => ({}));
     const manualReviewerId = (body as Record<string, unknown>).reviewerId as string | undefined;
     const assignMode = (body as Record<string, unknown>).mode as string | undefined;
+
+    // Validate reviewerId if provided
+    if (manualReviewerId && !UUID_RE.test(manualReviewerId)) {
+      return NextResponse.json({ error: "Invalid reviewerId" }, { status: 400 });
+    }
 
     // 1. Get all available reviewers for this phase (invited + accepted)
     const { data: reviewers, error: reviewersError } = await supabase
@@ -317,9 +408,64 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
     }
 
+    // ── Source phase filter: only allow applicants who advanced from source phases ──
+    const sourcePhaseIds = (phase.source_phase_ids as string[] | null) || [];
+    if (sourcePhaseIds.length > 0) {
+      // Fetch decisions with "advance" from all source phases
+      const { data: advanceDecisions, error: decError } = await supabase
+        .from("phase_decisions")
+        .select("registration_id")
+        .in("phase_id", sourcePhaseIds)
+        .eq("decision", "advance");
+
+      if (decError) {
+        console.error("Failed to fetch source phase decisions:", decError);
+        return NextResponse.json(
+          { error: "Failed to verify source phase advancement" },
+          { status: 500 }
+        );
+      }
+
+      // Also check phase_finalists as an alternative advancement path
+      const { data: finalists, error: finError } = await supabase
+        .from("phase_finalists")
+        .select("registration_id")
+        .in("phase_id", sourcePhaseIds);
+
+      if (finError) {
+        console.error("Failed to fetch source phase finalists:", finError);
+      }
+
+      // Build set of registration IDs that advanced
+      const advancedRegIds = new Set<string>();
+      for (const d of advanceDecisions || []) {
+        advancedRegIds.add(d.registration_id as string);
+      }
+      for (const f of finalists || []) {
+        advancedRegIds.add(f.registration_id as string);
+      }
+
+      if (advancedRegIds.size === 0) {
+        return NextResponse.json(
+          { error: "No applicants have advanced from the source phase(s). Complete decisions in the source phase first." },
+          { status: 400 }
+        );
+      }
+
+      // Filter to only advanced applicants
+      filteredRegistrations = filteredRegistrations.filter((reg) =>
+        advancedRegIds.has(reg.id as string)
+      );
+    }
+
     if (filteredRegistrations.length === 0) {
+      const filterDesc = sourcePhaseIds.length > 0
+        ? "No advanced applicants match the filters for this phase"
+        : campusFilter
+          ? "No applicants match the campus filter for this phase"
+          : "No eligible applicants found";
       return NextResponse.json(
-        { error: "No applicants match the campus filter for this phase" },
+        { error: filterDesc },
         { status: 400 }
       );
     }
@@ -379,6 +525,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     } else if (assignMode === "single" && manualReviewerId && (body as Record<string, unknown>).registrationId) {
       // ── Single manual assignment ──
       const registrationId = (body as Record<string, unknown>).registrationId as string;
+      if (!UUID_RE.test(registrationId)) {
+        return NextResponse.json({ error: "Invalid registrationId" }, { status: 400 });
+      }
       const targetReviewer = reviewers.find((r) => r.user_id === manualReviewerId);
       if (!targetReviewer) {
         return NextResponse.json(

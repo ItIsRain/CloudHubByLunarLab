@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToNotification } from "@/lib/supabase/mappers";
-import { NOTIFICATION_COLS } from "@/lib/constants";
+import { NOTIFICATION_COLS, UUID_RE } from "@/lib/constants";
 
 export async function PATCH(
   request: NextRequest,
@@ -9,6 +9,9 @@ export async function PATCH(
 ) {
   try {
     const { notificationId } = await params;
+    if (!UUID_RE.test(notificationId)) {
+      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+    }
     const supabase = await getSupabaseServerClient();
     const {
       data: { user },
@@ -57,6 +60,9 @@ export async function DELETE(
 ) {
   try {
     const { notificationId } = await params;
+    if (!UUID_RE.test(notificationId)) {
+      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+    }
     const supabase = await getSupabaseServerClient();
     const {
       data: { user },
