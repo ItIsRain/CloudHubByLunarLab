@@ -162,7 +162,10 @@
       "Bash(grep -l \"CREATE TABLE.*hackathon\" /c/Users/dared/Documents/OneToOneEvents/supabase/migrations/*.sql)",
       "Bash(grep -n \"in.*status\" /c/Users/dared/Documents/OneToOneEvents/src/app/api/hackathons/\\\\[hackathonId\\\\]/phases/\\\\[phaseId\\\\]/assignments/route.ts | head -5)",
       "Bash(grep -n \"function.*Filter\\\\|const.*Filter\" /c/Users/dared/Documents/OneToOneEvents/src/app/api/communities/\\\\[communityId\\\\]/route.ts | head -20)",
-      "Bash(grep -B 2 \"function.*Filter\\\\|const.*Filter =\" /c/Users/dared/Documents/OneToOneEvents/src/app/api/communities/\\\\[communityId\\\\]/route.ts)"
+      "Bash(grep -B 2 \"function.*Filter\\\\|const.*Filter =\" /c/Users/dared/Documents/OneToOneEvents/src/app/api/communities/\\\\[communityId\\\\]/route.ts)",
+      "Bash(ls:*)",
+      "mcp__plugin_supabase_supabase__get_logs",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); import re; txt=d[0]['text']; j=json.loads\\(txt\\); rows=j['result']['result']; [print\\(r.get\\('event_message',''\\)\\) for r in rows if 'alyazya' in str\\(r\\) or '594aeede' in str\\(r\\) or 'khalifa' in str\\(r\\).lower\\(\\)]\")"
     ]
   }
 }
