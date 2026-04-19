@@ -33,9 +33,17 @@ function isValidExportType(value: unknown): value is ExportType {
 
 function escapeCsvValue(value: unknown): string {
   if (value === null || value === undefined) return "";
-  const str = String(value);
-  // Wrap in quotes if the value contains commas, quotes, or newlines
-  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+  let str = String(value);
+  // Prevent CSV formula injection: if the value starts with a character
+  // that spreadsheet apps (Excel, Google Sheets) interpret as a formula
+  // trigger, prefix it with a single-quote so it's treated as plain text.
+  // This blocks =HYPERLINK(), =cmd|, +cmd, -cmd, @SUM, etc.
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  // Wrap in quotes if the value contains commas, quotes, newlines, or
+  // the single-quote prefix we just added.
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r") || str.includes("'")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
@@ -223,7 +231,7 @@ async function exportScores(
       .single();
 
     if (!phase) {
-      throw new Error("Phase not found for this hackathon");
+      throw new Error("Phase not found for this competition");
     }
     phaseIds = [phaseId];
   } else {
@@ -521,7 +529,7 @@ export async function GET(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -570,7 +578,7 @@ export async function GET(
     }
 
     const date = new Date().toISOString().slice(0, 10);
-    const filename = `hackathon-${exportType}-${date}.csv`;
+    const filename = `competition-${exportType}-${date}.csv`;
 
     return new Response(csv, {
       status: 200,

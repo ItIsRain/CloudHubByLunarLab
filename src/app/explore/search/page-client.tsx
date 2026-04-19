@@ -89,7 +89,7 @@ function SearchResultsContent() {
             <form onSubmit={handleSearch} className="max-w-2xl relative">
               <Input
                 type="text"
-                placeholder="Search events, hackathons, communities, people..."
+                placeholder="Search events, competitions, communities, people..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 icon={<Search className="h-5 w-5" />}

@@ -69,7 +69,7 @@ const statusConfig: Record<
   published: { label: "Published", variant: "success" },
   "registration-open": { label: "Registration Open", variant: "success" },
   "registration-closed": { label: "Registration Closed", variant: "warning" },
-  hacking: { label: "Hacking in Progress", variant: "gradient" },
+  hacking: { label: "Competing in Progress", variant: "gradient" },
   submission: { label: "Submissions Open", variant: "warning" },
   judging: { label: "Judging", variant: "secondary" },
   completed: { label: "Completed", variant: "muted" },
@@ -120,7 +120,7 @@ function HackathonDashboardContent() {
   // Redirect unauthorized users
   React.useEffect(() => {
     if (!isLoading && !authLoading && hackathon && user && !hasAccess) {
-      toast.error("You don't have permission to manage this hackathon.");
+      toast.error("You don't have permission to manage this competition.");
       router.replace("/dashboard/hackathons");
     }
   }, [isLoading, authLoading, hackathon, user, hasAccess, router]);

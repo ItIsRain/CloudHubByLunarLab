@@ -49,7 +49,7 @@ function buildMergedTimeline(
   const defaultItems: TimelineItem[] = [
     { label: "Registration Opens", date: hackathon.registrationStart },
     { label: "Registration Closes", date: hackathon.registrationEnd },
-    { label: "Hacking Starts", date: hackathon.hackingStart },
+    { label: "Competing Starts", date: hackathon.hackingStart },
     { label: "Submission Deadline", date: hackathon.submissionDeadline },
     { label: "Judging Begins", date: hackathon.judgingStart },
     { label: "Winners Announced", date: hackathon.winnersAnnouncement },
@@ -120,7 +120,7 @@ export default function HackathonOverviewPage() {
               The hackathon you&apos;re looking for doesn&apos;t exist or has been removed.
             </p>
             <Button asChild>
-              <Link href="/hackathons">Browse Hackathons</Link>
+              <Link href="/hackathons">Browse Competitions</Link>
             </Button>
           </div>
         </main>

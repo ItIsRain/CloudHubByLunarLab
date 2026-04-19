@@ -177,7 +177,7 @@ export default function ProfilePage() {
             <Tabs defaultValue="events">
               <TabsList>
                 <TabsTrigger value="events">Events</TabsTrigger>
-                <TabsTrigger value="hackathons">Hackathons</TabsTrigger>
+                <TabsTrigger value="hackathons">Competitions</TabsTrigger>
                 <TabsTrigger value="projects">Projects</TabsTrigger>
               </TabsList>
 

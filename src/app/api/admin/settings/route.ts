@@ -24,44 +24,9 @@ async function fetchSettingsMap(): Promise<Record<string, unknown>> {
   return map;
 }
 
-/**
- * Verify the current user is authenticated and has the admin role.
- * Returns the user ID on success, or a NextResponse error on failure.
- */
-async function verifyAdmin(): Promise<
-  { userId: string } | { error: NextResponse }
-> {
-  const supabase = await getSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return {
-      error: NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      ),
-    };
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("roles")
-    .eq("id", user.id)
-    .single();
-
-  const roles = (profile?.roles as string[]) || [];
-  if (!roles.includes("admin")) {
-    return {
-      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-    };
-  }
-
-  return { userId: user.id };
-}
+// Shared admin verification — reads roles via admin client to prevent
+// privilege escalation through self-modification of profiles.roles.
+import { verifyAdmin } from "@/lib/verify-admin";
 
 /**
  * GET /api/admin/settings

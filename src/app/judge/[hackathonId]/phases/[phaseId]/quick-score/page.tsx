@@ -526,7 +526,7 @@ function QuickScoreContent() {
               mode.
             </p>
             <Button asChild className="mt-6">
-              <Link href={`/judge/${hackathonId}`}>Back to Hackathon</Link>
+              <Link href={`/judge/${hackathonId}`}>Back to Competition</Link>
             </Button>
           </div>
         </main>
@@ -549,7 +549,7 @@ function QuickScoreContent() {
               phase. The organizer will assign reviewers soon.
             </p>
             <Button asChild className="mt-6">
-              <Link href={`/judge/${hackathonId}`}>Back to Hackathon</Link>
+              <Link href={`/judge/${hackathonId}`}>Back to Competition</Link>
             </Button>
           </div>
         </main>

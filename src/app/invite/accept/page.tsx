@@ -4,7 +4,7 @@ import AcceptInvitationPage from "./page-client";
 
 export const metadata: Metadata = buildMetadata({
   title: "Accept Invitation",
-  description: "Accept your invitation to join a private event or hackathon on CloudHub.",
+  description: "Accept your invitation to join a private event or competition on CloudHub.",
   path: "/invite/accept",
 });
 

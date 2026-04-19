@@ -32,12 +32,12 @@ const roleOptions: { value: UserRole; label: string; description: string }[] = [
   {
     value: "attendee",
     label: "Attendee",
-    description: "Join events and hackathons",
+    description: "Join events and competitions",
   },
   {
     value: "organizer",
     label: "Organizer",
-    description: "Host events and hackathons",
+    description: "Host events and competitions",
   },
 ];
 

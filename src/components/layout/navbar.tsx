@@ -309,7 +309,7 @@ export function Navbar() {
                   }}
                   onKeyDown={handleSearchKeyDown}
                   className="flex h-9 w-full rounded-lg border border-input bg-muted/50 pl-9 pr-3 py-1.5 text-sm ring-offset-background transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary focus-visible:bg-background"
-                  aria-label="Search events, hackathons, people"
+                  aria-label="Search events, competitions, people"
                   aria-expanded={searchOpen}
                   aria-autocomplete="list"
                   role="combobox"

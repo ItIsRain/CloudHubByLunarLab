@@ -168,14 +168,14 @@ export async function POST(request: NextRequest) {
 
       if (hackError || !hackRow) {
         return NextResponse.json(
-          { error: "Hackathon not found" },
+          { error: "Competition not found" },
           { status: 404 }
         );
       }
 
       if (hackRow.organizer_id !== user.id) {
         return NextResponse.json(
-          { error: "Only the hackathon organizer can issue certificates" },
+          { error: "Only the competition organizer can issue certificates" },
           { status: 403 }
         );
       }

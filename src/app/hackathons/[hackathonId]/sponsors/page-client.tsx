@@ -17,75 +17,79 @@ import { Card, CardContent } from "@/components/ui/card";
 import { mockSponsors } from "@/lib/mock-data";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { cn, getInitials, safeHref } from "@/lib/utils";
+import type { Sponsor } from "@/lib/types";
+import {
+  compareSponsorTiers,
+  distinctSponsorTiers,
+  normalizeSponsorTier,
+  sponsorTierGradientClass,
+  sponsorTierHeading,
+} from "@/lib/sponsor-tiers";
 
-const tierConfig: Record<
-  string,
-  {
-    label: string;
-    gridClass: string;
-    cardPadding: string;
-    avatarSize: string;
-    textSize: string;
-    showDescription: boolean;
-    showLogo: boolean;
-  }
-> = {
+// Per-tier layout configuration. Known presets get bespoke density; any
+// custom tier (e.g. "Title Sponsor") falls through to the default config.
+interface TierConfig {
+  gridClass: string;
+  cardPadding: string;
+  avatarSize: string;
+  textSize: string;
+  showDescription: boolean;
+  // When false, the external website link is hidden (used for "community" where
+  // logos-only treatment keeps the grid compact).
+  showWebsite: boolean;
+}
+
+const DEFAULT_TIER_CONFIG: TierConfig = {
+  gridClass: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4",
+  cardPadding: "p-4",
+  avatarSize: "h-12 w-12 text-lg",
+  textSize: "text-base",
+  showDescription: false,
+  showWebsite: true,
+};
+
+const TIER_CONFIG: Record<string, TierConfig> = {
   platinum: {
-    label: "Platinum Sponsors",
     gridClass: "grid-cols-1 sm:grid-cols-2",
     cardPadding: "p-8",
     avatarSize: "h-20 w-20 text-3xl",
     textSize: "text-xl",
     showDescription: true,
-    showLogo: true,
+    showWebsite: true,
   },
   gold: {
-    label: "Gold Sponsors",
     gridClass: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
     cardPadding: "p-6",
     avatarSize: "h-16 w-16 text-2xl",
     textSize: "text-lg",
     showDescription: true,
-    showLogo: true,
+    showWebsite: true,
   },
   silver: {
-    label: "Silver Sponsors",
     gridClass: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4",
     cardPadding: "p-4",
     avatarSize: "h-12 w-12 text-lg",
     textSize: "text-base",
     showDescription: false,
-    showLogo: true,
+    showWebsite: true,
   },
   bronze: {
-    label: "Bronze Sponsors",
     gridClass: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4",
     cardPadding: "p-4",
     avatarSize: "h-12 w-12 text-lg",
     textSize: "text-base",
     showDescription: false,
-    showLogo: true,
+    showWebsite: true,
   },
   community: {
-    label: "Community Partners",
     gridClass: "grid-cols-3 sm:grid-cols-4 lg:grid-cols-6",
     cardPadding: "p-3",
     avatarSize: "h-10 w-10 text-sm",
     textSize: "text-sm",
     showDescription: false,
-    showLogo: true,
+    showWebsite: false,
   },
 };
-
-const tierColors: Record<string, string> = {
-  platinum: "bg-gradient-to-br from-slate-200 to-slate-400 text-slate-800",
-  gold: "bg-gradient-to-br from-amber-300 to-amber-500 text-amber-900",
-  silver: "bg-gradient-to-br from-gray-300 to-gray-400 text-gray-700",
-  bronze: "bg-gradient-to-br from-orange-300 to-orange-500 text-orange-900",
-  community: "bg-gradient-to-br from-primary/60 to-accent/60 text-white",
-};
-
-const tierOrder = ["platinum", "gold", "silver", "bronze", "community"] as const;
 
 export default function HackathonSponsorsPage() {
   const params = useParams();
@@ -122,7 +126,7 @@ export default function HackathonSponsorsPage() {
               The hackathon you&apos;re looking for doesn&apos;t exist or has been removed.
             </p>
             <Button asChild>
-              <Link href="/hackathons">Browse Hackathons</Link>
+              <Link href="/hackathons">Browse Competitions</Link>
             </Button>
           </div>
         </main>
@@ -132,12 +136,15 @@ export default function HackathonSponsorsPage() {
   }
 
   // Use hackathon sponsors + fill in with mockSponsors for a fuller display
-  const allSponsors = [
+  const allSponsors: Sponsor[] = [
     ...hackathon.sponsors,
     ...mockSponsors.filter(
       (s) => !hackathon.sponsors.find((hs) => hs.id === s.id)
     ),
   ];
+
+  // Tiers actually present in the data — presets first, then any custom ones.
+  const tiersPresent = distinctSponsorTiers(allSponsors);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -174,11 +181,15 @@ export default function HackathonSponsorsPage() {
 
           {/* Tiered Layout */}
           <div className="space-y-12">
-            {tierOrder.map((tier, ti) => {
-              const sponsors = allSponsors.filter((s) => s.tier === tier);
+            {tiersPresent.map((tier, ti) => {
+              const sponsors = allSponsors.filter(
+                (s) => normalizeSponsorTier(s.tier) === tier
+              );
               if (sponsors.length === 0) return null;
 
-              const config = tierConfig[tier];
+              const config =
+                TIER_CONFIG[tier] ?? DEFAULT_TIER_CONFIG;
+              const gradientClass = sponsorTierGradientClass(tier);
 
               return (
                 <motion.div
@@ -192,76 +203,81 @@ export default function HackathonSponsorsPage() {
                     <div
                       className={cn(
                         "h-8 w-8 rounded-lg flex items-center justify-center",
-                        tierColors[tier]
+                        gradientClass
                       )}
                     >
                       <Heart className="h-4 w-4" />
                     </div>
-                    <h2 className="font-display text-2xl font-bold capitalize">
-                      {config.label}
+                    <h2 className="font-display text-2xl font-bold">
+                      {sponsorTierHeading(tier)}
                     </h2>
                   </div>
 
                   {/* Sponsor Cards */}
                   <div className={cn("grid gap-4", config.gridClass)}>
-                    {sponsors.map((sponsor, si) => (
-                      <motion.div
-                        key={sponsor.id}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: ti * 0.1 + si * 0.05 }}
-                      >
-                        <Card className="h-full hover:shadow-md transition-shadow">
-                          <CardContent
-                            className={cn(
-                              "flex flex-col items-center text-center",
-                              config.cardPadding
-                            )}
-                          >
-                            {/* Logo Placeholder (colored circle with initial) */}
-                            <div
+                    {sponsors
+                      .slice()
+                      .sort((a, b) =>
+                        compareSponsorTiers(a.tier, b.tier)
+                      )
+                      .map((sponsor, si) => (
+                        <motion.div
+                          key={sponsor.id}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: ti * 0.1 + si * 0.05 }}
+                        >
+                          <Card className="h-full hover:shadow-md transition-shadow">
+                            <CardContent
                               className={cn(
-                                "rounded-full flex items-center justify-center font-bold mb-3",
-                                config.avatarSize,
-                                tierColors[tier]
+                                "flex flex-col items-center text-center",
+                                config.cardPadding
                               )}
                             >
-                              {getInitials(sponsor.name).charAt(0)}
-                            </div>
-
-                            {/* Name */}
-                            <p
-                              className={cn(
-                                "font-display font-bold",
-                                config.textSize
-                              )}
-                            >
-                              {sponsor.name}
-                            </p>
-
-                            {/* Description (only for larger tiers) */}
-                            {config.showDescription && sponsor.description && (
-                              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                                {sponsor.description}
-                              </p>
-                            )}
-
-                            {/* Website Link */}
-                            {sponsor.website && tier !== "community" && (
-                              <a
-                                href={safeHref(sponsor.website)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-3"
+                              {/* Logo Placeholder (colored circle with initial) */}
+                              <div
+                                className={cn(
+                                  "rounded-full flex items-center justify-center font-bold mb-3",
+                                  config.avatarSize,
+                                  gradientClass
+                                )}
                               >
-                                Visit Website
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
+                                {getInitials(sponsor.name).charAt(0)}
+                              </div>
+
+                              {/* Name */}
+                              <p
+                                className={cn(
+                                  "font-display font-bold",
+                                  config.textSize
+                                )}
+                              >
+                                {sponsor.name}
+                              </p>
+
+                              {/* Description (only for larger tiers) */}
+                              {config.showDescription && sponsor.description && (
+                                <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                                  {sponsor.description}
+                                </p>
+                              )}
+
+                              {/* Website Link */}
+                              {sponsor.website && config.showWebsite && (
+                                <a
+                                  href={safeHref(sponsor.website)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-3"
+                                >
+                                  Visit Website
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+                      ))}
                   </div>
                 </motion.div>
               );

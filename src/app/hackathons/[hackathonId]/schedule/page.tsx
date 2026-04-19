@@ -12,7 +12,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   return buildMetadata({
     title: `Schedule - ${h.name}`,
-    description: `Full schedule for ${h.name} hackathon.`,
+    description: `Full schedule for ${h.name} competition.`,
     path: `/hackathons/${h.slug}/schedule`,
   });
 }

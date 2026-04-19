@@ -42,7 +42,7 @@ export default function JudgeDashboardPage() {
   const avgScore = historyStats?.averageScore ?? 0;
 
   const stats = [
-    { label: "Assigned Hackathons", value: uniqueHackathons, icon: ClipboardCheck, color: "text-blue-500" },
+    { label: "Assigned Competitions", value: uniqueHackathons, icon: ClipboardCheck, color: "text-blue-500" },
     { label: "Completed", value: totalScored, icon: Gavel, color: "text-green-500" },
     { label: "Pending", value: totalPending, icon: Clock, color: "text-amber-500" },
     { label: "Avg Score", value: totalScored > 0 ? avgScore.toFixed(1) : "-", icon: Star, color: "text-primary" },

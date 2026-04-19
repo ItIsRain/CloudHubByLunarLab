@@ -17,7 +17,7 @@ export async function GET(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -33,7 +33,7 @@ export async function GET(
 
     if (hErr || !hackathon) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }
@@ -41,7 +41,7 @@ export async function GET(
     // Only show winners for public/unlisted hackathons
     if (hackathon.visibility === "private") {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }

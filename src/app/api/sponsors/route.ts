@@ -74,12 +74,22 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Tier is free-form (e.g. "platinum", "gold", "title sponsor") — stored
+// lowercased for stable grouping/filtering. Callers choose a preset or supply
+// their own custom label.
+const tierSchema = z
+  .string()
+  .min(1)
+  .max(40)
+  .transform((v) => v.trim().toLowerCase().replace(/\s+/g, " "))
+  .refine((v) => v.length > 0, "Tier is required");
+
 const createSponsorSchema = z.object({
   name: z.string().min(1).max(150),
   logo: z.string().url().max(2048),
   website: z.string().url().max(500).optional(),
   description: z.string().max(2000).optional(),
-  tier: z.enum(["platinum", "gold", "silver", "bronze", "community"]).default("bronze"),
+  tier: tierSchema.default("bronze"),
   contactEmail: z.string().email().max(255).optional(),
   contactName: z.string().max(100).optional(),
 }).strict();

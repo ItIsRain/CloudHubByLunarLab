@@ -151,7 +151,7 @@ export function FAQTab({ hackathon, hackathonId }: FAQTabProps) {
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, question: e.target.value }))
                     }
-                    placeholder="e.g. Who can participate in this hackathon?"
+                    placeholder="e.g. Who can participate in this competition?"
                   />
                 </div>
                 <div className="space-y-2">

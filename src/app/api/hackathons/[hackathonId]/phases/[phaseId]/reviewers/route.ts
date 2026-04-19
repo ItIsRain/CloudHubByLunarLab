@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { hackathonId, phaseId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
     if (!UUID_RE.test(phaseId)) {
       return NextResponse.json({ error: "Invalid phase ID" }, { status: 400 });
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      return NextResponse.json({ error: "Competition not found" }, { status: 404 });
     }
     if (hackathon.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .maybeSingle();
 
     if (!phase) {
-      return NextResponse.json({ error: "Phase not found in this hackathon" }, { status: 404 });
+      return NextResponse.json({ error: "Phase not found in this competition" }, { status: 404 });
     }
 
     const { data: reviewers, error } = await supabase
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { hackathonId, phaseId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
     if (!UUID_RE.test(phaseId)) {
       return NextResponse.json({ error: "Invalid phase ID" }, { status: 400 });
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      return NextResponse.json({ error: "Competition not found" }, { status: 404 });
     }
     if (hackathon.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .maybeSingle();
 
     if (!phase) {
-      return NextResponse.json({ error: "Phase not found in this hackathon" }, { status: 404 });
+      return NextResponse.json({ error: "Phase not found in this competition" }, { status: 404 });
     }
 
     const body = await request.json();
@@ -288,7 +288,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { hackathonId, phaseId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
     if (!UUID_RE.test(phaseId)) {
       return NextResponse.json({ error: "Invalid phase ID" }, { status: 400 });
@@ -313,7 +313,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      return NextResponse.json({ error: "Competition not found" }, { status: 404 });
     }
     if (hackathon.organizer_id !== auth.userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -328,7 +328,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .maybeSingle();
 
     if (!phase) {
-      return NextResponse.json({ error: "Phase not found in this hackathon" }, { status: 404 });
+      return NextResponse.json({ error: "Phase not found in this competition" }, { status: 404 });
     }
 
     const body = await request.json();

@@ -2,8 +2,8 @@ import { buildMetadata } from "@/lib/seo";
 import CreateHackathonPage from "./page-client";
 
 export const metadata = buildMetadata({
-  title: "Create a Hackathon",
-  description: "Launch your own hackathon on CloudHub.",
+  title: "Create a Competition",
+  description: "Launch your own competition on CloudHub.",
   path: "/hackathons/create",
 });
 

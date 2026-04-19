@@ -142,7 +142,7 @@ export default function AdminAnalyticsPage() {
         bgColor: "bg-green-500/10",
       },
       {
-        label: "Active Hackathons",
+        label: "Active Competitions",
         value: stats.activeHackathons.toLocaleString(),
         change: `${stats.totalHackathons} total`,
         icon: Trophy,
@@ -449,7 +449,7 @@ export default function AdminAnalyticsPage() {
                         </ResponsiveContainer>
                       ) : (
                         <div className="h-[280px] flex items-center justify-center">
-                          <p className="text-sm text-muted-foreground">No hackathon data available</p>
+                          <p className="text-sm text-muted-foreground">No competition data available</p>
                         </div>
                       )}
                     </CardContent>

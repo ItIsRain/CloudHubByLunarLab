@@ -57,7 +57,7 @@ export function JoinTeamDialog({
         <DialogHeader>
           <DialogTitle>Join {team.name}</DialogTitle>
           <DialogDescription>
-            {hasPassword ? "This team requires a password to join." : "Join this team to collaborate on the hackathon."}
+            {hasPassword ? "This team requires a password to join." : "Join this team to collaborate on the competition."}
           </DialogDescription>
         </DialogHeader>
 

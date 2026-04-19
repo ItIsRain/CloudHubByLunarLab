@@ -5,14 +5,14 @@ export const SITE_URL =
   (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 export const SITE_NAME = "CloudHub by Lunar Limited";
 export const SITE_DESCRIPTION =
-  "The modern platform for hosting events and hackathons. Build communities, manage participants, and create unforgettable experiences.";
+  "The modern platform for hosting events and competitions. Build communities, manage participants, and create unforgettable experiences.";
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
 
 // ── Base metadata (used in root layout) ────────────────────────
 export const baseMetadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} | Modern Event & Hackathon Platform`,
+    default: `${SITE_NAME} | Modern Event & Competition Platform`,
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
@@ -24,7 +24,7 @@ export const baseMetadata: Metadata = {
     "ticketing",
     "community",
     "event management",
-    "hackathon platform",
+    "competition platform",
   ],
   icons: {
     icon: "/CloudHub-Favicon.svg",
@@ -34,7 +34,7 @@ export const baseMetadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
-    title: `${SITE_NAME} | Modern Event & Hackathon Platform`,
+    title: `${SITE_NAME} | Modern Event & Competition Platform`,
     description: SITE_DESCRIPTION,
     url: SITE_URL,
     images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],

@@ -176,7 +176,7 @@ export function getPhaseMessage(
   action: PhaseAction,
   now: Date = new Date()
 ): string {
-  if (h.status === "draft") return "This hackathon is still in draft.";
+  if (h.status === "draft") return "This competition is still in draft.";
 
   const config = actionConfig[action];
   const t = now.getTime();

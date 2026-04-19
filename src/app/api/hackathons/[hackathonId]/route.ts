@@ -23,7 +23,7 @@ export async function GET(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId) && !SAFE_SLUG_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     // Dual auth: session cookies OR API key
@@ -54,7 +54,7 @@ export async function GET(
 
     if (error || !data) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }
@@ -80,7 +80,7 @@ export async function GET(
 
       const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", row.id as string, userId, userEmail);
       if (!canAccess) {
-        return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+        return NextResponse.json({ error: "Competition not found" }, { status: 404 });
       }
     }
 
@@ -99,7 +99,7 @@ export async function GET(
         .update({ status: computedPhase })
         .eq("id", row.id as string)
         .then(({ error: updateErr }) => {
-          if (updateErr) console.warn("Failed to auto-update hackathon status:", updateErr);
+          if (updateErr) console.warn("Failed to auto-update competition status:", updateErr);
         });
     }
 
@@ -128,7 +128,7 @@ export async function PATCH(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId) && !SAFE_SLUG_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     // Dual auth: session cookies OR API key
@@ -159,7 +159,7 @@ export async function PATCH(
 
     if (!existing) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }
@@ -176,7 +176,7 @@ export async function PATCH(
     const keyMap: Record<string, string> = {
       name: "name", tagline: "tagline", description: "description",
       cover_image: "cover_image", coverImage: "cover_image",
-      logo: "logo", category: "category", tags: "tags", status: "status",
+      logo: "logo", category: "category", categories: "categories", tags: "tags", status: "status",
       location: "location",
       registration_start: "registration_start", registrationStart: "registration_start",
       registration_end: "registration_end", registrationEnd: "registration_end",
@@ -231,24 +231,60 @@ export async function PATCH(
       ];
       if (!allowedStatuses.includes(updates.status as string)) {
         return NextResponse.json(
-          { error: "Invalid hackathon status" },
+          { error: "Invalid competition status" },
           { status: 400 }
         );
       }
     }
 
-    // Validate category
-    if (updates.category) {
-      const { categories: cats } = await import("@/lib/constants");
-      if (!cats.map((c) => c.value).includes(updates.category as string)) {
+    // Validate / normalize categories. Customs are free-form (same rules
+    // as on create), but we still cap length and count to keep the column
+    // bounded. `categories` array takes precedence over legacy `category`.
+    const normalizeCategoryValue = (raw: unknown): string | null => {
+      if (typeof raw !== "string") return null;
+      const norm = raw.trim().toLowerCase().replace(/\s+/g, " ");
+      if (norm.length === 0 || norm.length > 40) return null;
+      return norm;
+    };
+
+    if (updates.categories !== undefined) {
+      if (!Array.isArray(updates.categories)) {
+        return NextResponse.json({ error: "categories must be an array of strings" }, { status: 400 });
+      }
+      const normalized = (updates.categories as unknown[])
+        .map(normalizeCategoryValue)
+        .filter((c): c is string => c !== null);
+      const deduped = Array.from(new Set(normalized));
+      if (deduped.length === 0) {
+        return NextResponse.json({ error: "categories must contain at least one non-empty value" }, { status: 400 });
+      }
+      if (deduped.length > 8) {
+        return NextResponse.json({ error: "At most 8 categories are allowed per competition" }, { status: 400 });
+      }
+      updates.categories = deduped;
+      // Keep the legacy column in sync. The DB trigger also does this, but
+      // writing it in the payload keeps the mutation self-describing.
+      updates.category = deduped[0];
+    } else if (updates.category !== undefined) {
+      const norm = normalizeCategoryValue(updates.category);
+      if (!norm) {
         return NextResponse.json({ error: "Invalid category" }, { status: 400 });
       }
+      const { categories: cats } = await import("@/lib/constants");
+      const validPresets = cats.map((c) => c.value);
+      // A single-category update has to either match a preset or be part
+      // of a later `categories` array write — reject unknown standalone
+      // customs so partial updates don't bypass the array normalization.
+      if (!validPresets.includes(norm)) {
+        return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+      }
+      updates.category = norm;
     }
 
     // Validate type
     if (updates.type) {
       if (!["in-person", "online", "virtual", "hybrid"].includes(updates.type as string)) {
-        return NextResponse.json({ error: "Invalid hackathon type" }, { status: 400 });
+        return NextResponse.json({ error: "Invalid competition type" }, { status: 400 });
       }
     }
 
@@ -379,7 +415,23 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: "Failed to update hackathon" }, { status: 400 });
+      // Log the full Supabase error server-side so column/constraint/RLS
+      // failures aren't opaque when the generic 400 surfaces in the UI.
+      console.error("[PATCH /api/hackathons/:id] update error:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        updateKeys: Object.keys(updates),
+      });
+      return NextResponse.json(
+        {
+          error: "Failed to update competition",
+          details: error.message,
+          code: error.code,
+        },
+        { status: 400 }
+      );
     }
 
     await writeAuditLog({
@@ -410,7 +462,7 @@ export async function DELETE(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId) && !SAFE_SLUG_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     // Dual auth: session cookies OR API key
@@ -441,7 +493,7 @@ export async function DELETE(
 
     if (!existing) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }
@@ -459,7 +511,7 @@ export async function DELETE(
       .eq("organizer_id", auth.userId);
 
     if (error) {
-      return NextResponse.json({ error: "Failed to delete hackathon" }, { status: 400 });
+      return NextResponse.json({ error: "Failed to delete competition" }, { status: 400 });
     }
 
     await writeAuditLog({
@@ -469,7 +521,7 @@ export async function DELETE(
       entityId: hackathonId,
     }, request);
 
-    return NextResponse.json({ message: "Hackathon deleted successfully" });
+    return NextResponse.json({ message: "Competition deleted successfully" });
   } catch (err) {
     console.error(err);
     return NextResponse.json(

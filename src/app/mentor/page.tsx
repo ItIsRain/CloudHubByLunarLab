@@ -28,8 +28,8 @@ export default function MentorDashboardPage() {
   );
 
   const stats = [
-    { label: "Active Hackathons", value: activeHackathons.length, icon: Calendar, color: "text-blue-500" },
-    { label: "Total Hackathons", value: hackathons.length, icon: Clock, color: "text-amber-500" },
+    { label: "Active Competitions", value: activeHackathons.length, icon: Calendar, color: "text-blue-500" },
+    { label: "Total Competitions", value: hackathons.length, icon: Clock, color: "text-amber-500" },
     { label: "Total Teams", value: hackathons.reduce((sum, h) => sum + (h.teamCount || 0), 0), icon: Users, color: "text-green-500" },
     { label: "Participants", value: hackathons.reduce((sum, h) => sum + (h.participantCount || 0), 0), icon: Video, color: "text-primary" },
   ];
@@ -135,7 +135,7 @@ export default function MentorDashboardPage() {
                     No active hackathons to mentor at the moment.
                   </p>
                   <Button asChild variant="outline" className="mt-4">
-                    <Link href="/explore/hackathons">Browse Hackathons</Link>
+                    <Link href="/explore/hackathons">Browse Competitions</Link>
                   </Button>
                 </CardContent>
               </Card>

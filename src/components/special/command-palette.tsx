@@ -114,7 +114,7 @@ export function CommandPalette() {
     },
     {
       id: "action-create-hackathon",
-      label: "Create Hackathon",
+      label: "Create Competition",
       icon: <Plus className="h-4 w-4" />,
       shortcut: "C H",
       action: () => router.push("/hackathons/create"),

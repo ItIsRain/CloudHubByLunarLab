@@ -52,7 +52,7 @@ const PLACEHOLDERS = [
   { key: "{{applicant_name}}", label: "Applicant Name" },
   { key: "{{applicant_email}}", label: "Email" },
   { key: "{{hackathon_name}}", label: "Hackathon" },
-  { key: "{{hackathon_url}}", label: "Hackathon URL" },
+  { key: "{{hackathon_url}}", label: "Competition URL" },
   { key: "{{status}}", label: "Status" },
   { key: "{{hackathon_start_date}}", label: "Start Date" },
   { key: "{{hackathon_end_date}}", label: "End Date" },
@@ -405,7 +405,7 @@ export function RemindersSection({ hackathon, hackathonId }: RemindersSectionPro
             <DialogDescription>
               {editingRule
                 ? "Update the reminder configuration below."
-                : "Set up an automated reminder for your hackathon participants."}
+                : "Set up an automated reminder for your competition participants."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">

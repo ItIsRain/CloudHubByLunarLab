@@ -36,7 +36,7 @@ export default function TeamsPage() {
             className="mb-8"
           >
             <h1 className="font-display text-3xl font-bold mb-1">My Teams</h1>
-            <p className="text-muted-foreground">{teams.length} teams across hackathons</p>
+            <p className="text-muted-foreground">{teams.length} teams across competitions</p>
           </motion.div>
 
           {isLoading ? (
@@ -57,7 +57,7 @@ export default function TeamsPage() {
                 Join a hackathon and create or join a team to get started.
               </p>
               <Button asChild>
-                <Link href="/explore">Browse Hackathons</Link>
+                <Link href="/explore">Browse Competitions</Link>
               </Button>
             </motion.div>
           ) : (

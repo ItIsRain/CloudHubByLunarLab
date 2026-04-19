@@ -3,7 +3,7 @@ import { JsonLd } from "@/components/seo/json-ld";
 import HomePage from "./page-client";
 
 export const metadata = {
-  title: `${SITE_NAME} | Modern Event & Hackathon Platform`,
+  title: `${SITE_NAME} | Modern Event & Competition Platform`,
 };
 
 export default function Page() {

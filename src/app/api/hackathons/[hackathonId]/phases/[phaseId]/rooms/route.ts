@@ -37,7 +37,7 @@ async function verifyOrganizerOwnership(
     .eq("id", hackathonId)
     .single();
 
-  if (!hackathon) return { ok: false as const, res: NextResponse.json({ error: "Hackathon not found" }, { status: 404 }) };
+  if (!hackathon) return { ok: false as const, res: NextResponse.json({ error: "Competition not found" }, { status: 404 }) };
 
   if (hackathon.organizer_id !== userId) {
     return { ok: false as const, res: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
@@ -50,13 +50,13 @@ async function verifyOrganizerOwnership(
     .eq("hackathon_id", hackathonId)
     .maybeSingle();
 
-  if (!phase) return { ok: false as const, res: NextResponse.json({ error: "Phase not found in this hackathon" }, { status: 404 }) };
+  if (!phase) return { ok: false as const, res: NextResponse.json({ error: "Phase not found in this competition" }, { status: 404 }) };
 
   return { ok: true as const };
 }
 
 function validateIds(hackathonId: string, phaseId: string) {
-  if (!UUID_RE.test(hackathonId)) return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+  if (!UUID_RE.test(hackathonId)) return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
   if (!UUID_RE.test(phaseId)) return NextResponse.json({ error: "Invalid phase ID" }, { status: 400 });
   return null;
 }
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .eq("id", hackathonId)
       .single();
 
-    if (!hackathon) return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+    if (!hackathon) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
 
     const { data: phase } = await supabase
       .from("competition_phases")
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .eq("hackathon_id", hackathonId)
       .maybeSingle();
 
-    if (!phase) return NextResponse.json({ error: "Phase not found in this hackathon" }, { status: 404 });
+    if (!phase) return NextResponse.json({ error: "Phase not found in this competition" }, { status: 404 });
 
     // Fetch rooms ordered by sort_order
     const { data: rooms, error: roomsErr } = await supabase

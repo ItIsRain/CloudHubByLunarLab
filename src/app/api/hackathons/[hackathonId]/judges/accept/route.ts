@@ -12,7 +12,7 @@ export async function GET(
   try {
     const { hackathonId } = await params;
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
     const token = request.nextUrl.searchParams.get("token");
 
@@ -50,7 +50,7 @@ export async function GET(
         id: invitation.id,
         name: invitation.name,
         status: invitation.status,
-        hackathonName: hackathon?.name || "Unknown Hackathon",
+        hackathonName: hackathon?.name || "Unknown Competition",
       },
     });
   } catch (err) {
@@ -69,7 +69,7 @@ export async function POST(
   try {
     const { hackathonId } = await params;
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
     const { token } = await request.json();
 

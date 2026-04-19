@@ -75,7 +75,7 @@ export async function PATCH(
     const authorized = await verifyIsTeamLeaderOrOrganizer(supabase, teamId, user.id);
     if (!authorized) {
       return NextResponse.json(
-        { error: "Only the team leader or hackathon organizer can update this team" },
+        { error: "Only the team leader or competition organizer can update this team" },
         { status: 403 }
       );
     }
@@ -178,7 +178,7 @@ export async function DELETE(
     const authorized = await verifyIsTeamLeaderOrOrganizer(supabase, teamId, user.id);
     if (!authorized) {
       return NextResponse.json(
-        { error: "Only the team leader or hackathon organizer can delete this team" },
+        { error: "Only the team leader or competition organizer can delete this team" },
         { status: 403 }
       );
     }
@@ -215,7 +215,7 @@ export async function DELETE(
             .eq("id", hId);
         }
       }).catch((err) => {
-        console.warn("Failed to update hackathon team_count:", err);
+        console.warn("Failed to update competition team_count:", err);
       });
     }
 

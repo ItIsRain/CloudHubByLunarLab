@@ -101,7 +101,7 @@ export default function AllHackathonsPage() {
               <div className="w-full sm:w-80">
                 <Input
                   type="text"
-                  placeholder="Search hackathons..."
+                  placeholder="Search competitions..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   icon={<Search className="h-4 w-4" />}

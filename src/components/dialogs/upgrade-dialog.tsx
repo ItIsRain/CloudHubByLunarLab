@@ -20,7 +20,7 @@ interface UpgradeDialogProps {
 }
 
 const enterpriseHighlights = [
-  "Unlimited events & hackathons",
+  "Unlimited events & competitions",
   "Unlimited attendees per event",
   "Custom branding & analytics",
   "Dedicated account manager",

@@ -52,7 +52,7 @@ export function OverviewTab() {
         bgColor: "bg-green-500/10",
       },
       {
-        label: "Total Hackathons",
+        label: "Total Competitions",
         value: stats.totalHackathons.toLocaleString(),
         change: `${stats.activeHackathons} active`,
         icon: Trophy,

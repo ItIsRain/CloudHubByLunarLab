@@ -62,7 +62,7 @@ export default function HackathonLeaderboardPage() {
               The hackathon you&apos;re looking for doesn&apos;t exist or has been removed.
             </p>
             <Button asChild>
-              <Link href="/hackathons">Browse Hackathons</Link>
+              <Link href="/hackathons">Browse Competitions</Link>
             </Button>
           </div>
         </main>

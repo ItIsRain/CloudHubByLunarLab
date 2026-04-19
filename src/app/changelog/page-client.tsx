@@ -43,11 +43,11 @@ const changelogEntries: ChangelogEntry[] = [
     date: "February 21, 2026",
     title: "Search Engine Optimization",
     changes: [
-      { text: "Events and hackathons now appear in Google with rich snippets (dates, location, prices)", category: "feature" },
+      { text: "Events and competitions now appear in Google with rich snippets (dates, location, prices)", category: "feature" },
       { text: "Shared links on social media now show proper titles, descriptions, and cover images", category: "feature" },
-      { text: "Added dynamic sitemap covering all public events, hackathons, and user profiles", category: "feature" },
+      { text: "Added dynamic sitemap covering all public events, competitions, and user profiles", category: "feature" },
       { text: "Private pages (dashboard, admin panel) are now properly excluded from search engines", category: "improvement" },
-      { text: "Fixed share links in event and hackathon pages pointing to incorrect URLs", category: "fix" },
+      { text: "Fixed share links in event and competition pages pointing to incorrect URLs", category: "fix" },
     ],
   },
   {
@@ -55,7 +55,7 @@ const changelogEntries: ChangelogEntry[] = [
     date: "February 21, 2026",
     title: "Live Backend & Real-Time Data",
     changes: [
-      { text: "Events, hackathons, teams, and notifications are now powered by a live database", category: "feature" },
+      { text: "Events, competitions, teams, and notifications are now powered by a live database", category: "feature" },
       { text: "Added secure authentication with email/password login, session management, and email verification", category: "feature" },
       { text: "Bookmarks now persist across sessions and devices", category: "feature" },
       { text: "Landing page stats and testimonials now update in real-time", category: "improvement" },
@@ -80,11 +80,11 @@ const changelogEntries: ChangelogEntry[] = [
     title: "Full Platform Launch",
     changes: [
       { text: "Launched complete event experience: schedule, speakers, tickets, gallery, recap, and live streaming pages", category: "feature" },
-      { text: "Launched complete hackathon experience: overview, tracks, schedule, teams, submissions, mentors, sponsors, FAQ, leaderboard, and resources", category: "feature" },
-      { text: "Added organizer dashboard with event management, hackathon management, team tools, notifications, bookmarks, certificates, and messaging", category: "feature" },
+      { text: "Launched complete competition experience: overview, tracks, schedule, teams, submissions, mentors, sponsors, FAQ, leaderboard, and resources", category: "feature" },
+      { text: "Added organizer dashboard with event management, competition management, team tools, notifications, bookmarks, certificates, and messaging", category: "feature" },
       { text: "Added admin panel with user management, analytics, reports, featured content curation, and platform settings", category: "feature" },
       { text: "Added judge and mentor portals with dedicated scoring, session booking, and review workflows", category: "feature" },
-      { text: "Added sharing and calendar integration dialogs across all event and hackathon pages", category: "feature" },
+      { text: "Added sharing and calendar integration dialogs across all event and competition pages", category: "feature" },
       { text: "Added blog, careers, contact, about, and legal pages", category: "feature" },
       { text: "Added calendar feed pages with ICS subscription support", category: "feature" },
     ],
@@ -94,7 +94,7 @@ const changelogEntries: ChangelogEntry[] = [
     date: "February 12, 2026",
     title: "Core Experience",
     changes: [
-      { text: "Launched explore page with event and hackathon discovery, filtering by category, date, type, and tags", category: "feature" },
+      { text: "Launched explore page with event and competition discovery, filtering by category, date, type, and tags", category: "feature" },
       { text: "Added authentication pages with animated split-screen layout (login, register, forgot password, verify email)", category: "feature" },
       { text: "Launched landing page with hero section, feature highlights, pricing overview, and testimonials", category: "feature" },
       { text: "Introduced CloudHub design system with Electric Coral theme, full dark mode support, and motion throughout", category: "improvement" },

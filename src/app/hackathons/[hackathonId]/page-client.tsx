@@ -61,13 +61,19 @@ import { usePhases } from "@/hooks/use-phases";
 import { usePublicWinners, type PublicWinner } from "@/hooks/use-winners";
 import { useAuthStore } from "@/store/auth-store";
 import { cn, formatDate, formatCurrency, formatPrizeValue, getTimeRemaining, safeHref } from "@/lib/utils";
+import {
+  distinctSponsorTiers,
+  normalizeSponsorTier,
+  sponsorTierHeading,
+} from "@/lib/sponsor-tiers";
+import { categoryLabel, getHackathonCategories } from "@/lib/hackathon-categories";
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   "draft": { label: "Draft", color: "bg-muted" },
   "published": { label: "Registration Open", color: "bg-green-500" },
   "registration-open": { label: "Registration Open", color: "bg-green-500" },
   "registration-closed": { label: "Registration Closed", color: "bg-yellow-500" },
-  "hacking": { label: "Hacking in Progress", color: "bg-primary" },
+  "hacking": { label: "Competing in Progress", color: "bg-primary" },
   "submission": { label: "Submissions Open", color: "bg-orange-500" },
   "judging": { label: "Judging", color: "bg-purple-500" },
   "completed": { label: "Completed", color: "bg-green-600" },
@@ -198,12 +204,12 @@ export default function HackathonDetailPage() {
         <main className="pt-24 pb-16 text-center">
           <div className="mx-auto max-w-md">
             <Trophy className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
-            <h1 className="font-display text-3xl font-bold mb-2">Hackathon Not Found</h1>
+            <h1 className="font-display text-3xl font-bold mb-2">Competition Not Found</h1>
             <p className="text-muted-foreground mb-6">
               The hackathon you&apos;re looking for doesn&apos;t exist or has been removed.
             </p>
             <Button asChild>
-              <Link href="/explore">Browse Hackathons</Link>
+              <Link href="/explore">Browse Competitions</Link>
             </Button>
           </div>
         </main>
@@ -225,7 +231,10 @@ export default function HackathonDetailPage() {
 
   const deadline = getDeadline();
 
-  const tierOrder = ["platinum", "gold", "silver", "bronze", "community"] as const;
+  // Distinct sponsor tier keys actually present on this hackathon, sorted so
+  // presets come first (platinum → community) and any custom tiers trail
+  // alphabetically after them.
+  const sponsorTiersPresent = distinctSponsorTiers(hackathon.sponsors ?? []);
 
   const competitionPhases = phasesData?.data ?? [];
 
@@ -239,8 +248,8 @@ export default function HackathonDetailPage() {
   }[] = [
     { label: "Registration Opens", date: hackathon.registrationStart, isPhase: false },
     { label: "Registration Closes", date: hackathon.registrationEnd, isPhase: false },
-    { label: "Hacking Starts", date: hackathon.hackingStart, isPhase: false },
-    { label: "Hacking Ends", date: hackathon.hackingEnd, isPhase: false },
+    { label: "Competing Starts", date: hackathon.hackingStart, isPhase: false },
+    { label: "Competing Ends", date: hackathon.hackingEnd, isPhase: false },
     { label: "Submission Deadline", date: hackathon.submissionDeadline, isPhase: false },
     { label: "Judging", date: hackathon.judgingStart, isPhase: false },
     { label: "Winners Announced", date: hackathon.winnersAnnouncement, isPhase: false },
@@ -304,7 +313,15 @@ export default function HackathonDetailPage() {
               <div className="text-white">
                 <div className="flex flex-wrap items-center gap-2 mb-3">
                   <Badge className={cn(status.color, "text-white")}>{status.label}</Badge>
-                  <Badge variant="secondary" className="bg-white/20 text-white border-none">{hackathon.category}</Badge>
+                  {getHackathonCategories(hackathon).map((cat) => (
+                    <Badge
+                      key={cat}
+                      variant="secondary"
+                      className="bg-white/20 text-white border-none"
+                    >
+                      {categoryLabel(cat)}
+                    </Badge>
+                  ))}
                   {isOrganizer && hackathon.visibility === "private" && (
                     <Badge variant="secondary" className="bg-white/20 text-white border-none gap-1">
                       <Lock className="h-3 w-3" />
@@ -889,7 +906,7 @@ export default function HackathonDetailPage() {
                               if (!isMember && team.status === "forming" && team.members.length < team.maxSize) {
                                 if (!isRegistered) {
                                   return (
-                                    <Button variant="outline" size="sm" className="w-full gap-1.5 mt-3" disabled title="Register for the hackathon to join a team">
+                                    <Button variant="outline" size="sm" className="w-full gap-1.5 mt-3" disabled title="Register for the competition to join a team">
                                       <Lock className="h-3.5 w-3.5" />
                                       Register to Join
                                     </Button>
@@ -919,7 +936,7 @@ export default function HackathonDetailPage() {
                   <div className="text-center py-16">
                     <Award className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                     <h3 className="font-display text-lg font-bold mb-1">No submissions yet</h3>
-                    <p className="text-sm text-muted-foreground">Submissions will appear here once the hacking phase begins.</p>
+                    <p className="text-sm text-muted-foreground">Submissions will appear here once the competing phase begins.</p>
                   </div>
                 ) : (
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1118,28 +1135,48 @@ export default function HackathonDetailPage() {
 
               {/* Sponsors */}
               <TabsContent value="sponsors" className="mt-6">
-                {tierOrder.map((tier) => {
-                  const tierSponsors = hackathon.sponsors.filter((s) => s.tier === tier);
+                {sponsorTiersPresent.map((tier) => {
+                  const tierSponsors = hackathon.sponsors.filter(
+                    (s) => normalizeSponsorTier(s.tier) === tier
+                  );
                   if (tierSponsors.length === 0) return null;
+                  const isPlatinum = tier === "platinum";
+                  const logoSize = isPlatinum ? 80 : 48;
                   return (
                     <div key={tier} className="mb-8">
-                      <h3 className="font-display text-lg font-bold capitalize mb-4">{tier} Sponsors</h3>
+                      <h3 className="font-display text-lg font-bold mb-4">
+                        {sponsorTierHeading(tier)}
+                      </h3>
                       <div className={cn(
                         "grid gap-4",
-                        tier === "platinum" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+                        isPlatinum ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
                       )}>
                         {tierSponsors.map((sponsor) => (
                           <Card key={sponsor.id} className="hover:shadow-md transition-shadow">
-                            <CardContent className={cn("flex flex-col items-center text-center", tier === "platinum" ? "p-8" : "p-4")}>
-                              <Image
-                                src={sponsor.logo}
-                                alt={sponsor.name}
-                                width={tier === "platinum" ? 80 : 48}
-                                height={tier === "platinum" ? 80 : 48}
-                                className="rounded-lg mb-3"
-                              />
+                            <CardContent className={cn("flex flex-col items-center text-center", isPlatinum ? "p-8" : "p-4")}>
+                              {sponsor.logo ? (
+                                <Image
+                                  src={sponsor.logo}
+                                  alt={sponsor.name}
+                                  width={logoSize}
+                                  height={logoSize}
+                                  className="rounded-lg mb-3"
+                                />
+                              ) : (
+                                <div
+                                  className="rounded-lg mb-3 flex items-center justify-center bg-muted font-display font-bold text-muted-foreground"
+                                  style={{
+                                    width: logoSize,
+                                    height: logoSize,
+                                    fontSize: Math.round(logoSize / 2.5),
+                                  }}
+                                  aria-hidden="true"
+                                >
+                                  {sponsor.name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
                               <p className="font-medium">{sponsor.name}</p>
-                              {sponsor.description && tier === "platinum" && (
+                              {sponsor.description && isPlatinum && (
                                 <p className="text-xs text-muted-foreground mt-1">{sponsor.description}</p>
                               )}
                               {sponsor.website && (
@@ -1349,7 +1386,7 @@ export default function HackathonDetailPage() {
                     consent: directConsent,
                   });
                   setConsentDialogOpen(false);
-                  toast.success("Successfully registered for the hackathon!");
+                  toast.success("Successfully registered for the competition!");
                 } catch (err) {
                   toast.error(err instanceof Error ? err.message : "Registration failed");
                 }
@@ -1368,7 +1405,7 @@ export default function HackathonDetailPage() {
           <DialogHeader>
             <DialogTitle>
               {(registrationStatus === "accepted" || registrationStatus === "approved")
-                ? "Leave Hackathon"
+                ? "Leave Competition"
                 : "Cancel Registration"}
             </DialogTitle>
             <DialogDescription>
@@ -1390,7 +1427,7 @@ export default function HackathonDetailPage() {
                     setCancelDialogOpen(false);
                     toast.success(
                       (registrationStatus === "accepted" || registrationStatus === "approved")
-                        ? "You have left the hackathon. Your spot has been released."
+                        ? "You have left the competition. Your spot has been released."
                         : "Registration cancelled successfully."
                     );
                   },
@@ -1402,7 +1439,7 @@ export default function HackathonDetailPage() {
             >
               {cancelMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
               {(registrationStatus === "accepted" || registrationStatus === "approved")
-                ? "Leave Hackathon"
+                ? "Leave Competition"
                 : "Cancel Registration"}
             </Button>
           </DialogFooter>

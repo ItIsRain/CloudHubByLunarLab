@@ -93,7 +93,7 @@ export function FeaturedTab() {
       toast.success(`"${name}" removed from featured`);
     } catch (err) {
       setFeaturedHackathonIds((prev) => [...prev, id]);
-      toast.error(`Failed to unfeature hackathon: ${err instanceof Error ? err.message : "Unknown error"}`);
+      toast.error(`Failed to unfeature competition: ${err instanceof Error ? err.message : "Unknown error"}`);
     }
   };
 
@@ -127,7 +127,7 @@ export function FeaturedTab() {
       toast.success(`"${hack?.name}" added to featured`);
     } catch (err) {
       setFeaturedHackathonIds((prev) => prev.filter((hid) => hid !== idToAdd));
-      toast.error(`Failed to feature hackathon: ${err instanceof Error ? err.message : "Unknown error"}`);
+      toast.error(`Failed to feature competition: ${err instanceof Error ? err.message : "Unknown error"}`);
     }
   };
 
@@ -234,7 +234,7 @@ export function FeaturedTab() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="flex items-center gap-2">
             <Trophy className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Featured Hackathons</CardTitle>
+            <CardTitle className="text-lg">Featured Competitions</CardTitle>
             <Badge variant="secondary" className="text-xs">
               {featuredHackathons.length}
             </Badge>
@@ -257,14 +257,14 @@ export function FeaturedTab() {
               animate={{ opacity: 1, height: "auto" }}
               className="mb-4 p-4 rounded-xl border border-border bg-muted/30"
             >
-              <p className="text-sm font-medium mb-2">Select a hackathon to feature:</p>
+              <p className="text-sm font-medium mb-2">Select a competition to feature:</p>
               <div className="flex flex-col sm:flex-row gap-2">
                 <select
                   value={selectedHackathonId}
                   onChange={(e) => setSelectedHackathonId(e.target.value)}
                   className="flex-1 h-10 rounded-xl border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">Choose a hackathon...</option>
+                  <option value="">Choose a competition...</option>
                   {nonFeaturedHackathons.map((hack) => (
                     <option key={hack.id} value={hack.id}>
                       {hack.name}
@@ -285,7 +285,7 @@ export function FeaturedTab() {
           {featuredHackathons.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <Star className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No featured hackathons. Click &quot;Add to Featured&quot; to get started.</p>
+              <p className="text-sm">No featured competitions. Click &quot;Add to Featured&quot; to get started.</p>
             </div>
           ) : (
             <div className="space-y-2">

@@ -3,6 +3,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess, canManage } from "@/lib/check-hackathon-access";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { sendEmail, emailWrapper, statusBanner, bodySection, greeting, ctaButton, COLORS } from "@/lib/resend";
 
 /**
@@ -20,7 +21,7 @@ export async function POST(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -36,6 +37,19 @@ export async function POST(
       if (scopeError) {
         return NextResponse.json({ error: scopeError }, { status: 403 });
       }
+    }
+
+    // Rate-limit bulk winner emails: 5 per hour per user.
+    const rl = checkRateLimit(auth.userId, {
+      namespace: "hackathon-bulk-email",
+      limit: 5,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many bulk emails sent. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
     }
 
     const supabase = getSupabaseAdminClient();
@@ -72,7 +86,7 @@ export async function POST(
       .single();
 
     if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      return NextResponse.json({ error: "Competition not found" }, { status: 404 });
     }
 
     // Fetch all winners with registration_id
@@ -163,11 +177,12 @@ export async function POST(
               <div style="color:#e4e4e7;font-size:15px;line-height:1.7;margin:0 0 16px;">
                 ${htmlBody}
               </div>
-              ${ctaButton(`${siteUrl}/hackathons/${hackathonId}`, "View Hackathon")}
+              ${ctaButton(`${siteUrl}/hackathons/${hackathonId}`, "View Competition")}
             `)}
           `),
         });
-        console.log(`[winners-email] Sent to ${user.email}, result:`, JSON.stringify(result));
+        // Intentionally no log here — email send results are ephemeral.
+        void result;
         sent++;
       } catch (err) {
         console.error(`[winners-email] Failed to email winner ${user.email}:`, err);

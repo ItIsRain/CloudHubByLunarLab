@@ -46,7 +46,7 @@ async function authenticateOrganizer(
     return {
       auth: null,
       supabase: null,
-      error: NextResponse.json({ error: "Hackathon not found" }, { status: 404 }),
+      error: NextResponse.json({ error: "Competition not found" }, { status: 404 }),
     } as const;
   }
 
@@ -266,7 +266,7 @@ async function handleAutoSelect(
 
   if (spError || !sourcePhases || sourcePhases.length !== sourcePhaseIds.length) {
     return NextResponse.json(
-      { error: "One or more source phases are invalid or do not belong to this hackathon" },
+      { error: "One or more source phases are invalid or do not belong to this competition" },
       { status: 400 }
     );
   }

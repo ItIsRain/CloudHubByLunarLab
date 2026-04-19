@@ -56,8 +56,8 @@ const featureCategories = [
     ],
   },
   {
-    title: "Hackathon Platform",
-    description: "The complete toolkit for organizing hackathons from start to finish.",
+    title: "Competition Platform",
+    description: "The complete toolkit for organizing competitions from start to finish.",
     features: [
       {
         icon: Trophy,
@@ -83,7 +83,7 @@ const featureCategories = [
   },
   {
     title: "Community & Growth",
-    description: "Build lasting communities around your events and hackathons.",
+    description: "Build lasting communities around your events and competitions.",
     features: [
       {
         icon: Globe,
@@ -103,7 +103,7 @@ const featureCategories = [
       {
         icon: Search,
         title: "Public Profiles",
-        description: "Participant profiles showcasing events attended, hackathons won, skills, and certifications.",
+        description: "Participant profiles showcasing events attended, competitions won, skills, and certifications.",
       },
     ],
   },

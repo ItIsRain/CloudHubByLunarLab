@@ -212,7 +212,7 @@ export default function PublicProfilePage() {
             <Tabs defaultValue="events">
               <TabsList>
                 <TabsTrigger value="events">Events</TabsTrigger>
-                <TabsTrigger value="hackathons">Hackathons</TabsTrigger>
+                <TabsTrigger value="hackathons">Competitions</TabsTrigger>
                 <TabsTrigger value="projects">Projects</TabsTrigger>
                 <TabsTrigger value="certificates">Certificates</TabsTrigger>
               </TabsList>

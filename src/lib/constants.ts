@@ -154,7 +154,7 @@ export const PRICING_TIERS: PricingTierConfig[] = [
     features: [
       "3 events per month",
       "Up to 100 attendees each",
-      "1 hackathon with team formation",
+      "1 competition with team formation",
       "Event page builder",
       "Ticketing (free tickets)",
       "Email notifications",

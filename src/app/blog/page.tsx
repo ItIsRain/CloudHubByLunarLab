@@ -5,7 +5,7 @@ import BlogPage from "./page-client";
 export const metadata = buildMetadata({
   title: "Blog",
   description:
-    "Insights, guides, and news from the CloudHub team. Tips on event management, hackathon organization, community building, and more.",
+    "Insights, guides, and news from the CloudHub team. Tips on event management, competition organization, community building, and more.",
   path: "/blog",
 });
 

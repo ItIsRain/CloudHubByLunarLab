@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     if (entityVisibility !== "private") {
       return NextResponse.json(
-        { error: "Invitations can only be sent for private events/hackathons" },
+        { error: "Invitations can only be sent for private events/competitions" },
         { status: 400 }
       );
     }

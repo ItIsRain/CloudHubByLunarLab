@@ -3,7 +3,7 @@ import { buildMetadata } from "@/lib/seo";
 
 export const metadata = buildMetadata({
   title: "Hackathons",
-  description: "Browse upcoming hackathons — compete, collaborate, and build something amazing.",
+  description: "Browse upcoming competitions — compete, collaborate, and build something amazing.",
   path: "/hackathons",
 });
 

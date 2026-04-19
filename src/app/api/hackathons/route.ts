@@ -66,8 +66,17 @@ export async function GET(request: NextRequest) {
       );
     }
     if (category) {
-      const cats = category.split(",");
-      query = query.in("category", cats);
+      // Normalize each requested category the same way we store them so the
+      // filter survives case differences and stray whitespace. Postgres
+      // overlap (`.overlaps`) matches when the hackathon's `categories`
+      // array shares any entry with the requested set.
+      const cats = category
+        .split(",")
+        .map((c) => c.trim().toLowerCase().replace(/\s+/g, " "))
+        .filter((c) => c.length > 0);
+      if (cats.length > 0) {
+        query = query.overlaps("categories", cats);
+      }
     }
     if (status) {
       const statuses = status.split(",");
@@ -143,8 +152,8 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error("Failed to fetch hackathons:", error.message);
-      return NextResponse.json({ error: "Failed to fetch hackathons" }, { status: 400 });
+      console.error("Failed to fetch competitions:", error.message);
+      return NextResponse.json({ error: "Failed to fetch competitions" }, { status: 400 });
     }
 
     const hackathons = (data || []).map((row: Record<string, unknown>) => {
@@ -226,7 +235,7 @@ export async function POST(request: NextRequest) {
     const roles = (Array.isArray(profile?.roles) ? profile.roles : []) as string[];
     if (!roles.includes("organizer") && !roles.includes("admin")) {
       return NextResponse.json(
-        { error: "Only organizers can create hackathons" },
+        { error: "Only organizers can create competitions" },
         { status: 403 }
       );
     }
@@ -248,7 +257,7 @@ export async function POST(request: NextRequest) {
       const limit = getHackathonLimit(tier);
       return NextResponse.json(
         {
-          error: `You've reached your monthly limit of ${limit} hackathon${limit !== 1 ? "s" : ""} on the ${tier} plan. Upgrade to Pro for unlimited hackathons.`,
+          error: `You've reached your monthly limit of ${limit} hackathon${limit !== 1 ? "s" : ""} on the ${tier} plan. Upgrade to Pro for unlimited competitions.`,
           code: "PLAN_LIMIT_REACHED",
         },
         { status: 403 }
@@ -269,7 +278,7 @@ export async function POST(request: NextRequest) {
 
     // Allowlist: only permit fields organizers should set
     const HACK_FIELDS = [
-      "name", "tagline", "description", "cover_image", "logo", "category",
+      "name", "tagline", "description", "cover_image", "logo", "category", "categories",
       "tags", "type", "status", "visibility", "location",
       "min_team_size", "max_team_size", "allow_solo", "total_prize_pool",
       "registration_start", "registration_end", "hacking_start", "hacking_end",
@@ -285,21 +294,55 @@ export async function POST(request: NextRequest) {
       if (key in body) insertData[key] = body[key];
     }
 
-    // Validate enum fields
+    // Normalize multi-category input: lowercase, trim, dedupe. Customs are
+    // allowed (free-form strings) — we only enforce per-label shape and a
+    // reasonable upper bound on count.
     const VALID_CATEGORIES = categories.map((c) => c.value);
-    if (insertData.category && !VALID_CATEGORIES.includes(insertData.category as string)) {
+    const normalizeCategoryValue = (raw: unknown): string | null => {
+      if (typeof raw !== "string") return null;
+      const norm = raw.trim().toLowerCase().replace(/\s+/g, " ");
+      if (norm.length === 0 || norm.length > 40) return null;
+      return norm;
+    };
+
+    let categoriesArray: string[] | undefined;
+    if (Array.isArray(insertData.categories)) {
+      const normalized = (insertData.categories as unknown[])
+        .map(normalizeCategoryValue)
+        .filter((c): c is string => c !== null);
+      categoriesArray = Array.from(new Set(normalized));
+      if (categoriesArray.length === 0) {
+        return NextResponse.json({ error: "categories must contain at least one non-empty value" }, { status: 400 });
+      }
+      if (categoriesArray.length > 8) {
+        return NextResponse.json({ error: "At most 8 categories are allowed per competition" }, { status: 400 });
+      }
+    } else if (insertData.category) {
+      const norm = normalizeCategoryValue(insertData.category);
+      if (!norm) {
+        return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+      }
+      categoriesArray = [norm];
+    }
+
+    if (categoriesArray) {
+      insertData.categories = categoriesArray;
+      insertData.category = categoriesArray[0];
+    } else if (insertData.category && !VALID_CATEGORIES.includes(insertData.category as string)) {
+      // No categories array and the legacy single value isn't a preset —
+      // reject rather than silently writing bad data.
       return NextResponse.json({ error: "Invalid category" }, { status: 400 });
     }
     const VALID_TYPES = ["in-person", "virtual", "hybrid"];
     if (insertData.type && !VALID_TYPES.includes(insertData.type as string)) {
-      return NextResponse.json({ error: "Invalid hackathon type" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition type" }, { status: 400 });
     }
 
     // Validate status (only draft or published on create)
     if (insertData.status) {
       if (!["draft", "published"].includes(insertData.status as string)) {
         return NextResponse.json(
-          { error: 'Hackathons can only be created with status "draft" or "published"' },
+          { error: 'Competitions can only be created with status "draft" or "published"' },
           { status: 400 }
         );
       }
@@ -389,8 +432,24 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("Failed to create hackathon:", error.message);
-      return NextResponse.json({ error: "Failed to create hackathon" }, { status: 400 });
+      // Log full Supabase error (code, details, hint) so column/constraint
+      // failures — like a missing `categories` column before the migration
+      // runs — surface in the server log instead of an opaque 400.
+      console.error("[POST /api/hackathons] insert error:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        insertKeys: Object.keys(insertData),
+      });
+      return NextResponse.json(
+        {
+          error: "Failed to create competition",
+          details: error.message,
+          code: error.code,
+        },
+        { status: 400 }
+      );
     }
 
     await writeAuditLog({

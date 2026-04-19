@@ -15,14 +15,37 @@ import { Input } from "@/components/ui/input";
 import { ImageUpload } from "@/components/forms/image-upload";
 import { generateId } from "@/lib/utils";
 import type { Sponsor } from "@/lib/types";
+import {
+  PRESET_SPONSOR_TIERS,
+  normalizeSponsorTier,
+  sponsorTierLabel,
+} from "@/lib/sponsor-tiers";
 
-const sponsorSchema = z.object({
-  name: z.string().min(2, "Name is required"),
-  logo: z.string().optional(),
-  website: z.string().url("Must be a valid URL").optional().or(z.literal("")),
-  tier: z.enum(["platinum", "gold", "silver", "bronze", "community"]),
-  description: z.string().optional(),
-});
+// "other" is a sentinel in the select — when chosen, the user enters their own
+// tier name. It is never stored; we persist the normalized custom string.
+const OTHER_TIER_SENTINEL = "__other__";
+
+const sponsorSchema = z
+  .object({
+    name: z.string().min(2, "Name is required"),
+    logo: z.string().optional(),
+    website: z.string().url("Must be a valid URL").optional().or(z.literal("")),
+    tierSelection: z.string().min(1, "Tier is required"),
+    customTier: z.string().max(40, "Tier name is too long").optional(),
+    description: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.tierSelection === OTHER_TIER_SENTINEL) {
+      const custom = normalizeSponsorTier(data.customTier ?? "");
+      if (!custom) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["customTier"],
+          message: "Enter a custom tier name",
+        });
+      }
+    }
+  });
 
 type SponsorForm = z.infer<typeof sponsorSchema>;
 
@@ -46,18 +69,27 @@ export function AddSponsorDialog({
     formState: { errors },
   } = useForm<SponsorForm>({
     resolver: zodResolver(sponsorSchema),
-    defaultValues: { tier: "silver" },
+    defaultValues: { tierSelection: "silver", customTier: "" },
   });
 
   const logo = watch("logo");
+  const tierSelection = watch("tierSelection");
+  const isCustomTier = tierSelection === OTHER_TIER_SENTINEL;
 
   const onSubmit = (data: SponsorForm) => {
+    const tier =
+      data.tierSelection === OTHER_TIER_SENTINEL
+        ? normalizeSponsorTier(data.customTier ?? "")
+        : normalizeSponsorTier(data.tierSelection);
+
     onAdd({
       id: generateId(),
       name: data.name,
-      logo: data.logo || `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(data.name)}`,
+      logo:
+        data.logo ||
+        `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(data.name)}`,
       website: data.website || undefined,
-      tier: data.tier,
+      tier,
       description: data.description,
     });
     reset();
@@ -77,6 +109,7 @@ export function AddSponsorDialog({
             onChange={(url) => setValue("logo", url)}
             aspectRatio="square"
             label="Sponsor Logo"
+            folder="cloudhub/uploads"
           />
 
           <div className="space-y-1">
@@ -98,16 +131,38 @@ export function AddSponsorDialog({
           <div className="space-y-1">
             <label className="text-sm font-medium">Tier</label>
             <select
-              {...register("tier")}
+              {...register("tierSelection")}
               className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              <option value="platinum">Platinum</option>
-              <option value="gold">Gold</option>
-              <option value="silver">Silver</option>
-              <option value="bronze">Bronze</option>
-              <option value="community">Community</option>
+              {PRESET_SPONSOR_TIERS.map((preset) => (
+                <option key={preset} value={preset}>
+                  {sponsorTierLabel(preset)}
+                </option>
+              ))}
+              <option value={OTHER_TIER_SENTINEL}>Other (custom)…</option>
             </select>
           </div>
+
+          {isCustomTier && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Custom tier name *</label>
+              <Input
+                {...register("customTier")}
+                placeholder="e.g. Title Sponsor, Venue Partner"
+                maxLength={40}
+              />
+              {errors.customTier ? (
+                <p className="text-xs text-destructive">
+                  {errors.customTier.message}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Name your own tier — e.g. &ldquo;Title Sponsor&rdquo;,
+                  &ldquo;Venue Partner&rdquo;, &ldquo;Media Partner&rdquo;.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1">
             <label className="text-sm font-medium">Description</label>

@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   EventType,
-  EventCategory,
   EntityVisibility,
   Track,
   Prize,
@@ -19,7 +18,12 @@ interface HackathonFormState {
   description: string;
   coverImage: string;
   logo: string;
-  category: EventCategory | "";
+  /**
+   * Categories assigned to the hackathon. Lowercased strings; any entry
+   * not in the preset list is a custom category typed via "Other". Always
+   * treated as a set (dedup + sort is handled at render time).
+   */
+  categories: string[];
   tags: string[];
   type: EventType;
   // Location
@@ -79,7 +83,7 @@ const initialState = {
   description: "",
   coverImage: "",
   logo: "",
-  category: "" as const,
+  categories: [] as string[],
   tags: [],
   type: "online" as EventType,
   address: "",
@@ -150,6 +154,23 @@ export const useHackathonFormStore = create<HackathonFormState>()(
     }),
     {
       name: "hackathon-form-storage",
+      version: 2,
+      // Migrate any persisted drafts from the single-category era: carry the
+      // old `category` string over as the first (and only) element of the
+      // new `categories` array so in-progress work isn't silently dropped.
+      migrate: (persistedState: unknown, fromVersion: number) => {
+        if (fromVersion >= 2 || !persistedState || typeof persistedState !== "object") {
+          return persistedState as Partial<HackathonFormState>;
+        }
+        const prior = persistedState as Record<string, unknown> & { category?: string };
+        const legacyCategory = typeof prior.category === "string" ? prior.category.trim() : "";
+        const { category: _drop, ...rest } = prior;
+        void _drop;
+        return {
+          ...rest,
+          categories: legacyCategory ? [legacyCategory] : [],
+        } as Partial<HackathonFormState>;
+      },
       partialize: (state) => {
         // Exclude large base64 image data from localStorage
         // eslint-disable-next-line @typescript-eslint/no-unused-vars

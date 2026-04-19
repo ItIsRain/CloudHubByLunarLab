@@ -97,7 +97,7 @@ const toolResources: Resource[] = [
     id: "tool-2",
     title: "AWS Credits",
     description:
-      "$50 in AWS credits for compute, storage, and AI/ML services during the hackathon.",
+      "$50 in AWS credits for compute, storage, and AI/ML services during the competition.",
     url: "https://example.com/aws-credits",
     type: "tool",
   },
@@ -105,7 +105,7 @@ const toolResources: Resource[] = [
     id: "tool-3",
     title: "Figma Pro Access",
     description:
-      "Complimentary Figma Pro for the duration of the hackathon. Design and prototype for free.",
+      "Complimentary Figma Pro for the duration of the competition. Design and prototype for free.",
     url: "https://example.com/figma-pro",
     type: "tool",
   },
@@ -173,7 +173,7 @@ export default function HackathonResourcesPage() {
               The hackathon you&apos;re looking for doesn&apos;t exist or has been removed.
             </p>
             <Button asChild>
-              <Link href="/hackathons">Browse Hackathons</Link>
+              <Link href="/hackathons">Browse Competitions</Link>
             </Button>
           </div>
         </main>

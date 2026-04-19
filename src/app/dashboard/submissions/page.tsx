@@ -144,7 +144,7 @@ export default function SubmissionsPage() {
               <p className="text-sm text-muted-foreground mb-4">
                 {search
                   ? "Try adjusting your search."
-                  : "Submit your first project to a hackathon!"}
+                  : "Submit your first project to a competition!"}
               </p>
               <Button asChild>
                 <Link href="/dashboard/submissions/new">Create Submission</Link>

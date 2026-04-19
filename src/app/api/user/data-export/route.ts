@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       admin
         .from("profiles")
-        .select("*")
+        .select("id,email,name,username,avatar,bio,headline,location,website,github,twitter,linkedin,skills,interests,roles,events_attended,hackathons_participated,projects_submitted,wins,subscription_tier,created_at,updated_at")
         .eq("id", userId)
         .single(),
       admin

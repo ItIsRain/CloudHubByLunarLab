@@ -88,7 +88,7 @@ export default function PrivacyPolicyPage() {
                 </h3>
                 <ul className="space-y-2 text-muted-foreground list-disc pl-6">
                   <li><strong>Account Information:</strong> When you register, we collect your name, email address, username, password, and optional profile details such as bio, location, skills, and social media links.</li>
-                  <li><strong>Event and Hackathon Data:</strong> When you create events or hackathons, we collect event details, descriptions, images, schedules, and configuration settings.</li>
+                  <li><strong>Event and Competition Data:</strong> When you create events or competitions, we collect event details, descriptions, images, schedules, and configuration settings.</li>
                   <li><strong>Submissions:</strong> Project submissions including titles, descriptions, source code links, demo URLs, images, and related materials.</li>
                   <li><strong>Communications:</strong> Messages sent through the platform, feedback, and support requests.</li>
                   <li><strong>Payment Information:</strong> When you purchase tickets or subscribe to paid plans, payment details are processed securely through our third-party payment processor. We do not store full credit card numbers.</li>
@@ -114,8 +114,8 @@ export default function PrivacyPolicyPage() {
                 <ul className="mt-4 space-y-2 text-muted-foreground list-disc pl-6">
                   <li>Provide, maintain, and improve the Service, including personalizing your experience.</li>
                   <li>Process transactions, send related information, and manage your account.</li>
-                  <li>Facilitate event discovery, team formation, and hackathon participation.</li>
-                  <li>Send notifications about events, hackathons, team activity, and submission updates.</li>
+                  <li>Facilitate event discovery, team formation, and competition participation.</li>
+                  <li>Send notifications about events, competitions, team activity, and submission updates.</li>
                   <li>Communicate with you about products, services, and events offered by us and others, including promotional communications (which you can opt out of).</li>
                   <li>Monitor and analyze trends, usage, and activities in connection with the Service.</li>
                   <li>Detect, investigate, and prevent fraudulent transactions, abuse, and other illegal activities.</li>
@@ -131,9 +131,9 @@ export default function PrivacyPolicyPage() {
                   We do not sell your personal information. We may share your information in the following circumstances:
                 </p>
                 <ul className="mt-4 space-y-2 text-muted-foreground list-disc pl-6">
-                  <li><strong>With Your Consent:</strong> We share information when you direct us to, such as when you join a team or submit a project to a hackathon.</li>
+                  <li><strong>With Your Consent:</strong> We share information when you direct us to, such as when you join a team or submit a project to a competition.</li>
                   <li><strong>Public Profile:</strong> Your profile name, username, avatar, bio, and participation history are visible to other users as part of the platform&apos;s community features.</li>
-                  <li><strong>Event Organizers:</strong> When you register for events or hackathons, organizers may receive your registration information.</li>
+                  <li><strong>Event Organizers:</strong> When you register for events or competitions, organizers may receive your registration information.</li>
                   <li><strong>Service Providers:</strong> We share data with third-party vendors who perform services on our behalf, such as hosting, analytics, email delivery, and payment processing.</li>
                   <li><strong>Legal Requirements:</strong> We may disclose information if required by law, regulation, legal process, or governmental request.</li>
                   <li><strong>Business Transfers:</strong> In connection with a merger, acquisition, or sale of assets, your information may be transferred.</li>
@@ -161,7 +161,7 @@ export default function PrivacyPolicyPage() {
                 </p>
                 <ul className="mt-4 space-y-2 text-muted-foreground list-disc pl-6">
                   <li><strong>Account Data:</strong> Retained for the lifetime of your account plus 30 days after account deletion to allow for recovery.</li>
-                  <li><strong>Competition &amp; Hackathon Data:</strong> Registration details, submissions, and team data are retained for 2 years after the competition ends to allow for verification of results, certificates, and portfolio purposes.</li>
+                  <li><strong>Competition Data:</strong> Registration details, submissions, and team data are retained for 2 years after the competition ends to allow for verification of results, certificates, and portfolio purposes.</li>
                   <li><strong>Event Registration Data:</strong> Retained for 1 year after the event concludes.</li>
                   <li><strong>Marketing Consent Records:</strong> Retained for as long as the consent is valid, plus 1 year after withdrawal for audit purposes.</li>
                   <li><strong>Data Deletion Requests:</strong> Processed within 30 days of the request. Backup copies may take up to 90 days to be fully purged.</li>
@@ -212,7 +212,7 @@ export default function PrivacyPolicyPage() {
                   We collect explicit consent for the processing of your personal data at key points in the platform:
                 </p>
                 <ul className="mt-4 space-y-2 text-muted-foreground list-disc pl-6">
-                  <li><strong>Competition Registration:</strong> When you register for a hackathon or competition, you are asked to provide explicit consent for data processing. Consent to data processing is required to participate. Marketing communications and third-party data sharing are optional.</li>
+                  <li><strong>Competition Registration:</strong> When you register for a competition, you are asked to provide explicit consent for data processing. Consent to data processing is required to participate. Marketing communications and third-party data sharing are optional.</li>
                   <li><strong>Marketing Communications:</strong> You may optionally consent to receiving marketing communications. This consent can be withdrawn at any time.</li>
                   <li><strong>Third-Party Sharing:</strong> For competitions with sponsors or partners, you may optionally consent to sharing your data with those partners. This consent is separate from data processing consent and can be withdrawn independently.</li>
                 </ul>

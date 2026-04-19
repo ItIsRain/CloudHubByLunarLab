@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     if (entityType !== "event" && entityType !== "hackathon") {
       return NextResponse.json(
-        { error: "entityType must be 'event' or 'hackathon'" },
+        { error: "entityType must be 'event' or 'competition'" },
         { status: 400 }
       );
     }

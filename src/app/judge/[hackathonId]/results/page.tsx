@@ -41,7 +41,7 @@ export default function ResultsPage() {
               className="flex flex-col items-center justify-center py-20"
             >
               <Trophy className="h-16 w-16 text-muted-foreground/30 mb-4" />
-              <h1 className="font-display text-2xl font-bold">Hackathon Not Found</h1>
+              <h1 className="font-display text-2xl font-bold">Competition Not Found</h1>
               <p className="text-muted-foreground mt-2">
                 The hackathon you are looking for does not exist.
               </p>

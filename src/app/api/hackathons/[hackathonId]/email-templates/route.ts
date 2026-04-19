@@ -5,6 +5,7 @@ import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess, canEdit, type HackathonRole } from "@/lib/check-hackathon-access";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const VALID_CATEGORIES = [
   "acceptance",
@@ -78,7 +79,7 @@ export async function GET(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -139,7 +140,7 @@ export async function POST(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -275,7 +276,7 @@ export async function PATCH(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -550,7 +551,7 @@ export async function DELETE(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -623,7 +624,7 @@ export async function PUT(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     const auth = await authenticateRequest(request);
@@ -633,6 +634,20 @@ export async function PUT(
     if (auth.type === "api_key") {
       const scopeError = assertScope(auth, "/api/hackathons");
       if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
+    }
+
+    // Rate-limit bulk email sends: 5 per hour per user to prevent abuse,
+    // domain reputation damage, and Resend quota exhaustion.
+    const rl = checkRateLimit(auth.userId, {
+      namespace: "hackathon-bulk-email",
+      limit: 5,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many bulk emails sent. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
     }
 
     const supabase =
@@ -653,7 +668,7 @@ export async function PUT(
       .single();
 
     if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      return NextResponse.json({ error: "Competition not found" }, { status: 404 });
     }
 
     const body = await request.json();

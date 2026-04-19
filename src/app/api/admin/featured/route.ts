@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/audit";
+import { verifyAdmin } from "@/lib/verify-admin";
 
 const VALID_ENTITY_TYPES = ["event", "hackathon"] as const;
 type EntityType = (typeof VALID_ENTITY_TYPES)[number];
@@ -13,28 +13,8 @@ const TABLE_MAP: Record<EntityType, string> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
-
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    // Verify admin role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("roles")
-      .eq("id", user.id)
-      .single();
-
-    const roles = (profile?.roles as string[]) || [];
-    if (!roles.includes("admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const adminCheck = await verifyAdmin();
+    if (adminCheck.error) return adminCheck.error;
 
     // Parse and validate body
     const body = await request.json();
@@ -49,7 +29,7 @@ export async function POST(request: NextRequest) {
       !VALID_ENTITY_TYPES.includes(entityType as EntityType)
     ) {
       return NextResponse.json(
-        { error: "entityType must be \"event\" or \"hackathon\"" },
+        { error: "entityType must be \"event\" or \"competition\"" },
         { status: 400 }
       );
     }
@@ -57,6 +37,15 @@ export async function POST(request: NextRequest) {
     if (typeof entityId !== "string" || entityId.trim().length === 0) {
       return NextResponse.json(
         { error: "entityId is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate UUID format to prevent filter-injection / IDOR
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(entityId as string)) {
+      return NextResponse.json(
+        { error: "entityId must be a valid UUID" },
         { status: 400 }
       );
     }
@@ -99,7 +88,7 @@ export async function POST(request: NextRequest) {
     // Write audit log (best-effort)
     await writeAuditLog(
       {
-        actorId: user.id,
+        actorId: adminCheck.userId,
         action: featured ? "feature" : "unfeature",
         entityType: validEntityType,
         entityId,

@@ -343,7 +343,7 @@ function TrackFormDialog({
           <DialogDescription>
             {editingTrack
               ? "Update the award track details and scoring criteria."
-              : "Create a new award track for this hackathon."}
+              : "Create a new award track for this competition."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

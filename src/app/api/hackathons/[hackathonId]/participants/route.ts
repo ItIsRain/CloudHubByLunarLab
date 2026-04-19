@@ -7,6 +7,72 @@ import { fireWebhooks } from "@/lib/webhook-delivery";
 import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
 
+// Statuses that free up a spot — when an applicant moves TO one of these,
+// the next waitlisted person can be auto-promoted.
+const SPOT_FREEING_STATUSES = new Set(["cancelled", "rejected", "declined"]);
+
+/**
+ * Auto-promote waitlisted applicants when spots open up. Promotes one
+ * person per freed spot (FIFO by `created_at`). Fires notifications so
+ * the promoted applicant knows immediately.
+ *
+ * Called fire-and-forget after a status update that moves registrations
+ * into a spot-freeing status.
+ */
+async function autoPromoteWaitlist(
+  hackathonId: string,
+  hackathonName: string,
+  freedSpots: number
+) {
+  if (freedSpots <= 0) return;
+
+  try {
+    const admin = getSupabaseAdminClient();
+
+    // Fetch the oldest N waitlisted registrations
+    const { data: waitlisted } = await admin
+      .from("hackathon_registrations")
+      .select("id, user_id")
+      .eq("hackathon_id", hackathonId)
+      .eq("status", "waitlisted")
+      .order("created_at", { ascending: true })
+      .limit(freedSpots);
+
+    if (!waitlisted || waitlisted.length === 0) return;
+
+    const idsToPromote = waitlisted.map((w) => w.id as string);
+
+    // Promote to "accepted"
+    const { error } = await admin
+      .from("hackathon_registrations")
+      .update({ status: "accepted" })
+      .in("id", idsToPromote);
+
+    if (error) {
+      console.error("[waitlist-auto-promote] Failed to promote:", error);
+      return;
+    }
+
+    // Notify each promoted applicant
+    const notifications = waitlisted.map((w) => ({
+      user_id: w.user_id,
+      type: "hackathon-update",
+      title: "You've Been Accepted!",
+      message: `A spot opened up in ${hackathonName} and you've been moved off the waitlist. Congratulations!`,
+      link: `/hackathons/${hackathonId}`,
+    }));
+
+    await admin.from("notifications").insert(notifications);
+
+    console.warn(
+      `[waitlist-auto-promote] Promoted ${idsToPromote.length} applicant(s) for hackathon ${hackathonId}`
+    );
+  } catch (err) {
+    // Non-critical — log and swallow so the original request still succeeds
+    console.error("[waitlist-auto-promote] Error:", err);
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ hackathonId: string }> }
@@ -15,7 +81,7 @@ export async function GET(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     // Dual auth: session cookies OR API key
@@ -177,7 +243,7 @@ export async function PATCH(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     // Dual auth: session cookies OR API key
@@ -213,7 +279,7 @@ export async function PATCH(
 
     if (!hackathon) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }
@@ -360,7 +426,7 @@ export async function PATCH(
         }
 
         // Send notifications/emails/webhooks for successfully updated registrations
-        const hackathonName = hackathon.name || "the hackathon";
+        const hackathonName = hackathon.name || "the competition";
         const notifiableStatuses = ["cancelled", "rejected", "approved", "accepted", "waitlisted", "ineligible", "eligible", "under_review", "declined"];
         const partialMessages: Record<string, { title: string; message: string }> = {
           cancelled: { title: "Registration Cancelled", message: `Your registration for ${hackathonName} has been cancelled by the organizer.` },
@@ -422,6 +488,17 @@ export async function PATCH(
             .then(() => {}, () => {});
         }
 
+        // Auto-promote waitlisted if spots freed
+        if (SPOT_FREEING_STATUSES.has(status)) {
+          const freedSpots = (data ?? []).filter((reg) => {
+            const prev = previousStatusMap.get(reg.id);
+            return prev && prev.status !== status;
+          }).length;
+          if (freedSpots > 0) {
+            autoPromoteWaitlist(hackathonId, hackathonName, freedSpots);
+          }
+        }
+
         return NextResponse.json({
           data: {
             updated: data?.length || 0,
@@ -453,7 +530,7 @@ export async function PATCH(
 
     // Send notifications + emails only for registrations whose status actually changed
     const notifiableStatuses = ["cancelled", "rejected", "approved", "accepted", "waitlisted", "ineligible", "eligible", "under_review", "declined"];
-    const hackathonName = hackathon.name || "the hackathon";
+    const hackathonName = hackathon.name || "the competition";
     const messages: Record<string, { title: string; message: string }> = {
       cancelled: {
         title: "Registration Cancelled",
@@ -544,6 +621,18 @@ export async function PATCH(
         .then(() => {}, () => {});
     }
 
+    // Auto-promote waitlisted applicants if spots were freed up
+    if (SPOT_FREEING_STATUSES.has(status)) {
+      const freedSpots = (data ?? []).filter((reg) => {
+        const prev = previousStatusMap.get(reg.id);
+        return prev && prev.status !== status; // actually changed
+      }).length;
+      if (freedSpots > 0) {
+        // Fire-and-forget — don't block the response
+        autoPromoteWaitlist(hackathonId, hackathonName, freedSpots);
+      }
+    }
+
     // Return single item for single-update backwards compatibility, array for bulk
     if (ids.length === 1 && data.length === 1) {
       const d = data[0];
@@ -583,7 +672,7 @@ export async function DELETE(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     const auth = await authenticateRequest(request);

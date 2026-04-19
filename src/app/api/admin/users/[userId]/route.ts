@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileToUser } from "@/lib/supabase/mappers";
 import { writeAuditLog } from "@/lib/audit";
+import { verifyAdmin } from "@/lib/verify-admin";
 
 const VALID_STATUSES = ["active", "suspended", "banned"] as const;
 type UserStatus = (typeof VALID_STATUSES)[number];
@@ -28,28 +28,9 @@ export async function PATCH(
 ) {
   try {
     const { userId } = await params;
-    const supabase = await getSupabaseServerClient();
 
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    // Verify admin role
-    const { data: callerProfile } = await supabase
-      .from("profiles")
-      .select("roles")
-      .eq("id", user.id)
-      .single();
-
-    const callerRoles = (callerProfile?.roles as string[]) || [];
-    if (!callerRoles.includes("admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const adminCheck = await verifyAdmin();
+    if (adminCheck.error) return adminCheck.error;
 
     // Parse and validate body
     const body = await request.json().catch(() => null);
@@ -103,10 +84,12 @@ export async function PATCH(
 
     const admin = getSupabaseAdminClient();
 
-    // Fetch current profile for audit log (old values)
+    // Fetch current profile for audit log (old values) — explicit column
+    // list prevents leaking any future sensitive columns.
+    const ADMIN_PROFILE_COLS = "id,name,email,username,avatar,roles,status,subscription_tier,created_at,updated_at";
     const { data: currentProfile, error: fetchError } = await admin
       .from("profiles")
-      .select("*")
+      .select(ADMIN_PROFILE_COLS)
       .eq("id", userId)
       .single();
 
@@ -136,7 +119,7 @@ export async function PATCH(
       .from("profiles")
       .update(updates)
       .eq("id", userId)
-      .select("*")
+      .select(ADMIN_PROFILE_COLS)
       .single();
 
     if (updateError) {
@@ -175,7 +158,7 @@ export async function PATCH(
     // Write audit log
     await writeAuditLog(
       {
-        actorId: user.id,
+        actorId: adminCheck.userId,
         action: "admin.user.update",
         entityType: "user",
         entityId: userId,

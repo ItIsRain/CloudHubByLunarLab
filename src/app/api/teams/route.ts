@@ -196,21 +196,21 @@ export async function POST(request: NextRequest) {
 
     if (!hackathonRes.data) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }
 
     if (!registrationRes.data) {
       return NextResponse.json(
-        { error: "You must be registered for this hackathon to create a team" },
+        { error: "You must be registered for this competition to create a team" },
         { status: 403 }
       );
     }
 
     if (membershipRes.data && membershipRes.data.length > 0) {
       return NextResponse.json(
-        { error: "You are already on a team in this hackathon" },
+        { error: "You are already on a team in this competition" },
         { status: 409 }
       );
     }
@@ -273,7 +273,7 @@ export async function POST(request: NextRequest) {
           .eq("id", hackathon_id);
       }
     }).catch((err) => {
-      console.warn("Failed to update hackathon team_count:", err);
+      console.warn("Failed to update competition team_count:", err);
     });
 
     // Fetch the full team with members

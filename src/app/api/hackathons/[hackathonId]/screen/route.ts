@@ -26,7 +26,7 @@ export async function GET(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     const auth = await authenticateRequest(request);
@@ -112,7 +112,7 @@ export async function POST(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     // Dual auth: session cookies OR API key
@@ -147,7 +147,7 @@ export async function POST(
       .single();
 
     if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      return NextResponse.json({ error: "Competition not found" }, { status: 404 });
     }
 
     const rules = (hackathon.screening_rules as ScreeningRule[]) || [];
@@ -166,7 +166,7 @@ export async function POST(
 
     if (rules.length === 0 && softFlaggedOptions.size === 0) {
       return NextResponse.json(
-        { error: "No screening rules configured for this hackathon" },
+        { error: "No screening rules configured for this competition" },
         { status: 400 }
       );
     }
@@ -472,7 +472,7 @@ export async function POST(
           const userProfile = fr.reg.user as { email?: string; name?: string } | null;
           const userEmail = userProfile?.email;
           const userName = userProfile?.name || "Applicant";
-          const hackathonName = (hackathon.name as string) || "the hackathon";
+          const hackathonName = (hackathon.name as string) || "the competition";
 
           if (userEmail) {
             const emailParams = { to: userEmail, applicantName: userName, hackathonName, hackathonId };
@@ -550,7 +550,7 @@ export async function PATCH(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     const auth = await authenticateRequest(request);
@@ -582,7 +582,7 @@ export async function PATCH(
       .single();
 
     if (!hackathon) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      return NextResponse.json({ error: "Competition not found" }, { status: 404 });
     }
 
     // Check if this is a force re-send (resend to already-published registrations)
@@ -628,7 +628,7 @@ export async function PATCH(
       });
     }
 
-    const hackathonName = (hackathon.name as string) || "the hackathon";
+    const hackathonName = (hackathon.name as string) || "the competition";
     let acceptedCount = 0;
     let waitlistedCount = 0;
     let eligibleCount = 0;

@@ -9,6 +9,12 @@ import { cn, formatCurrency, getTimeRemaining } from "@/lib/utils";
 import { Hackathon } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
+import { categoryLabel, getHackathonCategories } from "@/lib/hackathon-categories";
+
+// How many category badges to show inline before collapsing the rest into
+// a "+N more" pill. Picked to keep the header row from wrapping on narrow
+// cards while still surfacing multi-category coverage.
+const CARD_CATEGORY_VISIBLE_LIMIT = 2;
 
 interface HackathonCardProps {
   hackathon: Hackathon;
@@ -23,7 +29,7 @@ const statusConfig: Record<string, { label: string; variant: "muted" | "success"
   "registration_open": { label: "Registration Open", variant: "success", dot: true },
   "registration-closed": { label: "Registration Closed", variant: "warning" },
   "registration_closed": { label: "Registration Closed", variant: "warning" },
-  "hacking": { label: "Hacking in Progress", variant: "gradient", dot: true, pulse: true },
+  "hacking": { label: "Competing in Progress", variant: "gradient", dot: true, pulse: true },
   "submission": { label: "Submissions Open", variant: "warning", dot: true },
   "judging": { label: "Judging", variant: "secondary" },
   "completed": { label: "Completed", variant: "success" },
@@ -215,14 +221,19 @@ export const HackathonCard = React.memo(function HackathonCard({
                     key={sponsor.id}
                     className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-2 border-white/30"
                   >
-                    <Image
-                      src={sponsor.logo}
-                      alt={sponsor.name}
-                      width={20}
-                      height={20}
-          
-                      className="rounded-full"
-                    />
+                    {sponsor.logo ? (
+                      <Image
+                        src={sponsor.logo}
+                        alt={sponsor.name}
+                        width={20}
+                        height={20}
+                        className="rounded-full"
+                      />
+                    ) : (
+                      <span className="text-[10px] font-bold text-white/70">
+                        {sponsor.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
                   </div>
                 ))}
                 {hackathon.sponsors.length > 4 && (
@@ -310,10 +321,30 @@ export const HackathonCard = React.memo(function HackathonCard({
 
         {/* Content */}
         <div className="p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Badge variant="outline" className="text-xs">
-              {hackathon.category}
-            </Badge>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            {(() => {
+              const cats = getHackathonCategories(hackathon);
+              const visible = cats.slice(0, CARD_CATEGORY_VISIBLE_LIMIT);
+              const overflow = cats.length - visible.length;
+              return (
+                <>
+                  {visible.map((key) => (
+                    <Badge key={key} variant="outline" className="text-xs">
+                      {categoryLabel(key)}
+                    </Badge>
+                  ))}
+                  {overflow > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="text-xs"
+                      title={cats.slice(CARD_CATEGORY_VISIBLE_LIMIT).map(categoryLabel).join(", ")}
+                    >
+                      +{overflow} more
+                    </Badge>
+                  )}
+                </>
+              );
+            })()}
             <Badge variant="muted" className="text-xs">
               <Globe className="h-3 w-3 mr-1" />
               {hackathon.type}

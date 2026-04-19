@@ -125,7 +125,7 @@ export function HackathonsTab() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(data.error || `Failed to ${action} hackathon`);
+        throw new Error(data.error || `Failed to ${action} competition`);
       }
 
       await queryClient.invalidateQueries({ queryKey: ["hackathons"] });
@@ -136,7 +136,7 @@ export function HackathonsTab() {
         toast.warning(`"${name}" has been rejected — sent back to draft`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Failed to ${action} hackathon`);
+      toast.error(err instanceof Error ? err.message : `Failed to ${action} competition`);
     } finally {
       setLoadingActions((prev) => {
         const next = { ...prev };
@@ -308,9 +308,9 @@ export function HackathonsTab() {
         columns={columns}
         data={filteredHackathons}
         searchable={true}
-        searchPlaceholder="Search hackathons by name or organizer..."
-        emptyTitle="No hackathons found"
-        emptyDescription="No hackathons match your search or filter criteria."
+        searchPlaceholder="Search competitions by name or organizer..."
+        emptyTitle="No competitions found"
+        emptyDescription="No competitions match your search or filter criteria."
         emptyIcon={<Code className="h-6 w-6 text-muted-foreground" />}
         toolbar={
           <select
@@ -322,7 +322,7 @@ export function HackathonsTab() {
             <option value="draft">Draft</option>
             <option value="registration-open">Registration Open</option>
             <option value="registration-closed">Registration Closed</option>
-            <option value="hacking">Hacking</option>
+            <option value="hacking">Competing</option>
             <option value="submission">Submission</option>
             <option value="judging">Judging</option>
             <option value="completed">Completed</option>

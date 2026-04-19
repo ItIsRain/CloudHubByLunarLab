@@ -50,12 +50,21 @@ export async function GET(
   }
 }
 
+// Free-form tier (see POST /api/sponsors for rationale); normalized to
+// lowercase trimmed form on write.
+const tierSchema = z
+  .string()
+  .min(1)
+  .max(40)
+  .transform((v) => v.trim().toLowerCase().replace(/\s+/g, " "))
+  .refine((v) => v.length > 0, "Tier is required");
+
 const updateSponsorSchema = z.object({
   name: z.string().min(1).max(150).optional(),
   logo: z.string().url().max(2048).optional(),
   website: z.string().url().max(500).nullable().optional(),
   description: z.string().max(2000).nullable().optional(),
-  tier: z.enum(["platinum", "gold", "silver", "bronze", "community"]).optional(),
+  tier: tierSchema.optional(),
   contactEmail: z.string().email().max(255).nullable().optional(),
   contactName: z.string().max(100).nullable().optional(),
   status: z.enum(["active", "inactive"]).optional(),
