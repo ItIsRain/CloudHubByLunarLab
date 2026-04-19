@@ -198,7 +198,10 @@ export interface Sponsor {
   name: string;
   logo: string;
   website?: string;
-  tier: "platinum" | "gold" | "silver" | "bronze" | "community";
+  // Tier key — lowercase. Known presets: "platinum" | "gold" | "silver" |
+  // "bronze" | "community". Organizers can also enter a custom tier name via
+  // the "Other" option, so this is intentionally a free-form string.
+  tier: string;
   description?: string;
 }
 
@@ -249,7 +252,21 @@ export interface Hackathon {
   description: string;
   coverImage?: string;
   logo?: string;
-  category: EventCategory;
+  /**
+   * Primary category — free-form string (lowercased). Historically this was
+   * an `EventCategory` union, but organizers can now type custom categories
+   * via the "Other" option, so it's stored as a plain string. Kept for
+   * backward compatibility with older rows; new code should prefer the
+   * `categories` array below.
+   */
+  category: string;
+  /**
+   * All categories assigned to the hackathon, including any custom ones.
+   * Lowercased, deduplicated, and sorted with presets first. When empty or
+   * missing, callers should fall back to `[category]` — `getHackathonCategories()`
+   * in `@/lib/hackathon-categories` does this automatically.
+   */
+  categories?: string[];
   tags: string[];
   status: HackathonStatus;
   visibility: EntityVisibility;

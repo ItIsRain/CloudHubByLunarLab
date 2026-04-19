@@ -26,7 +26,7 @@ import { useCreateSubmission } from "@/hooks/use-submissions";
 import { useMyTeams } from "@/hooks/use-teams";
 
 const submissionSchema = z.object({
-  hackathonId: z.string().min(1, "Select a hackathon"),
+  hackathonId: z.string().min(1, "Select a competition"),
   teamId: z.string().min(1, "Select a team"),
   trackId: z.string().min(1, "Select a track"),
   projectName: z.string().min(2, "Project name is required"),
@@ -100,16 +100,16 @@ export default function NewSubmissionPage() {
             {/* Hackathon & Track */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Hackathon & Track</CardTitle>
+                <CardTitle className="text-lg">Competition & Track</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-1">
-                  <label className="text-sm font-medium">Hackathon *</label>
+                  <label className="text-sm font-medium">Competition *</label>
                   <select
                     {...register("hackathonId")}
                     className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   >
-                    <option value="">Select hackathon</option>
+                    <option value="">Select competition</option>
                     {hackathons
                       .filter((h) => h.status !== "completed" && h.status !== "draft")
                       .map((h) => (

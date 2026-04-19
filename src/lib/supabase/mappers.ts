@@ -103,7 +103,15 @@ export function dbRowToHackathon(
     description: (row.description as string) || "",
     coverImage: (row.cover_image as string) || undefined,
     logo: (row.logo as string) || undefined,
-    category: row.category as Hackathon["category"],
+    category: (row.category as string) || "",
+    // `categories` may be missing in rows that predate the multi-category
+    // migration — fall back to wrapping the legacy single value so callers
+    // can always treat the field as an array.
+    categories: Array.isArray(row.categories) && row.categories.length > 0
+      ? (row.categories as string[])
+      : row.category
+        ? [row.category as string]
+        : [],
     tags: (row.tags as string[]) || [],
     status: row.status as Hackathon["status"],
     visibility: (row.visibility as EntityVisibility) || "public",
@@ -396,7 +404,10 @@ export function hackathonFormToDbRow(
     description: string;
     coverImage: string;
     logo: string;
-    category: string;
+    /** Legacy single-category field; may be empty when `categories` is set. */
+    category?: string;
+    /** Multi-category array. When provided, takes precedence over `category`. */
+    categories?: string[];
     tags: string[];
     type: string;
     address: string;
@@ -440,7 +451,28 @@ export function hackathonFormToDbRow(
     description: form.description || "",
     cover_image: form.coverImage || null,
     logo: form.logo || null,
-    category: form.category || "tech",
+    // Determine the effective category set: prefer the multi-value array,
+    // fall back to the legacy single value, and default to a sensible
+    // preset so no row is inserted with an empty array.
+    ...(() => {
+      const normalized = (form.categories ?? [])
+        .map((c) => (c ?? "").trim().toLowerCase().replace(/\s+/g, " "))
+        .filter((c) => c.length > 0);
+      if (normalized.length === 0 && form.category) {
+        normalized.push(form.category.trim().toLowerCase());
+      }
+      if (normalized.length === 0) normalized.push("tech");
+      // Dedupe while preserving order.
+      const dedup = Array.from(new Set(normalized));
+      return {
+        categories: dedup,
+        // Keep the legacy column in sync for any readers that still use it;
+        // the trigger in migration 20260416000002 enforces this server-side
+        // too, but setting it explicitly here keeps the insert payload
+        // self-describing.
+        category: dedup[0],
+      };
+    })(),
     tags: form.tags,
     type: form.type || "online",
     status: "published",

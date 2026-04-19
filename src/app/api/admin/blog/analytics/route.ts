@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { verifyAdmin } from "@/lib/verify-admin";
 
 /**
  * GET /api/admin/blog/analytics
@@ -9,31 +9,8 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
-
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      );
-    }
-
-    // Verify admin role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("roles")
-      .eq("id", user.id)
-      .single();
-
-    const roles = (profile?.roles as string[]) || [];
-    if (!roles.includes("admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const adminCheck = await verifyAdmin();
+    if (adminCheck.error) return adminCheck.error;
 
     const admin = getSupabaseAdminClient();
 

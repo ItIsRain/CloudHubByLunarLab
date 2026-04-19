@@ -3,7 +3,7 @@ import CareersPage from "./page-client";
 
 export const metadata = buildMetadata({
   title: "Careers at Lunar Limited",
-  description: "Join the Lunar Limited team and help build the future of events and hackathons.",
+  description: "Join the Lunar Limited team and help build the future of events and competitions.",
   path: "/careers",
 });
 

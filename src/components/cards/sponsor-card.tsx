@@ -6,13 +6,20 @@ import { cn, safeHref } from "@/lib/utils";
 import type { Sponsor } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  normalizeSponsorTier,
+  sponsorTierBadgeVariant,
+  sponsorTierLabel,
+} from "@/lib/sponsor-tiers";
 
 interface SponsorCardProps {
   sponsor: Sponsor;
   className?: string;
 }
 
-const tierColors: Record<string, string> = {
+// Border/logo accents for the known preset tiers. Custom tiers fall through
+// to the default border/muted-logo styling.
+const tierBorderClass: Record<string, string> = {
   platinum: "border-violet-400/60",
   gold: "border-amber-400/60",
   silver: "border-zinc-400/60",
@@ -20,18 +27,7 @@ const tierColors: Record<string, string> = {
   community: "border-border",
 };
 
-const tierBadgeVariant: Record<
-  string,
-  "default" | "secondary" | "warning" | "muted" | "outline"
-> = {
-  platinum: "default",
-  gold: "warning",
-  silver: "secondary",
-  bronze: "muted",
-  community: "outline",
-};
-
-const logoColors: Record<string, string> = {
+const tierLogoClass: Record<string, string> = {
   platinum: "bg-violet-500/20 text-violet-500",
   gold: "bg-amber-500/20 text-amber-500",
   silver: "bg-zinc-400/20 text-zinc-500",
@@ -40,12 +36,14 @@ const logoColors: Record<string, string> = {
 };
 
 export function SponsorCard({ sponsor, className }: SponsorCardProps) {
+  const tierKey = normalizeSponsorTier(sponsor.tier);
+
   return (
     <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2 }}>
       <Card
         className={cn(
           "overflow-hidden border-2 transition-shadow duration-300 hover:shadow-lg",
-          tierColors[sponsor.tier] ?? "border-border",
+          tierBorderClass[tierKey] ?? "border-border",
           className
         )}
       >
@@ -54,7 +52,7 @@ export function SponsorCard({ sponsor, className }: SponsorCardProps) {
           <div
             className={cn(
               "flex h-14 w-14 shrink-0 items-center justify-center rounded-xl font-display text-xl font-bold",
-              logoColors[sponsor.tier] ?? "bg-muted text-muted-foreground"
+              tierLogoClass[tierKey] ?? "bg-muted text-muted-foreground"
             )}
           >
             {sponsor.name.charAt(0).toUpperCase()}
@@ -64,10 +62,10 @@ export function SponsorCard({ sponsor, className }: SponsorCardProps) {
               {sponsor.name}
             </h3>
             <Badge
-              variant={tierBadgeVariant[sponsor.tier] ?? "muted"}
-              className="text-xs capitalize mt-1"
+              variant={sponsorTierBadgeVariant(sponsor.tier)}
+              className="text-xs mt-1"
             >
-              {sponsor.tier}
+              {sponsorTierLabel(sponsor.tier)}
             </Badge>
           </div>
         </CardHeader>

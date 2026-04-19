@@ -39,7 +39,7 @@ export const mockUsers: User[] = [
     name: "Alex Chen",
     username: "alexchen",
     avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=alex",
-    bio: "Full-stack developer passionate about building products that matter. Love hackathons!",
+    bio: "Full-stack developer passionate about building products that matter. Love competitions!",
     headline: "Senior Software Engineer @ TechCorp",
     location: "San Francisco, CA",
     website: "https://alexchen.dev",
@@ -884,7 +884,7 @@ Whether you're an AI expert or just getting started, BuildAI welcomes all skill 
           { id: "slot-6", date: addDays(22), startTime: "09:00", endTime: "10:00", isBooked: false },
           { id: "slot-7", date: addDays(22), startTime: "15:00", endTime: "16:00", isBooked: true, bookedBy: "user-3" },
         ],
-        bio: "DevOps engineer who can help you deploy and scale your hackathon project.",
+        bio: "DevOps engineer who can help you deploy and scale your competition project.",
       },
     ],
     judges: mockUsers.slice(2, 5),
@@ -900,7 +900,7 @@ Whether you're an AI expert or just getting started, BuildAI welcomes all skill 
     eligibility: [
       "Must be 18 years or older",
       "Open to all skill levels",
-      "No prior hackathon experience required",
+      "No prior competition experience required",
     ],
     minTeamSize: 1,
     maxTeamSize: 4,
@@ -1096,8 +1096,8 @@ for (let i = 4; i <= 10; i++) {
     id: `hack-${i}`,
     slug: `${template.name.toLowerCase().replace(/\s+/g, "-")}-${i}`,
     name: template.name,
-    tagline: `Join the ${template.name} hackathon`,
-    description: `An exciting hackathon focused on ${template.name}. Build, learn, and win prizes!`,
+    tagline: `Join the ${template.name} competition`,
+    description: `An exciting competition focused on ${template.name}. Build, learn, and win prizes!`,
     coverImage: `https://images.unsplash.com/photo-${1677442136019 + i * 100000}-21780ecad995?w=1200&h=600&fit=crop`,
     logo: `https://api.dicebear.com/7.x/shapes/svg?seed=${template.name}`,
     category: template.category,
@@ -1123,7 +1123,7 @@ for (let i = 4; i <= 10; i++) {
     mentors: [],
     judges: mockUsers.slice(i % 3, (i % 3) + 3),
     judgingCriteria: createJudgingCriteria(),
-    rules: "Standard hackathon rules apply.",
+    rules: "Standard competition rules apply.",
     eligibility: ["Open to all"],
     minTeamSize: 1,
     maxTeamSize: 4,
@@ -1226,8 +1226,8 @@ export const mockBlogPosts: BlogPost[] = [
     id: "blog-1",
     slug: "10-tips-for-winning-hackathons",
     authorId: mockUsers[2].id,
-    title: "10 Tips for Winning Your Next Hackathon",
-    excerpt: "Learn from past winners about what it takes to stand out and win at hackathons.",
+    title: "10 Tips for Winning Your Next Competition",
+    excerpt: "Learn from past winners about what it takes to stand out and win at competitions.",
     content: `# 10 Tips for Winning Your Next Hackathon
 
 Winning a hackathon isn't just about coding skills—it's about strategy, teamwork, and presentation. Here are 10 tips from past winners...
@@ -1260,8 +1260,8 @@ Your demo is crucial. Practice it multiple times before presenting.
     id: "blog-2",
     slug: "the-rise-of-ai-hackathons",
     authorId: mockUsers[0].id,
-    title: "The Rise of AI Hackathons in 2024",
-    excerpt: "AI-focused hackathons have exploded in popularity. Here's why and what's next.",
+    title: "The Rise of AI Competitions in 2024",
+    excerpt: "AI-focused competitions have exploded in popularity. Here's why and what's next.",
     content: `# The Rise of AI Hackathons
 
 2024 has been the year of AI hackathons. With tools like ChatGPT, Claude, and open-source models becoming more accessible, builders are creating amazing AI-powered applications in just 48 hours...`,
@@ -1280,8 +1280,8 @@ Your demo is crucial. Practice it multiple times before presenting.
     id: "blog-3",
     slug: "building-winning-teams",
     authorId: mockUsers[1].id,
-    title: "Building Winning Hackathon Teams",
-    excerpt: "The secret to hackathon success often lies in team composition. Learn how to build the perfect team.",
+    title: "Building Winning Competition Teams",
+    excerpt: "The secret to competition success often lies in team composition. Learn how to build the perfect team.",
     content: `# Building Winning Hackathon Teams
 
 A great idea with a mediocre team will lose to a good idea with a great team. Here's how to build a team that can execute under pressure...`,
@@ -1301,12 +1301,12 @@ A great idea with a mediocre team will lose to a good idea with a great team. He
 // Generate more blog posts
 for (let i = 4; i <= 10; i++) {
   const titles = [
-    "How to Choose the Right Hackathon",
-    "Post-Hackathon: What's Next?",
+    "How to Choose the Right Competition",
+    "Post-Competition: What's Next?",
     "Sponsor Spotlight: TechGiant",
-    "Community Stories: From Hackathon to Startup",
-    "The Future of Virtual Hackathons",
-    "Design Tips for Hackathon Projects",
+    "Community Stories: From Competition to Startup",
+    "The Future of Virtual Competitions",
+    "Design Tips for Competition Projects",
     "API Integration Best Practices",
   ];
 
@@ -1417,7 +1417,7 @@ export const mockCertificates: Certificate[] = [
     hackathonId: "hack-1",
     type: "participation",
     title: "BuildAI 2024 Participant",
-    description: "Certificate of participation in BuildAI 2024 hackathon.",
+    description: "Certificate of participation in BuildAI 2024 competition.",
     issuedAt: subtractDays(10),
     verificationCode: "BA24-PAR-047",
   },
@@ -1447,7 +1447,7 @@ export const mockCertificates: Certificate[] = [
     hackathonId: "hack-3",
     type: "judge",
     title: "Climate Hack 2024 Judge",
-    description: "Served as a judge for the Climate Hack 2024 hackathon.",
+    description: "Served as a judge for the Climate Hack 2024 competition.",
     issuedAt: subtractDays(35),
     verificationCode: "CH24-JDG-003",
   },
@@ -1457,7 +1457,7 @@ export const mockCertificates: Certificate[] = [
     hackathonId: "hack-2",
     type: "participation",
     title: "ETHGlobal SF Participant",
-    description: "Certificate of participation in ETHGlobal San Francisco hackathon.",
+    description: "Certificate of participation in ETHGlobal San Francisco competition.",
     issuedAt: subtractDays(5),
     verificationCode: "ETH24-PAR-234",
   },
@@ -1467,7 +1467,7 @@ export const mockCertificates: Certificate[] = [
     hackathonId: "hack-1",
     type: "organizer",
     title: "BuildAI 2024 Organizer",
-    description: "Lead organizer of the BuildAI 2024 hackathon.",
+    description: "Lead organizer of the BuildAI 2024 competition.",
     issuedAt: subtractDays(1),
     verificationCode: "BA24-ORG-001",
   },
@@ -1505,16 +1505,16 @@ export const mockMessages: Message[] = [
   { id: "msg-13", conversationId: "conv-3", senderId: "user-4", sender: mockUsers[3], content: "We could team up! I'm working on a DeFi project and need a frontend dev.", type: "text", createdAt: subtractDays(10) + "T09:45:00" },
   { id: "msg-14", conversationId: "conv-3", senderId: "user-1", sender: mockUsers[0], content: "Sounds great! Let's chat more about it over coffee before the event.", type: "text", createdAt: subtractDays(10) + "T10:00:00" },
   // Conversation 4 — Alex & David
-  { id: "msg-15", conversationId: "conv-4", senderId: "user-5", sender: mockUsers[4], content: "Alex, can you help me set up the CI/CD pipeline for our hackathon project?", type: "text", createdAt: subtractDays(5) + "T13:00:00" },
+  { id: "msg-15", conversationId: "conv-4", senderId: "user-5", sender: mockUsers[4], content: "Alex, can you help me set up the CI/CD pipeline for our competition project?", type: "text", createdAt: subtractDays(5) + "T13:00:00" },
   { id: "msg-16", conversationId: "conv-4", senderId: "user-1", sender: mockUsers[0], content: "Sure David! I'll push the GitHub Actions config tonight.", type: "text", createdAt: subtractDays(5) + "T13:30:00" },
   { id: "msg-17", conversationId: "conv-4", senderId: "user-5", sender: mockUsers[4], content: "Thanks! Also, do we need to containerize the ML model or can we use serverless?", type: "text", createdAt: subtractDays(5) + "T14:00:00" },
-  { id: "msg-18", conversationId: "conv-4", senderId: "user-1", sender: mockUsers[0], content: "Let's go with serverless for the hackathon. Faster to deploy and cheaper.", type: "text", createdAt: subtractDays(5) + "T14:15:00" },
+  { id: "msg-18", conversationId: "conv-4", senderId: "user-1", sender: mockUsers[0], content: "Let's go with serverless for the competition. Faster to deploy and cheaper.", type: "text", createdAt: subtractDays(5) + "T14:15:00" },
   { id: "msg-19", conversationId: "conv-4", senderId: "user-5", sender: mockUsers[4], content: "Good call. I'll set up the Lambda functions.", type: "text", createdAt: subtractDays(4) + "T09:00:00" },
   // Conversation 5 — Alex & James (user-6)
-  { id: "msg-20", conversationId: "conv-5", senderId: "user-6", sender: mockUsers[5], content: "Hi Alex! I saw your profile and I'm impressed by your hackathon record. Any tips for a first-timer?", type: "text", createdAt: subtractDays(7) + "T11:00:00" },
+  { id: "msg-20", conversationId: "conv-5", senderId: "user-6", sender: mockUsers[5], content: "Hi Alex! I saw your profile and I'm impressed by your competition record. Any tips for a first-timer?", type: "text", createdAt: subtractDays(7) + "T11:00:00" },
   { id: "msg-21", conversationId: "conv-5", senderId: "user-1", sender: mockUsers[0], content: "Hey James! My biggest tip: focus on a working demo over a perfect codebase. Judges want to see impact.", type: "text", createdAt: subtractDays(7) + "T11:30:00" },
   { id: "msg-22", conversationId: "conv-5", senderId: "user-6", sender: mockUsers[5], content: "That makes sense. Should I go solo or find a team?", type: "text", createdAt: subtractDays(7) + "T12:00:00" },
-  { id: "msg-23", conversationId: "conv-5", senderId: "user-1", sender: mockUsers[0], content: "Definitely find a team! Diverse skills win hackathons. Check the Teams page to find open teams.", type: "text", createdAt: subtractDays(7) + "T12:15:00" },
+  { id: "msg-23", conversationId: "conv-5", senderId: "user-1", sender: mockUsers[0], content: "Definitely find a team! Diverse skills win competitions. Check the Teams page to find open teams.", type: "text", createdAt: subtractDays(7) + "T12:15:00" },
 ];
 
 export const mockConversations: Conversation[] = [
@@ -1567,7 +1567,7 @@ export const mockConversations: Conversation[] = [
     type: "direct",
     createdBy: "user-6",
     lastMessageAt: subtractDays(7) + "T12:15:00",
-    lastMessagePreview: "Definitely find a team! Diverse skills win hackathons.",
+    lastMessagePreview: "Definitely find a team! Diverse skills win competitions.",
     unreadCount: 0,
     otherParticipant: mockUsers[5],
     createdAt: subtractDays(7) + "T11:00:00",

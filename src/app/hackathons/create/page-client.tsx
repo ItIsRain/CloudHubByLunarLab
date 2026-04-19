@@ -40,7 +40,9 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
-import { categories } from "@/lib/constants";
+import { sponsorTierBadgeVariant, sponsorTierLabel } from "@/lib/sponsor-tiers";
+import { CategoryMultiSelect } from "@/components/forms/category-multi-select";
+import { categoryLabel } from "@/lib/hackathon-categories";
 import { useCreateHackathon } from "@/hooks/use-hackathons";
 import { useAuthStore } from "@/store/auth-store";
 import { hackathonFormToDbRow } from "@/lib/supabase/mappers";
@@ -80,12 +82,12 @@ export default function CreateHackathonPage() {
 
   const handlePublish = async () => {
     if (!store.name.trim()) {
-      toast.error("Hackathon name is required");
+      toast.error("Competition name is required");
       store.setSection(0);
       return;
     }
     if (!user) {
-      toast.error("You must be logged in to create a hackathon");
+      toast.error("You must be logged in to create a competition");
       return;
     }
     if (hackathonsThisMonth.isAtLimit) {
@@ -97,11 +99,11 @@ export default function CreateHackathonPage() {
       const slug = slugify(store.name || "hackathon");
       const payload = hackathonFormToDbRow(store, user.id, slug);
       const result = await createHackathon.mutateAsync(payload);
-      toast.success("Hackathon published successfully!");
+      toast.success("Competition published successfully!");
       store.resetForm();
       router.push(`/hackathons/${result.data.slug}`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create hackathon";
+      const message = err instanceof Error ? err.message : "Failed to create competition";
       if (message.includes("PLAN_LIMIT_REACHED")) {
         setShowUpgradeDialog(true);
       } else {
@@ -150,14 +152,14 @@ export default function CreateHackathonPage() {
                 {hackathonsThisMonth.isAtLimit ? (
                   <>
                     <Badge variant="destructive">Limit reached</Badge>
-                    <span>Monthly hackathon limit reached. Upgrade to continue creating hackathons.</span>
+                    <span>Monthly competition limit reached. Upgrade to continue creating competitions.</span>
                   </>
                 ) : (
                   <>
                     <Badge variant={hackathonsThisMonth.isNearLimit ? "outline" : "secondary"} className={cn(hackathonsThisMonth.isNearLimit && "border-amber-500 text-amber-600")}>
                       {hackathonsThisMonth.used}/{hackathonsThisMonth.limit}
                     </Badge>
-                    <span className="text-muted-foreground">hackathons used this month</span>
+                    <span className="text-muted-foreground">competitions used this month</span>
                     {hackathonsThisMonth.isNearLimit && (
                       <Badge variant="outline" className="border-amber-500 text-amber-600">Almost at limit</Badge>
                     )}
@@ -250,7 +252,7 @@ export default function CreateHackathonPage() {
                             />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-sm font-medium">Hackathon Name *</label>
+                            <label className="text-sm font-medium">Competition Name *</label>
                             <Input
                               value={store.name}
                               onChange={(e) => store.updateField("name", e.target.value)}
@@ -267,31 +269,19 @@ export default function CreateHackathonPage() {
                             />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-sm font-medium">Category</label>
-                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                              {categories.map((cat) => (
-                                <button
-                                  key={cat.value}
-                                  type="button"
-                                  onClick={() => store.updateField("category", cat.value as typeof store.category)}
-                                  className={cn(
-                                    "rounded-xl border-2 p-2.5 text-center text-xs font-medium transition-all",
-                                    store.category === cat.value
-                                      ? "border-primary bg-primary/5 text-primary"
-                                      : "border-border hover:border-primary/30"
-                                  )}
-                                >
-                                  {cat.label}
-                                </button>
-                              ))}
-                            </div>
+                            <label className="text-sm font-medium">Categories</label>
+                            <CategoryMultiSelect
+                              value={store.categories}
+                              onChange={(next) => store.updateField("categories", next)}
+                              helperText="Pick all that apply — or add your own via 'Add custom category'."
+                            />
                           </div>
                           <div className="space-y-2">
                             <label className="text-sm font-medium">Description</label>
                             <RichTextEditor
                               value={store.description}
                               onChange={(val) => store.updateField("description", val)}
-                              placeholder="Tell participants about this hackathon..."
+                              placeholder="Tell participants about this competition..."
                             />
                           </div>
                           <div className="space-y-2">
@@ -363,8 +353,8 @@ export default function CreateHackathonPage() {
                         {[
                           { label: "Registration Start", key: "registrationStart" as const },
                           { label: "Registration End", key: "registrationEnd" as const },
-                          { label: "Hacking Start", key: "hackingStart" as const },
-                          { label: "Hacking End", key: "hackingEnd" as const },
+                          { label: "Competing Start", key: "hackingStart" as const },
+                          { label: "Competing End", key: "hackingEnd" as const },
                           { label: "Submission Deadline", key: "submissionDeadline" as const },
                           { label: "Judging Start", key: "judgingStart" as const },
                           { label: "Judging End", key: "judgingEnd" as const },
@@ -483,7 +473,7 @@ export default function CreateHackathonPage() {
                           <RichTextEditor
                             value={store.rules}
                             onChange={(val) => store.updateField("rules", val)}
-                            placeholder="Write the hackathon rules..."
+                            placeholder="Write the competition rules..."
                           />
                         </div>
                         <div className="space-y-2">
@@ -632,11 +622,17 @@ export default function CreateHackathonPage() {
                           <div className="grid gap-3 sm:grid-cols-2">
                             {store.sponsors.map((sponsor) => (
                               <div key={sponsor.id} className="flex items-center gap-3 rounded-xl border border-border p-4">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={sponsor.logo} alt={sponsor.name} className="h-10 w-10 rounded-lg object-contain" />
+                                {sponsor.logo ? (
+                                  /* eslint-disable-next-line @next/next/no-img-element */
+                                  <img src={sponsor.logo} alt={sponsor.name} className="h-10 w-10 rounded-lg object-contain" />
+                                ) : (
+                                  <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center font-bold text-muted-foreground">
+                                    {sponsor.name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium truncate">{sponsor.name}</p>
-                                  <Badge variant="muted" className="text-xs capitalize">{sponsor.tier}</Badge>
+                                  <Badge variant={sponsorTierBadgeVariant(sponsor.tier)} className="text-xs">{sponsorTierLabel(sponsor.tier)}</Badge>
                                 </div>
                                 <Button type="button" variant="ghost" size="icon" onClick={() => store.removeSponsor(sponsor.id)}>
                                   <Trash2 className="h-4 w-4 text-destructive" />
@@ -767,15 +763,25 @@ export default function CreateHackathonPage() {
                             <p className="font-semibold">{store.name || "Untitled"}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground uppercase tracking-wider">Category</p>
-                            <p className="font-semibold capitalize">{store.category || "Not set"}</p>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wider">Categories</p>
+                            {store.categories.length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {store.categories.map((cat) => (
+                                  <Badge key={cat} variant="muted" className="text-xs">
+                                    {categoryLabel(cat)}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="font-semibold">Not set</p>
+                            )}
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground uppercase tracking-wider">Type</p>
                             <p className="font-semibold capitalize">{store.type}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground uppercase tracking-wider">Hacking Start</p>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wider">Competing Start</p>
                             <p className="font-semibold">{store.hackingStart ? formatDate(store.hackingStart) : "Not set"}</p>
                           </div>
                           <div>

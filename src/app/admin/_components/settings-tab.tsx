@@ -221,7 +221,7 @@ export function SettingsTab() {
                 />
                 <ToggleSwitch
                   label="Hackathons"
-                  description="Enable hackathon creation and participation"
+                  description="Enable competition creation and participation"
                   checked={features.hackathons}
                   onChange={(val) => handleFeatureToggle("hackathons", val)}
                 />

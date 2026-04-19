@@ -52,7 +52,7 @@ const mockReports: Report[] = [
   {
     id: "report-3",
     type: "Hackathon",
-    itemTitle: "Fake Prizes Hackathon",
+    itemTitle: "Fake Prizes Competition",
     reporter: "Emma Wilson",
     reason: "Misleading prize pool. Past participants report that prizes were never distributed.",
     date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),

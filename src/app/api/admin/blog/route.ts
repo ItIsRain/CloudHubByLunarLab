@@ -1,34 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToBlogPost } from "@/lib/supabase/mappers";
 import { slugify } from "@/lib/utils";
 import { writeAuditLog } from "@/lib/audit";
+import { verifyAdmin } from "@/lib/verify-admin";
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
-
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    // Verify admin role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("roles")
-      .eq("id", user.id)
-      .single();
-
-    const roles = (profile?.roles as string[]) || [];
-    if (!roles.includes("admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const adminCheck = await verifyAdmin();
+    if (adminCheck.error) return adminCheck.error;
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search");
@@ -104,28 +84,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
-
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    // Verify admin role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("roles")
-      .eq("id", user.id)
-      .single();
-
-    const roles = (profile?.roles as string[]) || [];
-    if (!roles.includes("admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const adminCheck = await verifyAdmin();
+    if (adminCheck.error) return adminCheck.error;
 
     const body = await request.json();
 
@@ -161,7 +121,7 @@ export async function POST(request: NextRequest) {
     // Allowlist fields
     const insertData: Record<string, unknown> = {
       slug,
-      author_id: user.id,
+      author_id: adminCheck.userId,
       title: body.title.trim(),
       excerpt: (body.excerpt || "").trim(),
       content: body.content,
@@ -204,7 +164,7 @@ export async function POST(request: NextRequest) {
     // Write audit log (best-effort)
     await writeAuditLog(
       {
-        actorId: user.id,
+        actorId: adminCheck.userId,
         action: "create",
         entityType: "blog_post",
         entityId: (data as Record<string, unknown>).id as string,

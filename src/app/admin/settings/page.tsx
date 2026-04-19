@@ -65,7 +65,7 @@ function ToggleSwitch({ label, description, defaultChecked = false }: ToggleSwit
 export default function AdminSettingsPage() {
   const [platformName, setPlatformName] = React.useState("CloudHub");
   const [description, setDescription] = React.useState(
-    "Next-Gen Event & Hackathon Management Platform"
+    "Next-Gen Event & Competition Management Platform"
   );
   const [supportEmail, setSupportEmail] = React.useState("support@cloudhub.io");
 
@@ -168,7 +168,7 @@ export default function AdminSettingsPage() {
                     />
                     <ToggleSwitch
                       label="Hackathons"
-                      description="Enable hackathon creation and participation"
+                      description="Enable competition creation and participation"
                       defaultChecked={true}
                     />
                     <ToggleSwitch

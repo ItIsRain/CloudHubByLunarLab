@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/audit";
 import { dbRowToReport } from "@/lib/supabase/mappers";
 import type { ReportStatus } from "@/lib/types";
+import { verifyAdmin } from "@/lib/verify-admin";
 
 const VALID_STATUSES: ReportStatus[] = [
   "pending",
@@ -12,37 +12,20 @@ const VALID_STATUSES: ReportStatus[] = [
   "dismissed",
 ];
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ reportId: string }> }
 ) {
   try {
     const { reportId } = await params;
-    const supabase = await getSupabaseServerClient();
-
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      );
+    if (!UUID_RE.test(reportId)) {
+      return NextResponse.json({ error: "Invalid report ID" }, { status: 400 });
     }
 
-    // Verify admin role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("roles")
-      .eq("id", user.id)
-      .single();
-
-    const roles = (profile?.roles as string[]) || [];
-    if (!roles.includes("admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const adminCheck = await verifyAdmin();
+    if (adminCheck.error) return adminCheck.error;
 
     const body = await request.json();
     const updates: Record<string, unknown> = {};
@@ -59,7 +42,7 @@ export async function PATCH(
 
       // Set resolution metadata when resolving or dismissing
       if (body.status === "resolved" || body.status === "dismissed") {
-        updates.resolved_by = user.id;
+        updates.resolved_by = adminCheck.userId;
         updates.resolved_at = new Date().toISOString();
       }
     }
@@ -116,7 +99,7 @@ export async function PATCH(
     // Write audit log
     await writeAuditLog(
       {
-        actorId: user.id,
+        actorId: adminCheck.userId,
         action: "report.update",
         entityType: "report",
         entityId: reportId,
@@ -147,31 +130,12 @@ export async function DELETE(
 ) {
   try {
     const { reportId } = await params;
-    const supabase = await getSupabaseServerClient();
-
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      );
+    if (!UUID_RE.test(reportId)) {
+      return NextResponse.json({ error: "Invalid report ID" }, { status: 400 });
     }
 
-    // Verify admin role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("roles")
-      .eq("id", user.id)
-      .single();
-
-    const roles = (profile?.roles as string[]) || [];
-    if (!roles.includes("admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const adminCheck = await verifyAdmin();
+    if (adminCheck.error) return adminCheck.error;
 
     const admin = getSupabaseAdminClient();
 
@@ -205,7 +169,7 @@ export async function DELETE(
     // Write audit log
     await writeAuditLog(
       {
-        actorId: user.id,
+        actorId: adminCheck.userId,
         action: "report.delete",
         entityType: "report",
         entityId: reportId,

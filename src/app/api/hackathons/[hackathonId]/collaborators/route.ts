@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!hackathon) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Check if user is the organizer
     if (targetUser.id === hackathon.organizer_id) {
       return NextResponse.json(
-        { error: "This user is already the organizer of this hackathon." },
+        { error: "This user is already the organizer of this competition." },
         { status: 409 }
       );
     }
@@ -243,7 +243,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -342,7 +342,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }

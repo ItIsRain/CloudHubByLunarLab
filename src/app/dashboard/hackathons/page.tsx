@@ -25,7 +25,7 @@ export default function MyHackathonsPage() {
           className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8"
         >
           <div>
-            <h1 className="font-display text-3xl font-bold">My Hackathons</h1>
+            <h1 className="font-display text-3xl font-bold">My Competitions</h1>
             <p className="text-muted-foreground mt-1">
               Manage hackathons you organize or participate in
             </p>

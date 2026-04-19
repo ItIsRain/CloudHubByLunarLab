@@ -122,7 +122,7 @@ export default function CertificatesPage() {
               </h3>
               <p className="text-sm text-muted-foreground max-w-md mx-auto">
                 {typeFilter === "all"
-                  ? "Participate in events and hackathons to earn certificates."
+                  ? "Participate in events and competitions to earn certificates."
                   : "Try a different filter to see other certificates."}
               </p>
             </motion.div>
@@ -162,7 +162,7 @@ export default function CertificatesPage() {
                                 <span>Event: {cert.eventTitle}</span>
                               )}
                               {cert.hackathonName && (
-                                <span>Hackathon: {cert.hackathonName}</span>
+                                <span>Competition: {cert.hackathonName}</span>
                               )}
                             </div>
                           </div>

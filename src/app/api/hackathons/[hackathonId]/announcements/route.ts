@@ -29,7 +29,7 @@ export async function GET(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     // Dual auth: session cookies OR API key
@@ -116,7 +116,7 @@ export async function POST(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     // Dual auth: session cookies OR API key
@@ -165,7 +165,7 @@ export async function POST(
 
     if (!hackathon) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }

@@ -239,8 +239,8 @@ export default function AdminHackathonsPage() {
                 </Button>
               </Link>
             </div>
-            <h1 className="font-display text-3xl font-bold">Hackathon Moderation</h1>
-            <p className="text-muted-foreground mt-1">Review, moderate, and feature hackathons</p>
+            <h1 className="font-display text-3xl font-bold">Competition Moderation</h1>
+            <p className="text-muted-foreground mt-1">Review, moderate, and feature competitions</p>
           </motion.div>
 
           {/* DataTable */}
@@ -253,9 +253,9 @@ export default function AdminHackathonsPage() {
               columns={columns}
               data={filteredHackathons}
               searchable={true}
-              searchPlaceholder="Search hackathons by name or organizer..."
-              emptyTitle="No hackathons found"
-              emptyDescription="No hackathons match your search or filter criteria."
+              searchPlaceholder="Search competitions by name or organizer..."
+              emptyTitle="No competitions found"
+              emptyDescription="No competitions match your search or filter criteria."
               emptyIcon={<Code className="h-6 w-6 text-muted-foreground" />}
               toolbar={
                 <select
@@ -267,7 +267,7 @@ export default function AdminHackathonsPage() {
                   <option value="draft">Draft</option>
                   <option value="registration-open">Registration Open</option>
                   <option value="registration-closed">Registration Closed</option>
-                  <option value="hacking">Hacking</option>
+                  <option value="hacking">Competing</option>
                   <option value="submission">Submission</option>
                   <option value="judging">Judging</option>
                   <option value="completed">Completed</option>

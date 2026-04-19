@@ -70,7 +70,7 @@ async function authenticateOrganizer(
       supabase: null,
       hackathon: null,
       error: NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       ),
     } as const;
@@ -91,7 +91,7 @@ export async function GET(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     // Try to authenticate — but allow public access for basic reads
@@ -113,7 +113,7 @@ export async function GET(
       .single();
 
     if (!hackathonRow) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      return NextResponse.json({ error: "Competition not found" }, { status: 404 });
     }
 
     hackathon = hackathonRow as Record<string, unknown>;
@@ -286,7 +286,7 @@ export async function POST(
     const { hackathonId } = await params;
 
     if (!UUID_RE.test(hackathonId)) {
-      return NextResponse.json({ error: "Invalid hackathon ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid competition ID" }, { status: 400 });
     }
 
     const { supabase, error } = await authenticateOrganizer(

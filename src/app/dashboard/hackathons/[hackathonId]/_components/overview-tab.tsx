@@ -17,6 +17,13 @@ import {
   Circle,
   Flag,
   MapPin,
+  Rocket,
+  AlertCircle,
+  Image as ImageIcon,
+  ListChecks,
+  CalendarRange,
+  Trophy,
+  LayoutList,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +56,7 @@ const fallbackActivity = [
   {
     id: "fallback-1",
     action: "New team registered",
-    detail: "Code Crusaders joined the hackathon",
+    detail: "Code Crusaders joined the competition",
     time: "2 hours ago",
     icon: UsersRound,
   },
@@ -70,7 +77,7 @@ const fallbackActivity = [
   {
     id: "fallback-4",
     action: "New participant",
-    detail: "Emma Wilson registered for the hackathon",
+    detail: "Emma Wilson registered for the competition",
     time: "12 hours ago",
     icon: UserCheck,
   },
@@ -152,7 +159,7 @@ export function OverviewTab({ hackathon, hackathonId }: OverviewTabProps) {
   const defaultMilestones: TimelineEntry[] = [
     { id: "reg-open", label: "Registration Opens", date: hackathon.registrationStart, isCompetitionPhase: false },
     { id: "reg-close", label: "Registration Closes", date: hackathon.registrationEnd, isCompetitionPhase: false },
-    { id: "hack-start", label: "Hacking Starts", date: hackathon.hackingStart, isCompetitionPhase: false },
+    { id: "hack-start", label: "Competing Starts", date: hackathon.hackingStart, isCompetitionPhase: false },
     { id: "sub-deadline", label: "Submission Deadline", date: hackathon.submissionDeadline, isCompetitionPhase: false },
     { id: "judge-start", label: "Judging Begins", date: hackathon.judgingStart, isCompetitionPhase: false },
     { id: "winners", label: "Winners Announced", date: hackathon.winnersAnnouncement, isCompetitionPhase: false },
@@ -184,8 +191,150 @@ export function OverviewTab({ hackathon, hackathonId }: OverviewTabProps) {
     completed: { badge: "bg-primary/10 text-primary border-primary/20", label: "Completed" },
   };
 
+  // ── Pre-launch Readiness Checklist ──────────────────────────────────
+
+  const checklistItems = React.useMemo(() => {
+    const items = [
+      {
+        id: "name",
+        label: "Competition name",
+        done: !!hackathon.name && hackathon.name.trim().length > 0,
+        icon: ListChecks,
+      },
+      {
+        id: "cover",
+        label: "Cover image uploaded",
+        done: !!hackathon.coverImage,
+        icon: ImageIcon,
+      },
+      {
+        id: "description",
+        label: "Description written",
+        done: !!hackathon.description && hackathon.description.replace(/<[^>]*>/g, "").trim().length > 20,
+        icon: FileText,
+      },
+      {
+        id: "categories",
+        label: "At least one category selected",
+        done: (hackathon.categories ?? []).length > 0 || !!hackathon.category,
+        icon: LayoutList,
+      },
+      {
+        id: "reg-dates",
+        label: "Registration dates set",
+        done: !!hackathon.registrationStart && !!hackathon.registrationEnd,
+        icon: CalendarRange,
+      },
+      {
+        id: "hack-dates",
+        label: "Competition dates set",
+        done: !!hackathon.hackingStart && !!hackathon.hackingEnd,
+        icon: CalendarRange,
+      },
+      {
+        id: "submission",
+        label: "Submission deadline set",
+        done: !!hackathon.submissionDeadline,
+        icon: Clock,
+      },
+      {
+        id: "tracks",
+        label: "At least one track defined",
+        done: (hackathon.tracks ?? []).length > 0,
+        icon: Flag,
+      },
+      {
+        id: "prizes",
+        label: "At least one prize added",
+        done: (hackathon.prizes ?? []).length > 0,
+        icon: Trophy,
+      },
+    ];
+    return items;
+  }, [hackathon]);
+
+  const completedCount = checklistItems.filter((c) => c.done).length;
+  const totalCount = checklistItems.length;
+  const readinessPercent = Math.round((completedCount / totalCount) * 100);
+  const isFullyReady = completedCount === totalCount;
+  const isPreLaunch = hackathon.status === "draft" || hackathon.status === "published";
+
   return (
     <div className="space-y-8">
+      {/* Pre-launch Readiness Checklist */}
+      {isPreLaunch && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Card className={cn(
+            "border-2 transition-colors",
+            isFullyReady
+              ? "border-green-500/30 bg-green-500/[0.02]"
+              : "border-primary/30 bg-primary/[0.02]"
+          )}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  {isFullyReady ? (
+                    <Rocket className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-primary" />
+                  )}
+                  {isFullyReady ? "Ready to Launch!" : "Launch Checklist"}
+                </CardTitle>
+                <Badge
+                  variant={isFullyReady ? "success" : "warning"}
+                  className="font-mono text-xs"
+                >
+                  {completedCount}/{totalCount}
+                </Badge>
+              </div>
+              {/* Progress bar */}
+              <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
+                <motion.div
+                  className={cn(
+                    "h-full rounded-full",
+                    isFullyReady ? "bg-green-500" : "bg-primary"
+                  )}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${readinessPercent}%` }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isFullyReady
+                  ? "All essentials are configured. Your competition is ready to go live!"
+                  : `Complete these items before publishing. ${totalCount - completedCount} remaining.`}
+              </p>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                {checklistItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className={cn(
+                      "flex items-center gap-2.5 py-1.5 text-sm transition-opacity",
+                      item.done ? "opacity-60" : "opacity-100"
+                    )}
+                  >
+                    {item.done ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-muted-foreground shrink-0" />
+                    )}
+                    <item.icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className={cn(item.done && "line-through text-muted-foreground")}>
+                      {item.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, i) => (

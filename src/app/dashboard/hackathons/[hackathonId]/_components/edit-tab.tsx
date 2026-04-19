@@ -14,12 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TagSelector } from "@/components/forms/tag-selector";
+import { CategoryMultiSelect } from "@/components/forms/category-multi-select";
 import { DateTimePicker } from "@/components/forms/date-time-picker";
 import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { useUpdateHackathon } from "@/hooks/use-hackathons";
 import { toast } from "sonner";
 import { cn, slugify } from "@/lib/utils";
 import type { Hackathon, FormField, FormFieldType } from "@/lib/types";
+import { getHackathonCategories } from "@/lib/hackathon-categories";
 
 interface EditTabProps {
   hackathon: Hackathon;
@@ -34,17 +36,6 @@ const hackathonStatuses = [
   { value: "submission", label: "Submission" },
   { value: "judging", label: "Judging" },
   { value: "completed", label: "Completed" },
-];
-
-const categoryOptions = [
-  { value: "tech", label: "Technology" },
-  { value: "ai-ml", label: "AI / Machine Learning" },
-  { value: "web3", label: "Web3 / Blockchain" },
-  { value: "design", label: "Design" },
-  { value: "business", label: "Business" },
-  { value: "health", label: "Health" },
-  { value: "music", label: "Music" },
-  { value: "social", label: "Social" },
 ];
 
 const typeOptions = [
@@ -65,7 +56,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
     name: "",
     tagline: "",
     description: "",
-    category: "tech",
+    categories: [] as string[],
     status: "draft",
     type: "online",
     tags: [] as string[],
@@ -98,7 +89,9 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
       name: hackathon.name || "",
       tagline: hackathon.tagline || "",
       description: hackathon.description || "",
-      category: hackathon.category || "tech",
+      // Prefer the multi-value array; fall back to wrapping the legacy
+      // single-value field for hackathons that predate the migration.
+      categories: getHackathonCategories(hackathon),
       status: hackathon.status || "draft",
       type: hackathon.type || "online",
       tags: hackathon.tags || [],
@@ -145,9 +138,13 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
     e.preventDefault();
     try {
       await updateHackathon.mutateAsync({ id: hackathonId, ...formData });
-      toast.success("Hackathon updated successfully!");
-    } catch {
-      toast.error("Failed to update hackathon.");
+      toast.success("Competition updated successfully!");
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Failed to update competition.";
+      toast.error(message);
     }
   };
 
@@ -176,7 +173,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="Hackathon name"
+                placeholder="Competition name"
               />
             </div>
 
@@ -197,27 +194,23 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
                 onChange={(html) =>
                   setFormData((prev) => ({ ...prev, description: html }))
                 }
-                placeholder="Describe your hackathon..."
+                placeholder="Describe your competition..."
                 minHeight="180px"
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Category</label>
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleChange}
-                  className={selectClasses}
-                >
-                  {categoryOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Categories</label>
+              <CategoryMultiSelect
+                value={formData.categories}
+                onChange={(next) =>
+                  setFormData((prev) => ({ ...prev, categories: next }))
+                }
+                helperText="Pick every category that applies — or add your own via 'Add custom category'."
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <select
@@ -292,7 +285,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Hacking Starts</label>
+                <label className="text-sm font-medium">Competing Starts</label>
                 <DateTimePicker
                   value={formData.hackingStart}
                   onChange={(val) =>
@@ -301,7 +294,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Hacking Ends</label>
+                <label className="text-sm font-medium">Competing Ends</label>
                 <DateTimePicker
                   value={formData.hackingEnd}
                   onChange={(val) =>
@@ -495,7 +488,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
                 onChange={(html) =>
                   setFormData((prev) => ({ ...prev, rules: html }))
                 }
-                placeholder="Hackathon rules and guidelines..."
+                placeholder="Competition rules and guidelines..."
                 minHeight="140px"
               />
             </div>

@@ -103,14 +103,14 @@ export async function POST(request: NextRequest) {
 
     if (!hackathon) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }
 
     if (hackathon.organizer_id !== user.id) {
       return NextResponse.json(
-        { error: "Only the hackathon organizer can trigger auto-matching" },
+        { error: "Only the competition organizer can trigger auto-matching" },
         { status: 403 }
       );
     }

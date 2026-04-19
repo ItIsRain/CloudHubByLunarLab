@@ -127,7 +127,7 @@ export function CollaboratorsSection({
   const handleRemove = async (collab: Collaborator) => {
     const name = collab.user?.name || collab.user?.email || "this collaborator";
     const confirmed = window.confirm(
-      `Remove ${name} from this hackathon?`
+      `Remove ${name} from this competition?`
     );
     if (!confirmed) return;
 

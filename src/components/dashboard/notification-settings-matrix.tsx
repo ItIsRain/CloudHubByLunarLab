@@ -13,7 +13,7 @@ interface NotificationCategory {
 
 const categories: NotificationCategory[] = [
   { id: "events", label: "Event Reminders", description: "Upcoming events you've registered for" },
-  { id: "hackathons", label: "Hackathon Updates", description: "Status changes and announcements" },
+  { id: "hackathons", label: "Competition Updates", description: "Status changes and announcements" },
   { id: "teams", label: "Team Activity", description: "Invites, joins, and messages" },
   { id: "submissions", label: "Submission Feedback", description: "Scores, reviews, and results" },
   { id: "community", label: "Community", description: "New events from followed communities" },

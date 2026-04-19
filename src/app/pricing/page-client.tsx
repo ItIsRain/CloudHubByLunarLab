@@ -85,16 +85,16 @@ const comparisonCategories: ComparisonCategory[] = [
     ],
   },
   {
-    name: "Hackathon Management",
+    name: "Competition Management",
     icon: <Trophy className="h-4 w-4" />,
     rows: [
-      { feature: "Hackathons per month", free: "1", enterprise: "Unlimited" },
+      { feature: "Competitions per month", free: "1", enterprise: "Unlimited" },
       { feature: "Team formation", free: true, enterprise: true },
       { feature: "Submission portal", free: true, enterprise: true },
       { feature: "Judging workflows", free: "Basic", enterprise: "Custom" },
       { feature: "Live leaderboard", free: false, enterprise: true },
       { feature: "Mentor matching", free: false, enterprise: true },
-      { feature: "Multi-track hackathons", free: false, enterprise: true },
+      { feature: "Multi-track competitions", free: false, enterprise: true },
       { feature: "Sponsor portal", free: false, enterprise: true },
       { feature: "Prize disbursement", free: false, enterprise: true },
     ],
@@ -234,7 +234,7 @@ const faqs = [
   {
     question: "Can I try CloudHub before committing?",
     answer:
-      "Absolutely. Our Free plan is not a trial — it is a fully functional tier with no time limit. You can host up to 3 events per month with up to 100 attendees each at zero cost, forever. You also get hackathon management, team formation, and all core features.",
+      "Absolutely. Our Free plan is not a trial — it is a fully functional tier with no time limit. You can host up to 3 events per month with up to 100 attendees each at zero cost, forever. You also get competition management, team formation, and all core features.",
   },
   {
     question: "How do I get an Enterprise plan?",
@@ -247,9 +247,9 @@ const faqs = [
       "We will notify you as you approach your plan limits. Your events will never be interrupted — we believe in never ruining your event. We will reach out to help you find the right plan. There are no surprise overage charges.",
   },
   {
-    question: "Can I use CloudHub for both events and hackathons?",
+    question: "Can I use CloudHub for both events and competitions?",
     answer:
-      "Yes! CloudHub is the only platform that natively combines event management with full hackathon lifecycle support. Every plan includes both capabilities — team formation, project submissions, judging workflows, and live leaderboards alongside ticketing, streaming, and attendee management.",
+      "Yes! CloudHub is the only platform that natively combines event management with full competition lifecycle support. Every plan includes both capabilities — team formation, project submissions, judging workflows, and live leaderboards alongside ticketing, streaming, and attendee management.",
   },
   {
     question: "Do you offer discounts for nonprofits or education?",
@@ -350,7 +350,7 @@ export default function PricingPage() {
           <div className="grid md:grid-cols-2 gap-6 lg:gap-8 max-w-4xl mx-auto">
             {PRICING_TIERS.map((tier, i) => {
               const descriptions: Record<string, string> = {
-                Free: "Perfect for getting started. Host events and hackathons with zero cost — forever.",
+                Free: "Perfect for getting started. Host events and competitions with zero cost — forever.",
                 Enterprise: "For organizations that demand custom solutions, security, and scale.",
               };
 

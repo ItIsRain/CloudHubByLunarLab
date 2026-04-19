@@ -309,13 +309,13 @@ export const apiRegistry: ApiSection[] = [
     id: "hackathons",
     title: "Hackathons",
     description:
-      "Create and manage hackathons with full timeline support including registration, hacking, submission, and judging phases.",
+      "Create and manage competitions with full timeline support including registration, competing, submission, and judging phases.",
     icon: "Trophy",
     endpoints: [
       {
         method: "GET",
         path: "/api/hackathons",
-        summary: "List hackathons",
+        summary: "List competitions",
         description:
           "Paginated list with filtering. The current phase is auto-computed from timeline dates, so the status field always reflects the real-time state.",
         auth: "api_key",
@@ -323,8 +323,8 @@ export const apiRegistry: ApiSection[] = [
         queryParams: [
           { name: "search", type: "string", required: false, description: "Search in name, tagline, description" },
           { name: "category", type: "string", required: false, description: "Comma-separated categories" },
-          { name: "status", type: "string", required: false, description: "Comma-separated: draft, published, registration-open, hacking, submission, judging, completed" },
-          { name: "featured", type: "boolean", required: false, description: "Only featured hackathons" },
+          { name: "status", type: "string", required: false, description: "Comma-separated: draft, published, registration-open, competing, submission, judging, completed" },
+          { name: "featured", type: "boolean", required: false, description: "Only featured competitions" },
           { name: "organizerId", type: "uuid", required: false, description: "Filter by organizer" },
           { name: "sortBy", type: "string", required: false, description: '"newest", "date", "prize", or "participants"', default: '"newest"' },
           { name: "page", type: "integer", required: false, description: "Page number", default: "1" },
@@ -359,13 +359,13 @@ export const apiRegistry: ApiSection[] = [
       {
         method: "POST",
         path: "/api/hackathons",
-        summary: "Create a hackathon",
+        summary: "Create a competition",
         description:
-          "Create a new hackathon. Requires organizer role and is subject to your plan's monthly limit.",
+          "Create a new competition. Requires organizer role and is subject to your plan's monthly limit.",
         auth: "api_key",
         scope: "hackathons",
         bodyParams: [
-          { name: "name", type: "string", required: true, description: "Hackathon name" },
+          { name: "name", type: "string", required: true, description: "Competition name" },
           { name: "tagline", type: "string", required: false, description: "Short tagline" },
           { name: "description", type: "string", required: false, description: "Full description (HTML supported)" },
           { name: "cover_image", type: "string", required: false, description: "Cover image URL" },
@@ -381,13 +381,13 @@ export const apiRegistry: ApiSection[] = [
           { name: "allow_solo", type: "boolean", required: false, description: "Allow solo participants" },
           { name: "registration_start", type: "ISO 8601", required: false, description: "Registration opens (must be before registration_end)" },
           { name: "registration_end", type: "ISO 8601", required: false, description: "Registration closes" },
-          { name: "hacking_start", type: "ISO 8601", required: false, description: "Hacking period start (required before publishing)" },
-          { name: "hacking_end", type: "ISO 8601", required: false, description: "Hacking period end (required before publishing)" },
+          { name: "hacking_start", type: "ISO 8601", required: false, description: "Competing period start (required before publishing)" },
+          { name: "hacking_end", type: "ISO 8601", required: false, description: "Competing period end (required before publishing)" },
           { name: "submission_deadline", type: "ISO 8601", required: false, description: "Submission deadline (required before publishing, must be >= hacking_end)" },
           { name: "judging_start", type: "ISO 8601", required: false, description: "Judging start" },
           { name: "judging_end", type: "ISO 8601", required: false, description: "Judging end" },
           { name: "winners_announcement", type: "ISO 8601", required: false, description: "Winners announcement date" },
-          { name: "tracks", type: "array", required: false, description: "Hackathon tracks: [{ name, description, icon, requirements, suggestedTech }]" },
+          { name: "tracks", type: "array", required: false, description: "Competition tracks: [{ name, description, icon, requirements, suggestedTech }]" },
           { name: "prizes", type: "array", required: false, description: "Prize tiers: [{ name, place, type, value, currency, description }]" },
           { name: "rules", type: "string", required: false, description: "Rules (HTML)" },
           { name: "eligibility", type: "string[]", required: false, description: "Eligibility requirements (e.g. ['Must be 18+'])" },
@@ -434,8 +434,8 @@ export const apiRegistry: ApiSection[] = [
       {
         method: "GET",
         path: "/api/hackathons/{hackathonId}",
-        summary: "Get a single hackathon",
-        description: "Fetch full hackathon details by UUID or slug. The status is auto-computed from timeline dates.",
+        summary: "Get a single competition",
+        description: "Fetch full competition details by UUID or slug. The status is auto-computed from timeline dates.",
         auth: "api_key",
         scope: "hackathons",
         responseExample: `{
@@ -466,8 +466,8 @@ export const apiRegistry: ApiSection[] = [
       {
         method: "PATCH",
         path: "/api/hackathons/{hackathonId}",
-        summary: "Update a hackathon",
-        description: "Update hackathon fields. Organizer only. Required dates must be set before publishing.",
+        summary: "Update a competition",
+        description: "Update competition fields. Organizer only. Required dates must be set before publishing.",
         auth: "api_key",
         scope: "hackathons",
         requestExample: `{
@@ -487,11 +487,11 @@ export const apiRegistry: ApiSection[] = [
       {
         method: "DELETE",
         path: "/api/hackathons/{hackathonId}",
-        summary: "Delete a hackathon",
-        description: "Permanently delete a hackathon and all associated data. Organizer only.",
+        summary: "Delete a competition",
+        description: "Permanently delete a competition and all associated data. Organizer only.",
         auth: "api_key",
         scope: "hackathons",
-        responseExample: `{ "message": "Hackathon deleted" }`,
+        responseExample: `{ "message": "Competition deleted" }`,
       },
       {
         method: "POST",
@@ -518,7 +518,7 @@ export const apiRegistry: ApiSection[] = [
         method: "GET",
         path: "/api/hackathons/{hackathonId}/participants",
         summary: "List participants",
-        description: "Paginated list of hackathon registrations with user profiles and team assignments. Organizer only. Supports status filtering and name/email search.",
+        description: "Paginated list of competition registrations with user profiles and team assignments. Organizer only. Supports status filtering and name/email search.",
         auth: "api_key",
         scope: "hackathons",
         queryParams: [
@@ -565,14 +565,14 @@ export const apiRegistry: ApiSection[] = [
         method: "GET",
         path: "/api/hackathons/{hackathonId}/announcements",
         summary: "List announcements",
-        description: "List hackathon announcements. Organizer only via API key.",
+        description: "List competition announcements. Organizer only via API key.",
         auth: "api_key",
         scope: "hackathons",
         responseExample: `{
   "data": [
     {
       "id": "ann-uuid",
-      "title": "Hacking Starts Now!",
+      "title": "Competing Starts Now!",
       "message": "Good luck to all teams...",
       "sentBy": { "id": "uuid", "name": "Organizer" },
       "recipientCount": 256,
@@ -610,8 +610,8 @@ export const apiRegistry: ApiSection[] = [
       {
         method: "GET",
         path: "/api/hackathons/{hackathonId}/analytics",
-        summary: "Get hackathon analytics",
-        description: "Detailed analytics for a hackathon including registration timeline, team count, submission count, track distribution, and scoring progress. Organizer only.",
+        summary: "Get competition analytics",
+        description: "Detailed analytics for a competition including registration timeline, team count, submission count, track distribution, and scoring progress. Organizer only.",
         auth: "api_key",
         scope: "hackathons",
         responseExample: `{
@@ -645,7 +645,7 @@ export const apiRegistry: ApiSection[] = [
     id: "submissions",
     title: "Submissions",
     description:
-      "Manage hackathon submissions — create, update, delete, and score. Submissions belong to teams within a hackathon.",
+      "Manage competition submissions — create, update, delete, and score. Submissions belong to teams within a competition.",
     icon: "FileCode",
     endpoints: [
       {
@@ -653,11 +653,11 @@ export const apiRegistry: ApiSection[] = [
         path: "/api/submissions",
         summary: "List submissions",
         description:
-          "Paginated list of submissions with filtering and sorting. Unauthenticated users can only see submitted (public) submissions. Supports filtering by hackathon, team, user, and status.",
+          "Paginated list of submissions with filtering and sorting. Unauthenticated users can only see submitted (public) submissions. Supports filtering by competition, team, user, and status.",
         auth: "api_key",
         scope: "hackathons",
         queryParams: [
-          { name: "hackathonId", type: "uuid", required: false, description: "Filter by hackathon" },
+          { name: "hackathonId", type: "uuid", required: false, description: "Filter by competition" },
           { name: "teamId", type: "uuid", required: false, description: "Filter by team" },
           { name: "userId", type: "uuid", required: false, description: "Filter by user (returns submissions from all teams the user belongs to)" },
           { name: "status", type: "string", required: false, description: '"draft" or "submitted"' },
@@ -697,11 +697,11 @@ export const apiRegistry: ApiSection[] = [
         path: "/api/submissions",
         summary: "Create a submission",
         description:
-          "Create a new submission for a hackathon. The authenticated user must be a member of the specified team. Enforces the submission deadline.",
+          "Create a new submission for a competition. The authenticated user must be a member of the specified team. Enforces the submission deadline.",
         auth: "api_key",
         scope: "hackathons",
         bodyParams: [
-          { name: "hackathonId", type: "uuid", required: true, description: "Hackathon UUID" },
+          { name: "hackathonId", type: "uuid", required: true, description: "Competition UUID" },
           { name: "teamId", type: "uuid", required: true, description: "Team UUID" },
           { name: "title", type: "string", required: false, description: "Submission title" },
           { name: "description", type: "string", required: false, description: "Project description" },
@@ -710,7 +710,7 @@ export const apiRegistry: ApiSection[] = [
           { name: "videoUrl", type: "string", required: false, description: "Demo video URL" },
           { name: "thumbnailUrl", type: "string", required: false, description: "Thumbnail image URL" },
           { name: "techStack", type: "string[]", required: false, description: "Technologies used" },
-          { name: "trackId", type: "string", required: false, description: "Hackathon track" },
+          { name: "trackId", type: "string", required: false, description: "Competition track" },
           { name: "status", type: "string", required: false, description: '"draft" or "submitted"', default: '"draft"' },
         ],
         requestExample: `{
@@ -737,7 +737,7 @@ export const apiRegistry: ApiSection[] = [
         path: "/api/submissions/{submissionId}",
         summary: "Get a single submission",
         description:
-          "Fetch full submission details including team and scores. Scores are only visible to the hackathon organizer and judges. Private hackathon submissions require authorization.",
+          "Fetch full submission details including team and scores. Scores are only visible to the competition organizer and judges. Private competition submissions require authorization.",
         auth: "api_key",
         scope: "hackathons",
         responseExample: `{
@@ -766,7 +766,7 @@ export const apiRegistry: ApiSection[] = [
         path: "/api/submissions/{submissionId}",
         summary: "Update a submission",
         description:
-          "Update submission fields. Only team members or the hackathon organizer can update. Setting status to 'submitted' enforces the submission deadline.",
+          "Update submission fields. Only team members or the competition organizer can update. Setting status to 'submitted' enforces the submission deadline.",
         auth: "api_key",
         scope: "hackathons",
         requestExample: `{
@@ -787,7 +787,7 @@ export const apiRegistry: ApiSection[] = [
         method: "DELETE",
         path: "/api/submissions/{submissionId}",
         summary: "Delete a submission",
-        description: "Permanently delete a submission. Only the team leader or hackathon organizer can delete.",
+        description: "Permanently delete a submission. Only the team leader or competition organizer can delete.",
         auth: "api_key",
         scope: "hackathons",
         responseExample: `{ "message": "Submission deleted" }`,
@@ -937,7 +937,7 @@ export const apiRegistry: ApiSection[] = [
       "id": "wh-uuid",
       "url": "https://hooks.zapier.com/hooks/catch/123/abc",
       "description": "Zapier registration sync",
-      "events": ["event.registration.created", "hackathon.registration.created"],
+      "events": ["event.registration.created", "competition.registration.created"],
       "status": "active",
       "failureCount": 0,
       "lastTriggeredAt": "2026-03-12T14:30:00Z",
@@ -963,7 +963,7 @@ export const apiRegistry: ApiSection[] = [
   "url": "https://hooks.zapier.com/hooks/catch/123/abc",
   "events": [
     "event.registration.created",
-    "hackathon.registration.created",
+    "competition.registration.created",
     "submission.submitted"
   ],
   "description": "Zapier registration sync"
@@ -972,7 +972,7 @@ export const apiRegistry: ApiSection[] = [
   "data": {
     "id": "wh-uuid",
     "url": "https://hooks.zapier.com/hooks/catch/123/abc",
-    "events": ["event.registration.created", "hackathon.registration.created", "submission.submitted"],
+    "events": ["event.registration.created", "competition.registration.created", "submission.submitted"],
     "status": "active",
     "secret": "whsec_a1b2c3d4e5f6...",
     "createdAt": "2026-03-12T10:00:00Z"

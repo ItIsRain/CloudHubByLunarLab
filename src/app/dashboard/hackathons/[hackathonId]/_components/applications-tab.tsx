@@ -30,6 +30,7 @@ import {
   CalendarClock,
   Trash2,
   BarChart3,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,6 +62,12 @@ import {
   useScreeningOverrides,
   type ScreeningOverride,
 } from "@/hooks/use-screening-overrides";
+import dynamic from "next/dynamic";
+
+const ImportApplicantsDialog = dynamic(
+  () => import("@/components/dialogs/import-applicants-dialog").then((m) => m.ImportApplicantsDialog),
+  { ssr: false }
+);
 
 // ── Types ──────────────────────────────────────────────
 
@@ -650,6 +657,7 @@ export function ApplicationsTab({
   }>({ open: false, registrationId: "", targetStatus: "", actionLabel: "" });
   const [rsvpExpanded, setRsvpExpanded] = React.useState(true);
   const [sectorExpanded, setSectorExpanded] = React.useState(true);
+  const [importDialogOpen, setImportDialogOpen] = React.useState(false);
 
   // Fetch RSVP stats
   const { data: rsvpData } = useHackathonRsvp(hackathonId);
@@ -1291,6 +1299,10 @@ export function ApplicationsTab({
               <Megaphone className="h-4 w-4" />
             )}
             Publish Results
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="h-4 w-4" />
+            Import CSV
           </Button>
           <Button variant="secondary" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4" />
@@ -2392,6 +2404,20 @@ export function ApplicationsTab({
             reason
           );
           setReasonDialog((prev) => ({ ...prev, open: false }));
+        }}
+      />
+
+      {/* CSV Import Dialog */}
+      <ImportApplicantsDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        hackathonId={hackathonId}
+        existingFields={hackathon.registrationFields ?? []}
+        onImportComplete={(result) => {
+          queryClient.invalidateQueries({ queryKey: ["hackathon-participants", hackathonId] });
+          if (result.imported > 0) {
+            toast.success(`${result.imported} applicant${result.imported !== 1 ? "s" : ""} imported!`);
+          }
         }}
       />
     </div>

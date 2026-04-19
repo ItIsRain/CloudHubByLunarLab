@@ -72,7 +72,7 @@ export default function HackathonSubmissionsPage() {
               The hackathon you&apos;re looking for doesn&apos;t exist or has been removed.
             </p>
             <Button asChild>
-              <Link href="/hackathons">Browse Hackathons</Link>
+              <Link href="/hackathons">Browse Competitions</Link>
             </Button>
           </div>
         </main>
@@ -217,7 +217,7 @@ export default function HackathonSubmissionsPage() {
               <p className="text-sm text-muted-foreground">
                 {searchQuery || trackFilter !== "all"
                   ? "Try adjusting your filters."
-                  : "Submissions will appear here once the hacking phase begins."}
+                  : "Submissions will appear here once the competing phase begins."}
               </p>
             </motion.div>
           ) : (

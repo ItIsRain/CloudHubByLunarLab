@@ -138,7 +138,7 @@ export default function JudgingHistoryPage() {
 
   const summaryStats = [
     {
-      label: "Hackathons Judged",
+      label: "Competitions Judged",
       value: stats.hackathonCount,
       icon: Trophy,
     },

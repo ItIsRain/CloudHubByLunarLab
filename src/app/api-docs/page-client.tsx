@@ -609,7 +609,7 @@ curl -H "Authorization: Bearer ch_key_YOUR_KEY_HERE" \\
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {[
                         { scope: "events", desc: "Events CRUD" },
-                        { scope: "hackathons", desc: "Hackathons CRUD" },
+                        { scope: "hackathons", desc: "Competitions CRUD" },
                         { scope: "users", desc: "User profiles" },
                         { scope: "analytics", desc: "Platform stats" },
                       ].map((s) => (

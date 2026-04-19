@@ -95,7 +95,7 @@ export function AuditLogsTab() {
         >
           <option value="">All Entities</option>
           <option value="event">Events</option>
-          <option value="hackathon">Hackathons</option>
+          <option value="hackathon">Competitions</option>
           <option value="user">Users</option>
           <option value="team">Teams</option>
           <option value="sponsor">Sponsors</option>

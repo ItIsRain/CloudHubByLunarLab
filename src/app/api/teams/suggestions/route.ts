@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     if (!hackathon) {
       return NextResponse.json(
-        { error: "Hackathon not found" },
+        { error: "Competition not found" },
         { status: 404 }
       );
     }

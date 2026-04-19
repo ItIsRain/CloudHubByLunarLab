@@ -94,7 +94,12 @@ export function useCreateHackathon() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error || "Failed to create hackathon");
+        // Surface Supabase details (e.g. missing column, constraint name)
+        // alongside the user-facing error so failures like "categories
+        // column not found before migration" are actually diagnosable.
+        const base = json.error || "Failed to create competition";
+        const detail = json.details ? ` (${json.details})` : "";
+        throw new Error(`${base}${detail}`);
       }
       return res.json() as Promise<{ data: Hackathon }>;
     },
@@ -119,7 +124,9 @@ export function useUpdateHackathon() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error || "Failed to update hackathon");
+        const base = json.error || "Failed to update competition";
+        const detail = json.details ? ` (${json.details})` : "";
+        throw new Error(`${base}${detail}`);
       }
       return res.json() as Promise<{ data: Hackathon }>;
     },
@@ -138,7 +145,7 @@ export function useDeleteHackathon() {
       const res = await fetch(`/api/hackathons/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error || "Failed to delete hackathon");
+        throw new Error(json.error || "Failed to delete competition");
       }
       return res.json();
     },

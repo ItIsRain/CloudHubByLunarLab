@@ -115,7 +115,7 @@ export async function POST(
     const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user.id, user.email ?? undefined);
     if (!canAccess) {
       return NextResponse.json(
-        { error: "This is a private hackathon. You need an invitation to register." },
+        { error: "This is a private competition. You need an invitation to register." },
         { status: 403 }
       );
     }
@@ -151,7 +151,7 @@ export async function POST(
       .single();
 
     if (!hackathonInfo) {
-      return NextResponse.json({ error: "Hackathon not found" }, { status: 404 });
+      return NextResponse.json({ error: "Competition not found" }, { status: 404 });
     }
 
     const hasFormFields = Array.isArray(hackathonInfo.registration_fields) &&
@@ -210,13 +210,13 @@ export async function POST(
       // Block re-registration for rejected/ineligible applicants
       if (existing.status === "rejected" || existing.status === "ineligible") {
         return NextResponse.json(
-          { error: "Your application has been rejected. You cannot re-register for this hackathon." },
+          { error: "Your application has been rejected. You cannot re-register for this competition." },
           { status: 403 }
         );
       }
       if (existing.status !== "cancelled") {
         return NextResponse.json(
-          { error: "Already registered for this hackathon" },
+          { error: "Already registered for this competition" },
           { status: 409 }
         );
       }
@@ -253,7 +253,7 @@ export async function POST(
       .single();
 
     if (hackOrg?.organizer_id) {
-      fireWebhooks(hackOrg.organizer_id, "hackathon.registration.created", {
+      fireWebhooks(hackOrg.organizer_id, "competition.registration.created", {
         hackathonId,
         hackathonName: hackOrg.name,
         registrationId: data?.id,
@@ -275,7 +275,7 @@ export async function POST(
       user_id: user.id,
       type: "hackathon-update",
       title: `Registration ${regStatus === "confirmed" ? "Confirmed" : "Received"} — ${hackOrg?.name || "Hackathon"}`,
-      message: `Your registration for ${hackOrg?.name || "this hackathon"} has ${statusLabels[regStatus] || "been received"}. ${regStatus === "confirmed" ? "You're all set to participate!" : "We'll notify you when there's an update."}`,
+      message: `Your registration for ${hackOrg?.name || "this competition"} has ${statusLabels[regStatus] || "been received"}. ${regStatus === "confirmed" ? "You're all set to participate!" : "We'll notify you when there's an update."}`,
       link: `/hackathons/${hackathonId}`,
     }).then(() => {}, () => {});
 
@@ -367,7 +367,7 @@ export async function DELETE(
       .single();
 
     if (hackInfo?.organizer_id) {
-      fireWebhooks(hackInfo.organizer_id, "hackathon.registration.cancelled", {
+      fireWebhooks(hackInfo.organizer_id, "competition.registration.cancelled", {
         hackathonId,
         hackathonName: hackInfo.name,
         userId: user.id,
@@ -555,7 +555,7 @@ export async function PUT(
         // Block re-registration for rejected/ineligible applicants (same as POST handler)
         if (existing.status === "rejected" || existing.status === "ineligible") {
           return NextResponse.json(
-            { error: "Your application has been rejected. You cannot re-register for this hackathon." },
+            { error: "Your application has been rejected. You cannot re-register for this competition." },
             { status: 403 }
           );
         }

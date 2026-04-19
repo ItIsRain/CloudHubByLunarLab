@@ -60,7 +60,7 @@ function buildStats(
       bgColor: "bg-blue-500/10",
     },
     {
-      label: "Hackathons Created",
+      label: "Competitions Created",
       value: String(hackathons.length),
       change: hackathonsThisMonth > 0 ? `+${hackathonsThisMonth} this month` : "No change",
       trend: "up" as const,
@@ -97,7 +97,7 @@ const organizerActions = [
     color: "bg-blue-500",
   },
   {
-    label: "Create Hackathon",
+    label: "Create Competition",
     href: "/hackathons/create",
     icon: Trophy,
     color: "bg-yellow-500",
@@ -158,7 +158,7 @@ function PlanUsageCard() {
               <UsageBar
                 used={hackathonsThisMonth.used}
                 limit={hackathonsThisMonth.limit}
-                label="Hackathons this month"
+                label="Competitions this month"
               />
               <UsageBar
                 used={attendeesPerEvent.used}
@@ -389,12 +389,12 @@ export default function DashboardPage() {
                       <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
                         <Trophy className="h-6 w-6 text-yellow-500" />
                       </div>
-                      <h3 className="font-semibold mb-1">No active hackathons</h3>
+                      <h3 className="font-semibold mb-1">No active competitions</h3>
                       <p className="text-sm text-muted-foreground mb-4">
                         Find hackathons to compete in and win prizes
                       </p>
                       <Button variant="outline" size="sm" asChild>
-                        <Link href="/explore/hackathons">Browse Hackathons</Link>
+                        <Link href="/explore/hackathons">Browse Competitions</Link>
                       </Button>
                     </CardContent>
                   </Card>

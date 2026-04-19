@@ -91,7 +91,7 @@ export default function AuthLayout({
             </div>
             <div>
               <div className="font-display text-3xl font-bold">2.5K+</div>
-              <div className="text-white/60 text-sm">Hackathons</div>
+              <div className="text-white/60 text-sm">Competitions</div>
             </div>
           </motion.div>
         </div>

@@ -43,9 +43,9 @@ const features = [
   },
   {
     icon: Trophy,
-    title: "Hackathon Management",
+    title: "Competition Management",
     description:
-      "End-to-end hackathon platform with team formation, project submissions, judging workflows, and live leaderboards.",
+      "End-to-end competition platform with team formation, project submissions, judging workflows, and live leaderboards.",
   },
   {
     icon: Users,

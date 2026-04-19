@@ -58,7 +58,7 @@ export async function GET(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -106,7 +106,7 @@ export async function POST(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -269,7 +269,7 @@ export async function POST(
         user_id: userId,
         type: "winner-announcement",
         title: `You won "${awardLabel}" at ${hackName}!`,
-        message: `Congratulations! You've been named a winner at ${hackName} for "${awardLabel}". Check the hackathon page for details.`,
+        message: `Congratulations! You've been named a winner at ${hackName} for "${awardLabel}". Check the competition page for details.`,
         link: `/hackathons/${hackathonId}`,
       }).then(() => {}, () => {});
     }
@@ -296,7 +296,7 @@ export async function PATCH(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }
@@ -467,7 +467,7 @@ export async function DELETE(
 
     if (!UUID_RE.test(hackathonId)) {
       return NextResponse.json(
-        { error: "Invalid hackathon ID" },
+        { error: "Invalid competition ID" },
         { status: 400 }
       );
     }

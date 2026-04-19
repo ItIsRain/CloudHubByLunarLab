@@ -130,7 +130,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
         id: hackathonId,
         visibility: newVisibility,
       });
-      toast.success(`Hackathon visibility set to ${newVisibility}.`);
+      toast.success(`Competition visibility set to ${newVisibility}.`);
     } catch {
       setVisibility(previousVisibility);
       toast.error("Failed to update visibility.");
@@ -164,7 +164,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
 
   const handleCancelHackathon = async () => {
     const confirmed = window.confirm(
-      "Are you sure you want to cancel this hackathon? This action will notify all participants."
+      "Are you sure you want to cancel this competition? This action will notify all participants."
     );
     if (!confirmed) return;
 
@@ -173,24 +173,24 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
         id: hackathonId,
         status: "draft",
       });
-      toast.success("Hackathon has been cancelled.");
+      toast.success("Competition has been cancelled.");
     } catch {
-      toast.error("Failed to cancel hackathon.");
+      toast.error("Failed to cancel competition.");
     }
   };
 
   const handleDeleteHackathon = async () => {
     const confirmed = window.confirm(
-      "Are you sure you want to permanently delete this hackathon? This action cannot be undone."
+      "Are you sure you want to permanently delete this competition? This action cannot be undone."
     );
     if (!confirmed) return;
 
     try {
       await deleteHackathon.mutateAsync(hackathonId);
       router.push("/dashboard/hackathons");
-      toast.success("Hackathon deleted successfully.");
+      toast.success("Competition deleted successfully.");
     } catch {
-      toast.error("Failed to delete hackathon.");
+      toast.error("Failed to delete competition.");
     }
   };
 
@@ -368,7 +368,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Hackathon URL</CardTitle>
+            <CardTitle className="text-lg">Competition URL</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex gap-3">
@@ -458,7 +458,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
             </div>
             <div className="flex items-center justify-between py-2">
               <div>
-                <p className="text-sm font-medium">Duplicate Hackathon</p>
+                <p className="text-sm font-medium">Duplicate Competition</p>
                 <p className="text-xs text-muted-foreground">
                   Create a copy of this hackathon with the same settings
                 </p>
@@ -468,7 +468,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
                 size="sm"
                 className="gap-2"
                 onClick={() =>
-                  toast.info("Duplicate hackathon feature coming soon.")
+                  toast.info("Duplicate competition feature coming soon.")
                 }
               >
                 <Copy className="h-4 w-4" />
@@ -495,7 +495,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between py-2 border-b border-destructive/20">
               <div>
-                <p className="text-sm font-medium">Cancel Hackathon</p>
+                <p className="text-sm font-medium">Cancel Competition</p>
                 <p className="text-xs text-muted-foreground">
                   Cancel this hackathon and notify all participants
                 </p>
@@ -513,7 +513,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
             </div>
             <div className="flex items-center justify-between py-2">
               <div>
-                <p className="text-sm font-medium">Delete Hackathon</p>
+                <p className="text-sm font-medium">Delete Competition</p>
                 <p className="text-xs text-muted-foreground">
                   Permanently delete this hackathon and all associated data
                 </p>
@@ -526,7 +526,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
                 disabled={deleteHackathon.isPending}
               >
                 <Trash2 className="h-4 w-4" />
-                {deleteHackathon.isPending ? "Deleting..." : "Delete Hackathon"}
+                {deleteHackathon.isPending ? "Deleting..." : "Delete Competition"}
               </Button>
             </div>
           </CardContent>

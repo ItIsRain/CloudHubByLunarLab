@@ -8,9 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ImageUpload } from "@/components/forms/image-upload";
 import { SortableList } from "@/components/ui/sortable-list";
-import { cn, formatCurrency, safeHref } from "@/lib/utils";
+import { formatCurrency, safeHref } from "@/lib/utils";
 import type { Hackathon, Sponsor } from "@/lib/types";
+import {
+  PRESET_SPONSOR_TIERS,
+  compareSponsorTiers,
+  normalizeSponsorTier,
+  sponsorTierBadgeVariant,
+  sponsorTierLabel,
+} from "@/lib/sponsor-tiers";
 import { useUpdateHackathon } from "@/hooks/use-hackathons";
 import { toast } from "sonner";
 
@@ -19,21 +27,9 @@ interface SponsorsTabProps {
   hackathonId: string;
 }
 
-const tierOrder: Record<string, number> = {
-  platinum: 0,
-  gold: 1,
-  silver: 2,
-  bronze: 3,
-  community: 4,
-};
-
-const tierBadgeVariant: Record<string, "gradient" | "warning" | "muted" | "secondary" | "success"> = {
-  platinum: "gradient",
-  gold: "warning",
-  silver: "muted",
-  bronze: "secondary",
-  community: "success",
-};
+// Sentinel value used only in the <select>. Never stored — when chosen, the
+// organizer types a custom tier name in the adjacent text input.
+const OTHER_TIER_SENTINEL = "__other__";
 
 const selectClasses =
   "flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50 appearance-none";
@@ -77,10 +73,10 @@ function SponsorCard({ sponsor, dragHandle, onRemove, isPending }: SponsorCardPr
                 {sponsor.name}
               </h3>
               <Badge
-                variant={tierBadgeVariant[sponsor.tier] ?? "muted"}
+                variant={sponsorTierBadgeVariant(sponsor.tier)}
                 className="text-[10px] px-1.5 py-0 shrink-0"
               >
-                {sponsor.tier}
+                {sponsorTierLabel(sponsor.tier)}
               </Badge>
             </div>
             {sponsor.description && (
@@ -117,28 +113,39 @@ function SponsorCard({ sponsor, dragHandle, onRemove, isPending }: SponsorCardPr
 
 // ── Main SponsorsTab ───────────────────────────────────────────────
 
+interface FormState {
+  name: string;
+  logo: string;
+  website: string;
+  tierSelection: string;
+  customTier: string;
+  description: string;
+}
+
+const initialFormState: FormState = {
+  name: "",
+  logo: "",
+  website: "",
+  tierSelection: "silver",
+  customTier: "",
+  description: "",
+};
+
 export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
   const updateHackathon = useUpdateHackathon();
   const [showForm, setShowForm] = React.useState(false);
-  const [formData, setFormData] = React.useState({
-    name: "",
-    logo: "",
-    website: "",
-    tier: "silver" as Sponsor["tier"],
-    description: "",
-  });
+  const [formData, setFormData] = React.useState<FormState>(initialFormState);
 
   const sponsors: Sponsor[] = hackathon.sponsors ?? [];
 
-  // Group sponsors by tier
+  // Group sponsors by their (normalized) tier, preserving insertion order
+  // within each group. Group ordering is handled at render time.
   const groupedSponsors = React.useMemo(() => {
     const groups: Record<string, Sponsor[]> = {};
-    const sorted = [...sponsors].sort(
-      (a, b) => (tierOrder[a.tier] ?? 99) - (tierOrder[b.tier] ?? 99)
-    );
-    for (const sponsor of sorted) {
-      if (!groups[sponsor.tier]) groups[sponsor.tier] = [];
-      groups[sponsor.tier].push(sponsor);
+    for (const sponsor of sponsors) {
+      const key = normalizeSponsorTier(sponsor.tier) || "other";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(sponsor);
     }
     return groups;
   }, [sponsors]);
@@ -150,12 +157,22 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
       return;
     }
 
+    const tier =
+      formData.tierSelection === OTHER_TIER_SENTINEL
+        ? normalizeSponsorTier(formData.customTier)
+        : normalizeSponsorTier(formData.tierSelection);
+
+    if (!tier) {
+      toast.error("Enter a custom tier name.");
+      return;
+    }
+
     const newSponsor: Sponsor = {
       id: crypto.randomUUID(),
       name: formData.name.trim(),
       logo: formData.logo.trim(),
       website: formData.website.trim() || undefined,
-      tier: formData.tier,
+      tier,
       description: formData.description.trim() || undefined,
     };
 
@@ -167,7 +184,7 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
         sponsors: updatedSponsors,
       });
       toast.success(`${formData.name} added as a sponsor!`);
-      setFormData({ name: "", logo: "", website: "", tier: "silver", description: "" });
+      setFormData(initialFormState);
       setShowForm(false);
     } catch {
       toast.error("Failed to add sponsor.");
@@ -188,30 +205,20 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
   };
 
   const handleReorderTier = async (tier: string, reorderedTierSponsors: Sponsor[]) => {
-    // Rebuild the full sponsors array with the reordered tier in place
-    const updatedSponsors = sponsors.map((s) => {
-      if (s.tier !== tier) return s;
-      // Find the corresponding sponsor from the reordered list
-      const idx = sponsors.filter((sp) => sp.tier === tier).indexOf(s);
-      return reorderedTierSponsors[idx] ?? s;
-    });
-
-    // Actually replace all sponsors of this tier with the reordered ones,
-    // keeping other tiers in their original positions
-    const otherSponsors = sponsors.filter((s) => s.tier !== tier);
+    // Rebuild the full sponsors array: for each sponsor at the original
+    // position whose tier matches, substitute the next reordered item;
+    // leave sponsors of other tiers in place.
     const finalSponsors: Sponsor[] = [];
     let tierIdx = 0;
-    let otherIdx = 0;
 
     for (const original of sponsors) {
-      if (original.tier === tier) {
+      if (normalizeSponsorTier(original.tier) === normalizeSponsorTier(tier)) {
         if (tierIdx < reorderedTierSponsors.length) {
           finalSponsors.push(reorderedTierSponsors[tierIdx]);
           tierIdx++;
         }
       } else {
-        finalSponsors.push(otherSponsors[otherIdx]);
-        otherIdx++;
+        finalSponsors.push(original);
       }
     }
 
@@ -225,6 +232,8 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
       toast.error("Failed to reorder sponsors.");
     }
   };
+
+  const isCustomTier = formData.tierSelection === OTHER_TIER_SENTINEL;
 
   return (
     <div className="space-y-6">
@@ -306,33 +315,32 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleAddSponsor} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Name</label>
-                    <Input
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          name: e.target.value,
-                        }))
-                      }
-                      placeholder="Sponsor name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Logo URL</label>
-                    <Input
-                      value={formData.logo}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          logo: e.target.value,
-                        }))
-                      }
-                      placeholder="https://example.com/logo.png"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Logo</label>
+                  <ImageUpload
+                    value={formData.logo}
+                    onChange={(url) =>
+                      setFormData((prev) => ({ ...prev, logo: url }))
+                    }
+                    aspectRatio="square"
+                    label="Upload sponsor logo"
+                    description="Square format works best. PNG, JPG or WebP, max 5MB."
+                    folder="cloudhub/uploads"
+                    className="max-w-[240px]"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Name</label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="Sponsor name"
+                  />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -351,23 +359,48 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Tier</label>
                     <select
-                      value={formData.tier}
+                      value={formData.tierSelection}
                       onChange={(e) =>
                         setFormData((prev) => ({
                           ...prev,
-                          tier: e.target.value as Sponsor["tier"],
+                          tierSelection: e.target.value,
                         }))
                       }
                       className={selectClasses}
                     >
-                      <option value="platinum">Platinum</option>
-                      <option value="gold">Gold</option>
-                      <option value="silver">Silver</option>
-                      <option value="bronze">Bronze</option>
-                      <option value="community">Community</option>
+                      {PRESET_SPONSOR_TIERS.map((preset) => (
+                        <option key={preset} value={preset}>
+                          {sponsorTierLabel(preset)}
+                        </option>
+                      ))}
+                      <option value={OTHER_TIER_SENTINEL}>
+                        Other (custom)…
+                      </option>
                     </select>
                   </div>
                 </div>
+                {isCustomTier && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      Custom tier name
+                    </label>
+                    <Input
+                      value={formData.customTier}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          customTier: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g. Title Sponsor, Venue Partner, Media Partner"
+                      maxLength={40}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Name your own tier. It will appear as its own group and
+                      get a default badge style.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Description</label>
                   <textarea
@@ -408,7 +441,7 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
       {sponsors.length > 0 ? (
         <div className="space-y-8">
           {Object.entries(groupedSponsors)
-            .sort(([a], [b]) => (tierOrder[a] ?? 99) - (tierOrder[b] ?? 99))
+            .sort(([a], [b]) => compareSponsorTiers(a, b))
             .map(([tier, tierSponsors]) => (
               <motion.div
                 key={tier}
@@ -417,8 +450,8 @@ export function SponsorsTab({ hackathon, hackathonId }: SponsorsTabProps) {
                 className="space-y-4"
               >
                 <div className="flex items-center gap-3">
-                  <Badge variant={tierBadgeVariant[tier] ?? "muted"}>
-                    {tier.charAt(0).toUpperCase() + tier.slice(1)}
+                  <Badge variant={sponsorTierBadgeVariant(tier)}>
+                    {sponsorTierLabel(tier)}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
                     {tierSponsors.length} sponsor

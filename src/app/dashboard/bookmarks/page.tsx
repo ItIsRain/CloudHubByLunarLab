@@ -36,7 +36,7 @@ export default function BookmarksPage() {
             className="mb-8"
           >
             <h1 className="font-display text-3xl font-bold mb-1">Bookmarks</h1>
-            <p className="text-muted-foreground">Events and hackathons you&apos;ve saved</p>
+            <p className="text-muted-foreground">Events and competitions you&apos;ve saved</p>
           </motion.div>
 
           <motion.div
@@ -114,12 +114,12 @@ export default function BookmarksPage() {
                 ) : bookmarkedHackathons.length === 0 ? (
                   <div className="text-center py-16">
                     <Bookmark className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <h3 className="font-display text-lg font-bold mb-1">No bookmarked hackathons</h3>
+                    <h3 className="font-display text-lg font-bold mb-1">No bookmarked competitions</h3>
                     <p className="text-sm text-muted-foreground mb-4">
                       Browse hackathons and click the bookmark icon to save them here.
                     </p>
                     <Button asChild>
-                      <Link href="/explore">Explore Hackathons</Link>
+                      <Link href="/explore">Explore Competitions</Link>
                     </Button>
                   </div>
                 ) : (

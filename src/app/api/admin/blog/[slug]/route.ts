@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToBlogPost } from "@/lib/supabase/mappers";
 import { writeAuditLog } from "@/lib/audit";
 import { UUID_RE, SAFE_SLUG_RE } from "@/lib/constants";
+import { verifyAdmin } from "@/lib/verify-admin";
 
 function postFilter(idOrSlug: string) {
   return UUID_RE.test(idOrSlug) ? `id.eq.${idOrSlug}` : `slug.eq.${idOrSlug}`;
@@ -20,28 +20,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
     }
 
-    const supabase = await getSupabaseServerClient();
-
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    // Verify admin role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("roles")
-      .eq("id", user.id)
-      .single();
-
-    const roles = (profile?.roles as string[]) || [];
-    if (!roles.includes("admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const adminCheck = await verifyAdmin();
+    if (adminCheck.error) return adminCheck.error;
 
     const admin = getSupabaseAdminClient();
 
@@ -116,7 +96,7 @@ export async function PATCH(
     // Write audit log (best-effort)
     await writeAuditLog(
       {
-        actorId: user.id,
+        actorId: adminCheck.userId,
         action: "update",
         entityType: "blog_post",
         entityId: existing.id as string,
@@ -150,28 +130,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
     }
 
-    const supabase = await getSupabaseServerClient();
-
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    // Verify admin role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("roles")
-      .eq("id", user.id)
-      .single();
-
-    const roles = (profile?.roles as string[]) || [];
-    if (!roles.includes("admin")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const adminCheck = await verifyAdmin();
+    if (adminCheck.error) return adminCheck.error;
 
     const admin = getSupabaseAdminClient();
 
@@ -199,7 +159,7 @@ export async function DELETE(
     // Write audit log (best-effort)
     await writeAuditLog(
       {
-        actorId: user.id,
+        actorId: adminCheck.userId,
         action: "delete",
         entityType: "blog_post",
         entityId: existing.id as string,

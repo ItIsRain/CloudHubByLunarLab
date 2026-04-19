@@ -12,7 +12,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   return buildMetadata({
     title: `Overview - ${h.name}`,
-    description: h.tagline ?? `Overview of ${h.name} hackathon.`,
+    description: h.tagline ?? `Overview of ${h.name} competition.`,
     path: `/hackathons/${h.slug}/overview`,
   });
 }

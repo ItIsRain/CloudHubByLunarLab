@@ -21,7 +21,7 @@ function buildTeamSchema(maxTeamSize: number) {
   return z.object({
     name: z.string().min(2, "Team name is required").max(50),
     description: z.string().max(500).optional(),
-    maxSize: z.number().min(1).max(maxTeamSize, `Cannot exceed hackathon limit of ${maxTeamSize}`),
+    maxSize: z.number().min(1).max(maxTeamSize, `Cannot exceed competition limit of ${maxTeamSize}`),
     joinPassword: z.string().max(50).optional(),
   });
 }

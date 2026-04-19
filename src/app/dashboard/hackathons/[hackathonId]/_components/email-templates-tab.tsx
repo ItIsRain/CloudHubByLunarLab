@@ -45,7 +45,7 @@ const PLACEHOLDERS = [
   { key: "{{applicant_name}}", label: "Applicant Name" },
   { key: "{{applicant_email}}", label: "Email" },
   { key: "{{hackathon_name}}", label: "Hackathon" },
-  { key: "{{hackathon_url}}", label: "Hackathon URL" },
+  { key: "{{hackathon_url}}", label: "Competition URL" },
   { key: "{{status}}", label: "Status" },
   { key: "{{registration_date}}", label: "Reg. Date" },
   { key: "{{hackathon_start_date}}", label: "Start Date" },

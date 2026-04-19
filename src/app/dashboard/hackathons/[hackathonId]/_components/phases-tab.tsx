@@ -1008,7 +1008,7 @@ function CreatePhaseDialog({
           <DialogDescription>
             {isEditing
               ? "Update the configuration for this evaluation phase."
-              : "Set up a new evaluation phase for your hackathon."}
+              : "Set up a new evaluation phase for your competition."}
           </DialogDescription>
         </DialogHeader>
 

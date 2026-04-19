@@ -390,7 +390,7 @@ export default function TeamsPage() {
                                 size="sm"
                                 className="w-full gap-1.5"
                                 disabled
-                                title="Register for the hackathon to join a team"
+                                title="Register for the competition to join a team"
                               >
                                 <Lock className="h-3.5 w-3.5" />
                                 Register to Join

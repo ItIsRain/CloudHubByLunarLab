@@ -1,6 +1,20 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy singleton — avoids crashing module evaluation when RESEND_API_KEY
+// is missing. The Resend constructor throws synchronously on an empty key,
+// so instantiating at top-level would bring down any route that imports
+// this file (e.g. /api/auth/login) with a module-eval error.
+let resendClient: Resend | null = null;
+function getResend(): Resend {
+  if (!resendClient) {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) {
+      throw new Error("RESEND_API_KEY is not configured");
+    }
+    resendClient = new Resend(key);
+  }
+  return resendClient;
+}
 
 const FROM_EMAIL = "noreply@1i1.ae";
 const FROM_NAME = "CloudHub by Lunar Limited";
@@ -153,7 +167,7 @@ export async function sendEmail({
   // Strip newlines to prevent email header injection
   const safeSubject = subject.replace(/[\r\n]/g, " ").trim();
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: `${FROM_NAME} <${FROM_EMAIL}>`,
     to,
     subject: safeSubject,
@@ -171,10 +185,10 @@ export async function sendWelcomeEmail(email: string, name: string) {
       ${statusBanner(COLORS.coral, `${COLORS.coral}08`, "&#127881;", "Welcome aboard")}
       ${bodySection(`
         ${greeting(name)}
-        ${paragraph(`Your CloudHub account is ready. Discover hackathons, compete in challenges, form teams, and build something amazing.`)}
+        ${paragraph(`Your CloudHub account is ready. Discover competitions, compete in challenges, form teams, and build something amazing.`)}
         ${paragraph(`Here's what you can do next:`)}
         ${infoBox(`
-          <strong style="color:${COLORS.white};">Browse events</strong> &mdash; find hackathons and competitions near you<br/>
+          <strong style="color:${COLORS.white};">Browse events</strong> &mdash; find competitions and competitions near you<br/>
           <strong style="color:${COLORS.white};">Complete your profile</strong> &mdash; showcase your skills to potential teammates<br/>
           <strong style="color:${COLORS.white};">Join a team</strong> &mdash; collaborate with talented builders
         `)}
@@ -254,7 +268,7 @@ export async function sendApplicationRejectedEmail({ to, applicantName, hackatho
       ${bodySection(`
         ${greeting(applicantName)}
         ${paragraph(`Thank you for your interest in ${eventName(hackathonName)}. After careful review, we weren't able to offer you a spot this time.`)}
-        ${paragraph(`Don't let this stop you — there are plenty of exciting events and hackathons on CloudHub waiting for builders like you.`)}
+        ${paragraph(`Don't let this stop you — there are plenty of exciting events and competitions on CloudHub waiting for builders like you.`)}
         ${divider()}
         ${ctaButton(`${SITE_URL}/explore`, "Explore Other Events")}
       `)}
@@ -370,7 +384,7 @@ export async function sendApplicationDeclinedEmail({ to, applicantName, hackatho
       ${bodySection(`
         ${greeting(applicantName)}
         ${paragraph(`This confirms that you've declined your spot in ${eventName(hackathonName)}. Your place may be offered to someone on the waitlist.`)}
-        ${paragraph(`We're sorry to see you go. Whenever you're ready, there are always new hackathons and competitions to join.`)}
+        ${paragraph(`We're sorry to see you go. Whenever you're ready, there are always new competitions and competitions to join.`)}
         ${divider()}
         ${ctaButton(`${SITE_URL}/explore`, "Explore Events", "secondary")}
       `)}

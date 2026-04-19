@@ -9,7 +9,7 @@ type Props = { params: Promise<{ hackathonId: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { hackathonId } = await params;
   const h = await getHackathonMeta(hackathonId);
-  if (!h) return buildMetadata({ title: "Hackathon Not Found" });
+  if (!h) return buildMetadata({ title: "Competition Not Found" });
 
   const desc = h.total_prize_pool
     ? `${h.tagline ?? h.name} — $${h.total_prize_pool.toLocaleString()} in prizes.`

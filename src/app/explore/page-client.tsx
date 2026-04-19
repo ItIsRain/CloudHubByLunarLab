@@ -130,7 +130,7 @@ export default function ExplorePage() {
             <div className="relative">
               <Input
                 type="text"
-                placeholder="Search events, hackathons, topics..."
+                placeholder="Search events, competitions, topics..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 icon={<Search className="h-5 w-5" />}
