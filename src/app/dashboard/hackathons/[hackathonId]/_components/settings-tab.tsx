@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ImageUpload } from "@/components/forms/image-upload";
 import { cn } from "@/lib/utils";
 import type { Hackathon, EntityInvitation } from "@/lib/types";
 import { useUpdateHackathon, useDeleteHackathon } from "@/hooks/use-hackathons";
@@ -207,11 +208,69 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
         </p>
       </motion.div>
 
-      {/* Visibility */}
+      {/* Branding — Cover Image & Logo */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Branding</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Cover Image</label>
+              <ImageUpload
+                value={hackathon.coverImage}
+                onChange={async (url) => {
+                  try {
+                    await updateHackathon.mutateAsync({
+                      id: hackathonId,
+                      coverImage: url || null,
+                    });
+                    toast.success("Cover image updated!");
+                  } catch {
+                    toast.error("Failed to update cover image.");
+                  }
+                }}
+                aspectRatio="banner"
+                label="Upload cover image"
+                description="Recommended: 1920 x 640px (3:1). PNG, JPG or WebP, max 5MB."
+                folder="cloudhub/hackathons"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Logo</label>
+              <ImageUpload
+                value={hackathon.logo}
+                onChange={async (url) => {
+                  try {
+                    await updateHackathon.mutateAsync({
+                      id: hackathonId,
+                      logo: url || null,
+                    });
+                    toast.success("Logo updated!");
+                  } catch {
+                    toast.error("Failed to update logo.");
+                  }
+                }}
+                aspectRatio="square"
+                label="Upload logo"
+                description="Recommended: 512 x 512px. PNG, JPG or WebP, max 5MB."
+                folder="cloudhub/hackathons"
+                className="max-w-[240px]"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Visibility */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
       >
         <Card>
           <CardHeader>
