@@ -165,7 +165,25 @@
       "Bash(grep -B 2 \"function.*Filter\\\\|const.*Filter =\" /c/Users/dared/Documents/OneToOneEvents/src/app/api/communities/\\\\[communityId\\\\]/route.ts)",
       "Bash(ls:*)",
       "mcp__plugin_supabase_supabase__get_logs",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); import re; txt=d[0]['text']; j=json.loads\\(txt\\); rows=j['result']['result']; [print\\(r.get\\('event_message',''\\)\\) for r in rows if 'alyazya' in str\\(r\\) or '594aeede' in str\\(r\\) or 'khalifa' in str\\(r\\).lower\\(\\)]\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); import re; txt=d[0]['text']; j=json.loads\\(txt\\); rows=j['result']['result']; [print\\(r.get\\('event_message',''\\)\\) for r in rows if 'alyazya' in str\\(r\\) or '594aeede' in str\\(r\\) or 'khalifa' in str\\(r\\).lower\\(\\)]\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npm run *)",
+      "Bash(grep -E \"\\\\.sql$\")",
+      "Bash(xargs grep *)",
+      "Bash(grep -n \"category\" supabase/migrations/*_create_*hackathons*.sql)",
+      "Bash(grep -l \"hackathons\" supabase/migrations/*.sql)",
+      "Bash(grep -n \"CREATE TABLE.*hackathons\\\\|hackathons \\(\" supabase/migrations/*.sql)",
+      "Bash(grep -rioP '\\(?<=[\"\\\\x27`> ]\\)hackathons?\\(?=[\"\\\\x27`< ,.:!?\\\\\\)]\\)' src/ --include=\"*.tsx\" --include=\"*.ts\")",
+      "Bash(node scripts/rename-hackathon.mjs --dry-run)",
+      "Bash(node scripts/rename-hackathon.mjs)",
+      "Bash(xargs sed *)",
+      "Bash(grep -n \"hackathon_registrations\" /c/Users/dared/Documents/OneToOneEvents/supabase/migrations/*.sql)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Skill(commit-commands:commit-push-pr)",
+      "Bash(git checkout *)",
+      "Bash(where gh *)",
+      "Bash(cmd //c \"where gh\")"
     ]
   }
 }
