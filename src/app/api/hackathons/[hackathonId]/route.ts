@@ -316,6 +316,7 @@ export async function PATCH(
     const DATE_FIELDS = [
       "registration_start", "registration_end", "hacking_start", "hacking_end",
       "submission_deadline", "judging_start", "judging_end", "winners_announcement",
+      "rsvp_deadline", "registration_editable_until",
     ];
     for (const field of DATE_FIELDS) {
       if (updates[field] !== undefined) {
