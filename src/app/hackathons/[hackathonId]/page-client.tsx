@@ -221,6 +221,14 @@ export default function HackathonDetailPage() {
   const hackTeams = teamsData?.data || [];
   const hackSubs = submissionsData?.data || [];
   const isOrganizer = user?.id === hackathon.organizerId;
+  // Submissions tab/listing is hidden from the public until winners_announcement
+  // has passed. Organizers always see it (so they can preview), and team members
+  // implicitly see their own submission via the API even before then.
+  const submissionsPubliclyVisible =
+    !!hackathon.winnersAnnouncement &&
+    new Date(hackathon.winnersAnnouncement).getTime() <= Date.now();
+  const canSeeSubmissionsTab =
+    submissionsPubliclyVisible || isOrganizer || hackSubs.length > 0;
   const canEditApplication = (registrationStatus === "pending" || registrationStatus === "draft" || registrationStatus === "confirmed") && !isOrganizer;
 
   const getDeadline = () => {
@@ -574,7 +582,7 @@ export default function HackathonDetailPage() {
                 <TabsTrigger value="tracks">Tracks ({hackathon.tracks.length})</TabsTrigger>
                 <TabsTrigger value="schedule">Schedule</TabsTrigger>
                 {hackathon.teamsEnabled !== false && <TabsTrigger value="teams">Teams ({hackTeams.length})</TabsTrigger>}
-                {hackathon.submissionsEnabled !== false && <TabsTrigger value="submissions">Submissions ({hackSubs.length})</TabsTrigger>}
+                {hackathon.submissionsEnabled !== false && canSeeSubmissionsTab && <TabsTrigger value="submissions">Submissions ({hackSubs.length})</TabsTrigger>}
                 {winnersAnnounced && publicWinners.length > 0 && (
                   <TabsTrigger value="winners">
                     <Trophy className="h-3.5 w-3.5 mr-1.5" />
@@ -931,7 +939,14 @@ export default function HackathonDetailPage() {
               </TabsContent>}
 
               {/* Submissions */}
-              {hackathon.submissionsEnabled !== false && <TabsContent value="submissions" className="mt-6">
+              {hackathon.submissionsEnabled !== false && canSeeSubmissionsTab && <TabsContent value="submissions" className="mt-6">
+                {!submissionsPubliclyVisible && (
+                  <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+                    Submissions are hidden from the public until winners are
+                    announced. You can see them because you organize this
+                    competition or have submitted to it.
+                  </div>
+                )}
                 {hackSubs.length === 0 ? (
                   <div className="text-center py-16">
                     <Award className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />

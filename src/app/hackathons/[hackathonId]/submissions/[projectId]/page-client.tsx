@@ -11,6 +11,7 @@ import {
   Github,
   ExternalLink,
   Award,
+  Lock,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
@@ -19,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useSubmission } from "@/hooks/use-submissions";
+import { useHackathon } from "@/hooks/use-hackathons";
 import { cn, getInitials, safeHref } from "@/lib/utils";
 
 export default function ProjectDetailPage() {
@@ -28,6 +30,8 @@ export default function ProjectDetailPage() {
 
   const { data: submissionData, isLoading } = useSubmission(projectId);
   const submission = submissionData?.data;
+  const { data: hackathonData } = useHackathon(hackathonId);
+  const hackathon = hackathonData?.data;
 
   const [upvoted, setUpvoted] = React.useState(false);
   const [upvoteCount, setUpvoteCount] = React.useState(0);
@@ -65,6 +69,42 @@ export default function ProjectDetailPage() {
   }
 
   if (!submission) {
+    // Differentiate "actually missing" from "hidden until winners announced"
+    // by checking the parent hackathon's winners_announcement timestamp.
+    const announceTs = hackathon?.winnersAnnouncement
+      ? new Date(hackathon.winnersAnnouncement).getTime()
+      : null;
+    const lockedPreAnnouncement =
+      !!hackathon && (!announceTs || announceTs > Date.now());
+
+    if (lockedPreAnnouncement) {
+      const announceLabel = hackathon?.winnersAnnouncement
+        ? new Date(hackathon.winnersAnnouncement).toLocaleString()
+        : null;
+      return (
+        <div className="min-h-screen bg-muted/30">
+          <Navbar />
+          <main className="pt-24 pb-16 text-center">
+            <div className="mx-auto max-w-md">
+              <Lock className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
+              <h1 className="font-display text-3xl font-bold mb-2">
+                This project is private
+              </h1>
+              <p className="text-muted-foreground mb-6">
+                Submissions for {hackathon?.name ?? "this competition"} stay
+                hidden until winners are announced
+                {announceLabel ? ` on ${announceLabel}` : ""}.
+              </p>
+              <Button asChild>
+                <Link href={`/hackathons/${hackathonId}`}>Back to competition</Link>
+              </Button>
+            </div>
+          </main>
+          <Footer />
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-muted/30">
         <Navbar />

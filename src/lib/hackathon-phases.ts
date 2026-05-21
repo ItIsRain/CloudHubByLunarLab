@@ -82,6 +82,19 @@ export function canSubmit(
   return t >= start && t < end;
 }
 
+// Submissions are private (organizers + collaborators + the submitting team only)
+// until the winners_announcement timestamp passes. After that they become public
+// so attendees and outside visitors can browse projects.
+export function submissionsArePubliclyVisible(
+  winnersAnnouncement: string | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!winnersAnnouncement) return false;
+  const ts = safeTime(winnersAnnouncement);
+  if (!ts) return false;
+  return now.getTime() >= ts;
+}
+
 export function canJudge(
   h: HackathonTimeline,
   now: Date = new Date()

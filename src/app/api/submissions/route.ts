@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
 import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
-import { canSubmit, getPhaseMessage } from "@/lib/hackathon-phases";
+import { canSubmit, getPhaseMessage, submissionsArePubliclyVisible } from "@/lib/hackathon-phases";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 
@@ -69,6 +69,50 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ data: [], total: 0, page, pageSize, totalPages: 0, hasMore: false });
       }
       query = query.eq("hackathon_id", hackathonId);
+
+      // Submissions are private until winners are announced. Before that, only
+      // organizers, collaborators, and members of the submitting team can see
+      // them. After winners_announcement, all submitted entries are public.
+      const { data: hackTiming } = await supabase
+        .from("hackathons")
+        .select("organizer_id, winners_announcement")
+        .eq("id", hackathonId)
+        .single();
+
+      const publicVisible = submissionsArePubliclyVisible(
+        (hackTiming?.winners_announcement as string | null | undefined) ?? null
+      );
+
+      if (!publicVisible) {
+        const isOrganizer = !!authUserId && hackTiming?.organizer_id === authUserId;
+        let isCollaborator = false;
+        if (authUserId && !isOrganizer) {
+          const { data: collab } = await supabase
+            .from("hackathon_collaborators")
+            .select("id")
+            .eq("hackathon_id", hackathonId)
+            .eq("user_id", authUserId)
+            .maybeSingle();
+          isCollaborator = !!collab;
+        }
+
+        if (!isOrganizer && !isCollaborator) {
+          if (!authUserId) {
+            // Unauthenticated viewers see nothing pre-announcement.
+            return NextResponse.json({ data: [], total: 0, page, pageSize, totalPages: 0, hasMore: false });
+          }
+          // Auth users can still see their own team's submission(s).
+          const { data: teamRows } = await supabase
+            .from("team_members")
+            .select("team_id")
+            .eq("user_id", authUserId);
+          const ownTeamIds = (teamRows || []).map((m) => m.team_id as string);
+          if (ownTeamIds.length === 0) {
+            return NextResponse.json({ data: [], total: 0, page, pageSize, totalPages: 0, hasMore: false });
+          }
+          query = query.in("team_id", ownTeamIds);
+        }
+      }
     }
     if (teamId) query = query.eq("team_id", teamId);
 

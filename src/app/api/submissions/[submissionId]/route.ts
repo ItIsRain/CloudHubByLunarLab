@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
 import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
-import { canSubmit, getPhaseMessage } from "@/lib/hackathon-phases";
+import { canSubmit, getPhaseMessage, submissionsArePubliclyVisible } from "@/lib/hackathon-phases";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 
@@ -76,16 +76,51 @@ export async function GET(
         return NextResponse.json({ error: "Submission not found" }, { status: 404 });
       }
 
+      const { data: hack } = await supabase
+        .from("hackathons")
+        .select("organizer_id, winners_announcement")
+        .eq("id", hackathonId)
+        .single();
+
+      const isOrganizer = !!authUserId && authUserId === hack?.organizer_id;
+      let isCollaborator = false;
+      if (authUserId && !isOrganizer) {
+        const { data: collab } = await supabase
+          .from("hackathon_collaborators")
+          .select("id")
+          .eq("hackathon_id", hackathonId)
+          .eq("user_id", authUserId)
+          .maybeSingle();
+        isCollaborator = !!collab;
+      }
+
+      // Gate visibility: until winners are announced, only org/collaborators
+      // and members of the submitting team can see this submission.
+      const publicVisible = submissionsArePubliclyVisible(
+        (hack?.winners_announcement as string | null | undefined) ?? null
+      );
+
+      if (!publicVisible && !isOrganizer && !isCollaborator) {
+        const submissionTeamId = (data as Record<string, unknown>).team_id as string | null;
+        let isTeamMember = false;
+        if (authUserId && submissionTeamId) {
+          const { data: membership } = await supabase
+            .from("team_members")
+            .select("id")
+            .eq("team_id", submissionTeamId)
+            .eq("user_id", authUserId)
+            .maybeSingle();
+          isTeamMember = !!membership;
+        }
+        if (!isTeamMember) {
+          return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+        }
+      }
+
       // Strip scores for non-judge / non-organizer users
       if (!authUserId) {
         submission.scores = [];
       } else {
-        const { data: hack } = await supabase
-          .from("hackathons")
-          .select("organizer_id")
-          .eq("id", hackathonId)
-          .single();
-        const isOrganizer = authUserId === hack?.organizer_id;
         const isJudge = submission.scores.some((s) => s.judgeId === authUserId);
         if (!isOrganizer && !isJudge) {
           submission.scores = [];

@@ -11,6 +11,7 @@ import {
   ArrowUpDown,
   ThumbsUp,
   Award,
+  Lock,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
@@ -82,6 +83,50 @@ export default function HackathonSubmissionsPage() {
   }
 
   const hackSubs = submissionsData?.data || [];
+  const submissionsPubliclyVisible =
+    !!hackathon.winnersAnnouncement &&
+    new Date(hackathon.winnersAnnouncement).getTime() <= Date.now();
+
+  // Pre-announcement: if the viewer can't see any submissions, show a locked
+  // state explaining why instead of the generic "no submissions yet" message.
+  if (!submissionsPubliclyVisible && hackSubs.length === 0) {
+    const announceTime = hackathon.winnersAnnouncement
+      ? new Date(hackathon.winnersAnnouncement).toLocaleString()
+      : null;
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8">
+            <Link
+              href={`/hackathons/${hackathonId}`}
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to {hackathon.name}
+            </Link>
+            <Card>
+              <CardContent className="py-16 text-center">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                  <Lock className="h-7 w-7 text-muted-foreground" />
+                </div>
+                <h1 className="font-display text-2xl font-bold mb-2">
+                  Submissions are private
+                </h1>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  Projects submitted to {hackathon.name} stay hidden until
+                  winners are announced
+                  {announceTime ? ` on ${announceTime}` : ""}. Check back then
+                  to browse all entries.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   const filteredSubs = hackSubs
     .filter((sub) => {
