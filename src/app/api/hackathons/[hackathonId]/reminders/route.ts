@@ -181,15 +181,16 @@ export async function POST(
       }
 
       // Fetch hackathon details for placeholders
-      const { data: hackathon } = await supabase
+      const { data: hackathon, error: hackathonErr } = await supabase
         .from("hackathons")
         .select(
-          "name, hacking_start, hacking_end, registration_end, organizer:profiles!hackathons_organizer_id_fkey(display_name, full_name)"
+          "name, hacking_start, hacking_end, registration_end, organizer:profiles!organizer_id(name)"
         )
         .eq("id", hackathonId)
         .single();
 
-      if (!hackathon) {
+      if (hackathonErr || !hackathon) {
+        if (hackathonErr) console.error("Failed to load hackathon for reminder:", hackathonErr);
         return NextResponse.json(
           { error: "Competition not found" },
           { status: 404 }
@@ -201,7 +202,7 @@ export async function POST(
       let regQuery = supabase
         .from("hackathon_registrations")
         .select(
-          "id, user_id, status, user:profiles!hackathon_registrations_user_id_fkey(email, full_name, display_name)"
+          "id, user_id, status, user:profiles!hackathon_registrations_user_id_fkey(email, name)"
         )
         .eq("hackathon_id", hackathonId);
 
@@ -250,13 +251,9 @@ export async function POST(
         process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
       const hackathonName = hackathon.name as string;
       const organizerProfile = hackathon.organizer as {
-        display_name?: string;
-        full_name?: string;
+        name?: string;
       } | null;
-      const organizerName =
-        organizerProfile?.display_name ||
-        organizerProfile?.full_name ||
-        "Organizer";
+      const organizerName = organizerProfile?.name || "Organizer";
       const startDate = hackathon.hacking_start
         ? new Date(hackathon.hacking_start as string).toLocaleDateString()
         : "TBD";
@@ -276,14 +273,12 @@ export async function POST(
       for (const reg of registrations) {
         const profile = reg.user as {
           email?: string;
-          full_name?: string;
-          display_name?: string;
+          name?: string;
         } | null;
         const recipientEmail = profile?.email;
         if (!recipientEmail) continue;
 
-        const recipientName =
-          profile?.display_name || profile?.full_name || "Participant";
+        const recipientName = profile?.name || "Participant";
 
         const replacements: Record<string, string> = {
           "{{applicant_name}}": recipientName,

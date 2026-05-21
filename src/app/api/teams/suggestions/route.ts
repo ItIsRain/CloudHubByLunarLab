@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
       .from("hackathon_registrations")
       .select("user_id")
       .eq("hackathon_id", hackathonId)
-      .in("status", ["confirmed", "approved"]);
+      .in("status", ["confirmed", "approved", "accepted"]);
 
     if (!registrations || registrations.length === 0) {
       return NextResponse.json({ data: [] });

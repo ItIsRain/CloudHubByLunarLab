@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       .from("hackathon_registrations")
       .select("user_id")
       .eq("hackathon_id", hackathon_id)
-      .in("status", ["confirmed", "approved"]);
+      .in("status", ["confirmed", "approved", "accepted"]);
 
     if (!registrations || registrations.length === 0) {
       return NextResponse.json(

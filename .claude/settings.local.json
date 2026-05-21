@@ -167,7 +167,8 @@
       "mcp__plugin_supabase_supabase__get_logs",
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); import re; txt=d[0]['text']; j=json.loads\\(txt\\); rows=j['result']['result']; [print\\(r.get\\('event_message',''\\)\\) for r in rows if 'alyazya' in str\\(r\\) or '594aeede' in str\\(r\\) or 'khalifa' in str\\(r\\).lower\\(\\)]\")",
       "Bash(git merge *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "mcp__plugin_supabase_supabase__list_projects"
     ]
   }
 }

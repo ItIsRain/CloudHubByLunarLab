@@ -28,6 +28,7 @@ import {
   ClipboardList,
   Shield,
   Layers,
+  Flag,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ import { toast } from "sonner";
 
 import { OverviewTab } from "./_components/overview-tab";
 import { EditTab } from "./_components/edit-tab";
+import { TracksTab } from "./_components/tracks-tab";
 import { ParticipantsTab } from "./_components/participants-tab";
 import { TeamsTab } from "./_components/teams-tab";
 import { SubmissionsTab } from "./_components/submissions-tab";
@@ -78,6 +80,7 @@ const statusConfig: Record<
 const tabs = [
   { value: "overview", label: "Overview", icon: LayoutDashboard },
   { value: "edit", label: "Edit", icon: Edit },
+  { value: "tracks", label: "Tracks", icon: Flag },
   { value: "form-builder", label: "Form Builder", icon: FileText },
   { value: "applications", label: "Applications", icon: ClipboardList },
   { value: "screening", label: "Screening", icon: Shield },
@@ -304,6 +307,9 @@ function HackathonDashboardContent() {
             </TabsContent>
             <TabsContent value="edit">
               <EditTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="tracks">
+              <TracksTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
             <TabsContent value="form-builder">
               <FormBuilderTab hackathon={hackathon} hackathonId={hackathonId} />

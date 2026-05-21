@@ -265,21 +265,39 @@ export default function FormBuilderTab({ hackathon, hackathonId }: FormBuilderTa
   // Initialize sections from existing fields or create default
   const [sections, setSections] = React.useState<FormSection[]>(() => {
     const existingFields = hackathon.registrationFields || [];
+    const savedSections = hackathon.registrationSections || [];
+
+    // Prefer persisted section metadata (titles, descriptions, order) when present.
+    if (savedSections.length > 0) {
+      // Ensure every field-referenced sectionId exists in the section list; append
+      // defaults for any orphans so we don't lose fields whose section was deleted upstream.
+      const knownIds = new Set(savedSections.map((s) => s.id));
+      const orphanIds = new Set<string>();
+      existingFields.forEach((f) => {
+        if (f.sectionId && !knownIds.has(f.sectionId)) orphanIds.add(f.sectionId);
+      });
+      const orphanSections: FormSection[] = Array.from(orphanIds).map((sid, i) => ({
+        id: sid,
+        title: `Section ${savedSections.length + i + 1}`,
+        description: "",
+        order: savedSections.length + i,
+      }));
+      return [...savedSections, ...orphanSections].sort((a, b) => a.order - b.order);
+    }
+
     if (existingFields.length === 0) return [];
 
-    // Extract unique section IDs
+    // Legacy fallback: no persisted sections, reconstruct from unique sectionIds.
     const sectionIds = new Set<string>();
     existingFields.forEach((f) => {
       if (f.sectionId) sectionIds.add(f.sectionId);
     });
 
     if (sectionIds.size === 0) {
-      // Fields exist but no sectionIds -- assign them all to a default section
       const defaultSection = createDefaultSection(0);
       return [defaultSection];
     }
 
-    // Build sections from unique IDs (we don't store section metadata yet, so reconstruct)
     return Array.from(sectionIds).map((sid, i) => ({
       id: sid,
       title: i === 0 ? "Basic Information" : `Section ${i + 1}`,

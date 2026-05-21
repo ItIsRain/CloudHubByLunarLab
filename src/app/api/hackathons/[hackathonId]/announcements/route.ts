@@ -65,7 +65,7 @@ export async function GET(
         .select("id")
         .eq("hackathon_id", hackathonId)
         .eq("user_id", auth.userId)
-        .in("status", ["confirmed", "approved"])
+        .in("status", ["confirmed", "approved", "accepted"])
         .maybeSingle();
 
       if (!registration) {

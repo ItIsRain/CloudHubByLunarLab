@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
     // Run validation queries in parallel
     const [hackathonRes, registrationRes, membershipRes] = await Promise.all([
       supabase.from("hackathons").select("id").eq("id", hackathon_id).single(),
-      supabase.from("hackathon_registrations").select("id").eq("hackathon_id", hackathon_id).eq("user_id", user.id).in("status", ["confirmed", "approved"]).maybeSingle(),
+      supabase.from("hackathon_registrations").select("id").eq("hackathon_id", hackathon_id).eq("user_id", user.id).in("status", ["confirmed", "approved", "accepted"]).maybeSingle(),
       supabase.from("team_members").select("team_id, teams!inner(hackathon_id)").eq("user_id", user.id).eq("teams.hackathon_id", hackathon_id),
     ]);
 
