@@ -136,17 +136,19 @@ export async function GET(
       regQuery = regQuery.range(offset, offset + pageSize - 1);
     }
 
-    const [regResult, teamsResult, hackathonResult] = await Promise.all([
+    const [regResult, teamsResult, submissionsResult] = await Promise.all([
       regQuery,
       supabase
         .from("teams")
         .select("id, name, hackathon_id, team_members(user_id)")
         .eq("hackathon_id", hackathonId),
+      // Pull each team's submission's track choice — track is chosen at
+      // submission time, never at registration, so participants without a
+      // submitted project have no track yet.
       supabase
-        .from("hackathons")
-        .select("tracks")
-        .eq("id", hackathonId)
-        .single(),
+        .from("submissions")
+        .select("team_id, track")
+        .eq("hackathon_id", hackathonId),
     ]);
 
     const { data: registrations, error, count } = regResult;
@@ -155,21 +157,29 @@ export async function GET(
       return NextResponse.json({ error: "Failed to fetch participants" }, { status: 400 });
     }
 
-    // Build a user_id -> team name lookup
+    // Build a user_id -> team name lookup AND user_id -> team_id lookup
     const userTeamMap: Record<string, string> = {};
+    const userTeamIdMap: Record<string, string> = {};
     if (teamsResult.data) {
       for (const team of teamsResult.data) {
         const members = (team.team_members as { user_id: string }[]) || [];
         for (const member of members) {
-          userTeamMap[member.user_id] = team.name;
+          userTeamMap[member.user_id] = team.name as string;
+          userTeamIdMap[member.user_id] = team.id as string;
         }
       }
     }
 
-    const hackathon = hackathonResult.data;
-
-    const tracks = (hackathon?.tracks as { id?: string; name: string }[]) || [];
-    const firstTrackName = tracks.length > 0 ? tracks[0].name : null;
+    // Build team_id -> track-name lookup from submissions
+    const teamTrackMap: Record<string, string> = {};
+    if (submissionsResult.data) {
+      for (const sub of submissionsResult.data as { team_id: string; track: unknown }[]) {
+        const track = sub.track as { name?: string } | string | null | undefined;
+        if (!track) continue;
+        const name = typeof track === "string" ? track : track.name;
+        if (name && sub.team_id) teamTrackMap[sub.team_id] = name;
+      }
+    }
 
     // Map registrations to response shape
     let participants = (registrations || []).map(
@@ -185,7 +195,10 @@ export async function GET(
           createdAt: reg.created_at as string,
           user: userProfile ? profileToPublicUser(userProfile) : null,
           teamName: userTeamMap[userId] || null,
-          trackName: firstTrackName,
+          trackName: (() => {
+            const teamId = userTeamIdMap[userId];
+            return teamId ? teamTrackMap[teamId] ?? null : null;
+          })(),
           formData: (reg.form_data as Record<string, unknown>) || null,
           completenessScore: typeof reg.completeness_score === "number" ? reg.completeness_score : 0,
           eligibilityPassed: reg.eligibility_passed as boolean | null,

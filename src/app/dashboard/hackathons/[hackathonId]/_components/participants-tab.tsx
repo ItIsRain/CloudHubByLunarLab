@@ -425,9 +425,11 @@ export function ParticipantsTab({
                               )}
                             </td>
                             <td className="p-4 text-sm hidden lg:table-cell">
-                              {participant.trackName || (
-                                <span className="text-muted-foreground">
-                                  —
+                              {participant.trackName ? (
+                                participant.trackName
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">
+                                  Not selected
                                 </span>
                               )}
                             </td>
