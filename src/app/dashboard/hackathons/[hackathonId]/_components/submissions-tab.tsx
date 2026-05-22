@@ -11,11 +11,10 @@ import {
   Settings2,
   Grid3x3,
   Plus,
-  Trash2,
-  GripVertical,
   Loader2,
   Save,
 } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +23,7 @@ import { cn, formatDate } from "@/lib/utils";
 import type { Hackathon, FormField, FormSection } from "@/lib/types";
 import { useHackathonSubmissions } from "@/hooks/use-submissions";
 import { useUpdateHackathon } from "@/hooks/use-hackathons";
+import { FieldEditor } from "@/components/forms/form-field-editor";
 import { toast } from "sonner";
 
 interface SubmissionsTabProps {
@@ -47,19 +47,6 @@ const submissionStatusConfig: Record<
 
 const selectClasses =
   "flex h-11 rounded-xl border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary appearance-none";
-
-const FIELD_TYPES = [
-  { value: "text", label: "Short Text" },
-  { value: "textarea", label: "Long Text" },
-  { value: "email", label: "Email" },
-  { value: "url", label: "URL" },
-  { value: "number", label: "Number" },
-  { value: "select", label: "Dropdown" },
-  { value: "multi_select", label: "Multi Select" },
-  { value: "radio", label: "Radio" },
-  { value: "checkbox", label: "Checkbox" },
-  { value: "file", label: "File Upload" },
-] as const;
 
 export function SubmissionsTab({
   hackathon,
@@ -339,16 +326,31 @@ function SubmissionFormEditor({ hackathon, hackathonId }: SubmissionsTabProps) {
     setFields([...fields, newField]);
   };
 
-  const updateFieldValue = (fieldId: string, key: keyof FormField, value: unknown) => {
+  const updateField = (fieldId: string, updates: Partial<FormField>) => {
     setFields((prev) =>
-      prev.map((f) =>
-        f.id === fieldId ? { ...f, [key]: value } : f
-      )
+      prev.map((f) => (f.id === fieldId ? { ...f, ...updates } : f))
     );
   };
 
   const removeField = (fieldId: string) => {
     setFields((prev) => prev.filter((f) => f.id !== fieldId));
+  };
+
+  const duplicateField = (fieldId: string) => {
+    setFields((prev) => {
+      const idx = prev.findIndex((f) => f.id === fieldId);
+      if (idx === -1) return prev;
+      const original = prev[idx];
+      const copy: FormField = {
+        ...original,
+        id: crypto.randomUUID(),
+        label: `${original.label} (copy)`,
+        order: idx + 1,
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next.map((f, i) => ({ ...f, order: i }));
+    });
   };
 
   const moveField = (fromIndex: number, direction: "up" | "down") => {
@@ -420,84 +422,22 @@ function SubmissionFormEditor({ hackathon, hackathonId }: SubmissionsTabProps) {
             </div>
           ) : (
             <div className="space-y-3">
-              {fields.map((field, index) => (
-                <div
-                  key={field.id}
-                  className="flex items-start gap-3 rounded-lg border border-border p-3 bg-muted/20"
-                >
-                  <div className="flex flex-col items-center gap-1 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => moveField(index, "up")}
-                      disabled={index === 0}
-                      className="text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                    >
-                      <GripVertical className="h-4 w-4" />
-                    </button>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {index + 1}
-                    </span>
-                  </div>
-
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="sm:col-span-2">
-                      <Input
-                        placeholder="Field label"
-                        value={field.label}
-                        onChange={(e) =>
-                          updateFieldValue(field.id, "label", e.target.value)
-                        }
-                      />
-                    </div>
-                    <select
-                      className={cn(selectClasses, "h-10")}
-                      value={field.type}
-                      onChange={(e) =>
-                        updateFieldValue(field.id, "type", e.target.value)
-                      }
-                    >
-                      {FIELD_TYPES.map((ft) => (
-                        <option key={ft.value} value={ft.value}>
-                          {ft.label}
-                        </option>
-                      ))}
-                    </select>
-                    <Input
-                      placeholder="Placeholder text"
-                      value={field.placeholder || ""}
-                      onChange={(e) =>
-                        updateFieldValue(field.id, "placeholder", e.target.value)
-                      }
-                    />
-                    <Input
-                      placeholder="Description (optional)"
-                      value={field.description || ""}
-                      onChange={(e) =>
-                        updateFieldValue(field.id, "description", e.target.value)
-                      }
-                    />
-                    <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={field.required}
-                        onChange={(e) =>
-                          updateFieldValue(field.id, "required", e.target.checked)
-                        }
-                        className="rounded border-border"
-                      />
-                      Required
-                    </label>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => removeField(field.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors mt-2"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+              <AnimatePresence initial={false}>
+                {fields.map((field, index) => (
+                  <FieldEditor
+                    key={field.id}
+                    field={field}
+                    allFields={fields}
+                    onUpdate={(updates) => updateField(field.id, updates)}
+                    onRemove={() => removeField(field.id)}
+                    onDuplicate={() => duplicateField(field.id)}
+                    onMoveUp={() => moveField(index, "up")}
+                    onMoveDown={() => moveField(index, "down")}
+                    isFirst={index === 0}
+                    isLast={index === fields.length - 1}
+                  />
+                ))}
+              </AnimatePresence>
             </div>
           )}
 
