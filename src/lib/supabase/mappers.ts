@@ -1008,6 +1008,7 @@ export function dbRowToCompetitionPhase(row: Record<string, unknown>): Competiti
     status: (row.status as PhaseStatus) || "draft",
     awardCategories: (row.award_categories as CompetitionPhase["awardCategories"]) || [],
     advanceTopN: (row.advance_top_n as number | null | undefined) ?? null,
+    autoAssignTrackIds: (row.auto_assign_track_ids as string[] | null | undefined) ?? null,
     sourcePhaseIds: (row.source_phase_ids as string[]) || [],
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
@@ -1083,5 +1084,6 @@ export function phaseFormToDbRow(phase: Partial<CompetitionPhase>): Record<strin
   if (phase.awardCategories !== undefined) row.award_categories = phase.awardCategories;
   if (phase.sourcePhaseIds !== undefined) row.source_phase_ids = phase.sourcePhaseIds;
   if (phase.advanceTopN !== undefined) row.advance_top_n = phase.advanceTopN;
+  if (phase.autoAssignTrackIds !== undefined) row.auto_assign_track_ids = phase.autoAssignTrackIds;
   return row;
 }

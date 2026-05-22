@@ -64,6 +64,7 @@ import {
   usePhaseFinalists,
   useAutoSelectFinalists,
   useManualSelectFinalists,
+  useAutoAssignPhaseWinners,
 } from "@/hooks/use-phase-scoring";
 import { useHackathonParticipants } from "@/hooks/use-hackathon-participants";
 import {
@@ -998,6 +999,7 @@ export function FinalistsSection({
   );
   const autoSelect = useAutoSelectFinalists();
   const manualSelect = useManualSelectFinalists();
+  const autoAssignWinners = useAutoAssignPhaseWinners(hackathonId, phase.id);
 
   const finalists = finalistsData?.data ?? [];
   const hasSourcePhases =
@@ -1017,6 +1019,26 @@ export function FinalistsSection({
   React.useEffect(() => {
     if (presetTopN != null) setTopN(presetTopN);
   }, [presetTopN]);
+
+  const [autoAssignOpen, setAutoAssignOpen] = React.useState(false);
+  const handleAutoAssignWinners = async () => {
+    try {
+      const result = await autoAssignWinners.mutateAsync();
+      const assigned = result?.data?.assigned ?? 0;
+      const skipped = result?.data?.skipped ?? 0;
+      toast.success(
+        `Assigned ${assigned} winner${assigned === 1 ? "" : "s"}.` +
+          (skipped > 0
+            ? ` ${skipped} slot${skipped === 1 ? "" : "s"} had no eligible team.`
+            : "")
+      );
+      setAutoAssignOpen(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to auto-assign winners"
+      );
+    }
+  };
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [manualOpen, setManualOpen] = React.useState(false);
 
@@ -1086,6 +1108,21 @@ export function FinalistsSection({
           <UserCheck className="h-4 w-4 mr-2" />
           Manual Select
         </Button>
+        {phase.autoAssignTrackIds && phase.autoAssignTrackIds.length > 0 && (
+          <Button
+            variant="outline"
+            onClick={() => setAutoAssignOpen(true)}
+            disabled={autoAssignWinners.isPending}
+            title={`Auto-assign top ${phase.autoAssignTrackIds.length} teams to configured award tracks`}
+          >
+            {autoAssignWinners.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Trophy className="h-4 w-4 mr-2" />
+            )}
+            Auto-assign Winners ({phase.autoAssignTrackIds.length})
+          </Button>
+        )}
       </div>
 
       {!hasSourcePhases && finalists.length === 0 && (
@@ -1141,6 +1178,42 @@ export function FinalistsSection({
         existingFinalistRegIds={new Set(finalists.map((f) => f.registrationId))}
         manualSelect={manualSelect}
       />
+
+      {/* Auto-Assign Winners Confirm Dialog */}
+      <Dialog open={autoAssignOpen} onOpenChange={setAutoAssignOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Auto-assign top {phase.autoAssignTrackIds?.length ?? 0} winners?
+            </DialogTitle>
+            <DialogDescription>
+              The {phase.autoAssignTrackIds?.length ?? 0} highest-scoring teams
+              in this phase will be assigned to the configured award tracks in
+              rank order. One winner row per team. You can still edit any
+              assignment afterwards from the Winners tab.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 rounded-lg bg-warning/10 p-3 text-sm text-warning">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Existing winner rows on the same award tracks will be replaced.
+            Winners on other tracks are untouched.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAutoAssignOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAutoAssignWinners}
+              disabled={autoAssignWinners.isPending}
+            >
+              {autoAssignWinners.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              )}
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Finalists Table */}
       {isLoading ? (

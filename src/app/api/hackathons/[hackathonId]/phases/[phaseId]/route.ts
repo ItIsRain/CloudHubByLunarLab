@@ -438,6 +438,19 @@ export async function PATCH(
         { status: 400 }
       );
     }
+    if (body.autoAssignTrackIds !== undefined && body.autoAssignTrackIds !== null) {
+      if (
+        !Array.isArray(body.autoAssignTrackIds) ||
+        body.autoAssignTrackIds.some(
+          (id: unknown) => typeof id !== "string" || !UUID_RE.test(id)
+        )
+      ) {
+        return NextResponse.json(
+          { error: "autoAssignTrackIds must be an array of UUIDs or null" },
+          { status: 400 }
+        );
+      }
+    }
     if (body.requireRecommendation !== undefined && typeof body.requireRecommendation !== "boolean") {
       return NextResponse.json(
         { error: "requireRecommendation must be a boolean" },
@@ -655,6 +668,7 @@ export async function PATCH(
       ...(body.awardCategories !== undefined && { awardCategories: body.awardCategories }),
       ...(body.sourcePhaseIds !== undefined && { sourcePhaseIds: body.sourcePhaseIds }),
       ...(body.advanceTopN !== undefined && { advanceTopN: body.advanceTopN }),
+      ...(body.autoAssignTrackIds !== undefined && { autoAssignTrackIds: body.autoAssignTrackIds }),
     });
 
     if (Object.keys(updatePayload).length === 0) {

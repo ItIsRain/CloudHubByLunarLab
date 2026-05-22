@@ -59,6 +59,7 @@ import {
   AwardCategoriesEditor,
 } from "./phase-sections";
 import { PitchRoomsSection } from "./pitch-rooms-section";
+import { useAwardTracks } from "@/hooks/use-award-tracks";
 
 // ── Style Constants ────────────────────────────────────────
 
@@ -862,6 +863,8 @@ interface PhaseFormState {
   sourcePhaseIds: string[];
   /** Empty string = no preset; the auto-select dialog will prompt for a value. */
   advanceTopN: string;
+  /** Ordered list of award_track_ids that "Auto-assign winners" will use. */
+  autoAssignTrackIds: string[];
 }
 
 const defaultFormState: PhaseFormState = {
@@ -878,6 +881,7 @@ const defaultFormState: PhaseFormState = {
   awardCategories: [],
   sourcePhaseIds: [],
   advanceTopN: "",
+  autoAssignTrackIds: [],
 };
 
 function toDatetimeLocal(iso: string | null | undefined): string {
@@ -902,6 +906,8 @@ function CreatePhaseDialog({
 }: CreatePhaseDialogProps) {
   const createPhase = useCreatePhase(hackathonId);
   const updatePhase = useUpdatePhase(hackathonId, editingPhase?.id ?? "");
+  const { data: awardTracksData } = useAwardTracks(hackathonId);
+  const awardTracks = awardTracksData?.data ?? [];
 
   const isEditing = !!editingPhase;
 
@@ -928,6 +934,7 @@ function CreatePhaseDialog({
         sourcePhaseIds: editingPhase.sourcePhaseIds ?? [],
         advanceTopN:
           editingPhase.advanceTopN != null ? String(editingPhase.advanceTopN) : "",
+        autoAssignTrackIds: editingPhase.autoAssignTrackIds ?? [],
       });
     } else if (open) {
       setForm(defaultFormState);
@@ -996,6 +1003,8 @@ function CreatePhaseDialog({
         }
         return parsed;
       })(),
+      autoAssignTrackIds:
+        form.autoAssignTrackIds.length > 0 ? form.autoAssignTrackIds : null,
     };
 
     // Catch advanceTopN range issues explicitly so the user gets feedback
@@ -1274,6 +1283,140 @@ function CreatePhaseDialog({
               onChange={(e) => updateField("advanceTopN", e.target.value)}
               className="max-w-[160px]"
             />
+          </div>
+
+          {/* Auto-assign winners — ordered list of award tracks to fill
+              from this phase's top scorers. Slot 1 = highest-scoring team,
+              etc. Empty = manual assignment only (Winners tab). */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              Auto-assign winners (ordered)
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Pick award tracks in rank order. When you click
+              &quot;Auto-assign winners&quot; on this phase, slot 1 goes to the
+              highest-scoring team, slot 2 to the next, etc. One winner per
+              team (not per individual). Leave empty to keep assignments
+              fully manual.
+            </p>
+            {awardTracks.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                No award tracks yet — create them in the Winners tab first.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {form.autoAssignTrackIds.map((trackId, idx) => {
+                  const track = awardTracks.find((t) => t.id === trackId);
+                  return (
+                    <div
+                      key={`${trackId}-${idx}`}
+                      className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2"
+                    >
+                      <Badge variant="muted" className="shrink-0">
+                        Slot {idx + 1}
+                      </Badge>
+                      <span className="text-sm flex-1 truncate">
+                        {track?.name ?? "(removed track)"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            autoAssignTrackIds: prev.autoAssignTrackIds.filter(
+                              (_, i) => i !== idx
+                            ),
+                          }));
+                        }}
+                        disabled={idx === 0}
+                        className={cn(
+                          "p-1 transition-colors",
+                          idx === 0
+                            ? "text-muted-foreground/30 cursor-not-allowed"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                        aria-label="Move up"
+                        title="Move up"
+                      >
+                        {/* swap up/down via index manipulation below */}
+                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setForm((prev) => {
+                            if (idx === 0) return prev;
+                            const next = [...prev.autoAssignTrackIds];
+                            [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                            return { ...prev, autoAssignTrackIds: next };
+                          });
+                        }}
+                        disabled={idx === 0}
+                        className="text-xs h-7 px-2"
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setForm((prev) => {
+                            if (idx >= prev.autoAssignTrackIds.length - 1) return prev;
+                            const next = [...prev.autoAssignTrackIds];
+                            [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                            return { ...prev, autoAssignTrackIds: next };
+                          });
+                        }}
+                        disabled={idx === form.autoAssignTrackIds.length - 1}
+                        className="text-xs h-7 px-2"
+                      >
+                        ↓
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            autoAssignTrackIds: prev.autoAssignTrackIds.filter(
+                              (_, i) => i !== idx
+                            ),
+                          }));
+                        }}
+                        className="text-xs h-7 px-2 text-destructive hover:text-destructive"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  );
+                })}
+
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) return;
+                    setForm((prev) => ({
+                      ...prev,
+                      autoAssignTrackIds: [...prev.autoAssignTrackIds, id],
+                    }));
+                  }}
+                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring appearance-none"
+                >
+                  <option value="">— Add an award track —</option>
+                  {awardTracks
+                    .filter((t) => !form.autoAssignTrackIds.includes(t.id))
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Award Categories */}

@@ -995,6 +995,9 @@ export interface CompetitionPhase {
    *  phase that lists this one in its source_phase_ids. Null = no preset;
    *  the organizer enters topN manually at selection time. */
   advanceTopN?: number | null;
+  /** Ordered list of award_track_ids the per-phase "Auto-assign winners"
+   *  action will use. Position 0 = highest-scored team, etc. */
+  autoAssignTrackIds?: string[] | null;
   createdAt: string;
   updatedAt: string;
   // Populated on fetch (aggregate counts from API)

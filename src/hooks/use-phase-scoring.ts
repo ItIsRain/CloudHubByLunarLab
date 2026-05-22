@@ -298,6 +298,40 @@ export function useManualSelectFinalists() {
   });
 }
 
+// ── Auto-assign phase winners ───────────────────────────
+
+interface AutoAssignWinner {
+  id: string;
+  award_track_id: string;
+  rank: number;
+  final_score: number;
+  registration_id: string;
+}
+
+export function useAutoAssignPhaseWinners(
+  hackathonId: string,
+  phaseId: string
+) {
+  const qc = useQueryClient();
+  return useMutation<{ data: { assigned: number; skipped: number; winners: AutoAssignWinner[] } }>({
+    mutationFn: async () => {
+      const res = await fetch(
+        `/api/hackathons/${hackathonId}/phases/${phaseId}/auto-assign-winners`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Failed to auto-assign winners");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["winners", hackathonId] });
+      qc.invalidateQueries({ queryKey: ["phase-finalists", hackathonId, phaseId] });
+    },
+  });
+}
+
 // ── My reviewer phases (dashboard discovery) ────────────
 
 export function useMyReviewerPhases() {

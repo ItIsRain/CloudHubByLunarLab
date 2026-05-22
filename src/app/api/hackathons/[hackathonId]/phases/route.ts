@@ -442,6 +442,19 @@ export async function POST(
         { status: 400 }
       );
     }
+    if (body.autoAssignTrackIds !== undefined && body.autoAssignTrackIds !== null) {
+      if (
+        !Array.isArray(body.autoAssignTrackIds) ||
+        body.autoAssignTrackIds.some(
+          (id: unknown) => typeof id !== "string" || !UUID_RE.test(id)
+        )
+      ) {
+        return NextResponse.json(
+          { error: "autoAssignTrackIds must be an array of UUIDs or null" },
+          { status: 400 }
+        );
+      }
+    }
     if (body.requireRecommendation !== undefined && typeof body.requireRecommendation !== "boolean") {
       return NextResponse.json(
         { error: "requireRecommendation must be a boolean" },
@@ -520,6 +533,7 @@ export async function POST(
       location: body.location ?? null,
       sortOrder: body.sortOrder ?? 0,
       advanceTopN: body.advanceTopN ?? null,
+      autoAssignTrackIds: body.autoAssignTrackIds ?? null,
     });
 
     // Attach hackathon_id (not part of the form mapper)
