@@ -21,9 +21,11 @@ import { ImageUpload } from "@/components/forms/image-upload";
 import dynamic from "next/dynamic";
 const RichTextEditor = dynamic(() => import("@/components/forms/rich-text-editor").then(m => m.RichTextEditor), { ssr: false, loading: () => <div className="shimmer rounded-xl h-[200px]" /> });
 import { TagSelector } from "@/components/forms/tag-selector";
+import { CustomFormFields } from "@/components/forms/custom-form-field";
 import { useHackathons } from "@/hooks/use-hackathons";
 import { useCreateSubmission } from "@/hooks/use-submissions";
 import { useMyTeams } from "@/hooks/use-teams";
+import { Settings2 } from "lucide-react";
 
 const submissionSchema = z.object({
   hackathonId: z.string().min(1, "Select a competition"),
@@ -49,6 +51,10 @@ export default function NewSubmissionPage() {
   const myTeams = teamsData?.data || [];
   const createMutation = useCreateSubmission();
   const [techStack, setTechStack] = useState<string[]>([]);
+  // Values for the hackathon's custom submission fields (configured in the
+  // organizer's Submissions tab → Form Editor). Stored as field-id keyed map
+  // and sent through as `formData` on the create payload.
+  const [customFormData, setCustomFormData] = useState<Record<string, unknown>>({});
 
   const {
     register,
@@ -69,8 +75,30 @@ export default function NewSubmissionPage() {
   const readme = watch("readme");
 
   const onSubmit = async (data: SubmissionForm) => {
+    // Validate required custom fields before sending — the schema only covers
+    // the built-in fields, so required custom fields would otherwise slip
+    // through with empty values.
+    const customFields = selectedHackathon?.submissionFields || [];
+    for (const f of customFields) {
+      if (!f.required) continue;
+      const v = customFormData[f.id];
+      const empty =
+        v === undefined ||
+        v === null ||
+        v === "" ||
+        (Array.isArray(v) && v.length === 0);
+      if (empty) {
+        toast.error(`${f.label || "A required field"} is required.`);
+        return;
+      }
+    }
+
     try {
-      const result = await createMutation.mutateAsync({ ...data, techStack });
+      const result = await createMutation.mutateAsync({
+        ...data,
+        techStack,
+        formData: customFormData,
+      });
       toast.success("Project submitted successfully!");
       router.push(`/dashboard/submissions/${result.data.id}`);
     } catch (error) {
@@ -299,6 +327,35 @@ export default function NewSubmissionPage() {
                 />
               </CardContent>
             </Card>
+
+            {/* Hackathon's custom submission fields (configured in the
+                organizer dashboard → Submissions tab → Form Editor). File
+                uploads here use Cloudinary; their URLs surface to judges as
+                clickable links. */}
+            {selectedHackathon &&
+              (selectedHackathon.submissionFields?.length ?? 0) > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Settings2 className="h-5 w-5" />
+                      Additional Submission Fields
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CustomFormFields
+                      fields={selectedHackathon.submissionFields || []}
+                      values={customFormData}
+                      onChange={(fieldId, value) =>
+                        setCustomFormData((prev) => ({
+                          ...prev,
+                          [fieldId]: value,
+                        }))
+                      }
+                      uploadFolder={`cloudhub/submissions/${selectedHackathon.id}`}
+                    />
+                  </CardContent>
+                </Card>
+              )}
 
             {/* Submit */}
             <div className="flex justify-end gap-3 pt-4">
