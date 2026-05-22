@@ -210,6 +210,7 @@ export function PhasesTab({ hackathon, hackathonId }: PhasesTabProps) {
               hackathonId={hackathonId}
               hackathon={hackathon}
               phase={phase}
+              allPhases={phases}
               onEdit={() => handleOpenEdit(phase)}
             />
           </motion.div>
@@ -237,10 +238,11 @@ interface PhaseCardProps {
   hackathonId: string;
   hackathon: Hackathon;
   phase: CompetitionPhase;
+  allPhases: CompetitionPhase[];
   onEdit: () => void;
 }
 
-function PhaseCard({ hackathonId, hackathon, phase, onEdit }: PhaseCardProps) {
+function PhaseCard({ hackathonId, hackathon, phase, allPhases, onEdit }: PhaseCardProps) {
   const [expanded, setExpanded] = React.useState(false);
   const deletePhase = useDeletePhase(hackathonId);
   const updatePhase = useUpdatePhase(hackathonId, phase.id);
@@ -489,7 +491,7 @@ function PhaseCard({ hackathonId, hackathon, phase, onEdit }: PhaseCardProps) {
               {(phase.sourcePhaseIds && phase.sourcePhaseIds.length > 0) && (
                 <>
                   <hr className="border-border" />
-                  <FinalistsSection hackathonId={hackathonId} phase={phase} />
+                  <FinalistsSection hackathonId={hackathonId} phase={phase} allPhases={allPhases} />
                 </>
               )}
             </div>
@@ -858,6 +860,8 @@ interface PhaseFormState {
   location: string;
   awardCategories: AwardCategory[];
   sourcePhaseIds: string[];
+  /** Empty string = no preset; the auto-select dialog will prompt for a value. */
+  advanceTopN: string;
 }
 
 const defaultFormState: PhaseFormState = {
@@ -873,6 +877,7 @@ const defaultFormState: PhaseFormState = {
   location: "",
   awardCategories: [],
   sourcePhaseIds: [],
+  advanceTopN: "",
 };
 
 function toDatetimeLocal(iso: string | null | undefined): string {
@@ -921,6 +926,8 @@ function CreatePhaseDialog({
         location: editingPhase.location ?? "",
         awardCategories: editingPhase.awardCategories ?? [],
         sourcePhaseIds: editingPhase.sourcePhaseIds ?? [],
+        advanceTopN:
+          editingPhase.advanceTopN != null ? String(editingPhase.advanceTopN) : "",
       });
     } else if (open) {
       setForm(defaultFormState);
@@ -978,7 +985,28 @@ function CreatePhaseDialog({
       location: form.location.trim() || null,
       awardCategories: form.awardCategories.length > 0 ? form.awardCategories : undefined,
       sourcePhaseIds: form.sourcePhaseIds.length > 0 ? form.sourcePhaseIds : undefined,
+      advanceTopN: (() => {
+        const trimmed = form.advanceTopN.trim();
+        if (trimmed === "") return null;
+        const parsed = Number(trimmed);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 500) {
+          // Validation surfaces in the toast below, but bail out with null so
+          // the API doesn't reject the rest of the payload.
+          return null;
+        }
+        return parsed;
+      })(),
     };
+
+    // Catch advanceTopN range issues explicitly so the user gets feedback
+    // instead of silently clearing the value.
+    if (form.advanceTopN.trim() !== "") {
+      const parsed = Number(form.advanceTopN.trim());
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 500) {
+        toast.error("Advance Top N must be a whole number between 1 and 500.");
+        return;
+      }
+    }
 
     try {
       if (isEditing) {
@@ -1223,6 +1251,30 @@ function CreatePhaseDialog({
               </div>
             </div>
           )}
+
+          {/* Advance Top N — how many from THIS phase auto-advance to the
+              next phase. The destination phase's auto-select dialog uses this
+              as the default topN value. Leave blank to decide at the time. */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              Advance Top N to Next Phase
+            </label>
+            <p className="text-xs text-muted-foreground">
+              How many top scorers from this phase auto-advance to the next
+              phase (e.g. <code>10</code> for top 10). Leave blank to enter
+              the number manually when promoting finalists.
+            </p>
+            <Input
+              type="number"
+              min={1}
+              max={500}
+              inputMode="numeric"
+              placeholder="e.g. 10"
+              value={form.advanceTopN}
+              onChange={(e) => updateField("advanceTopN", e.target.value)}
+              className="max-w-[160px]"
+            />
+          </div>
 
           {/* Award Categories */}
           <AwardCategoriesEditor

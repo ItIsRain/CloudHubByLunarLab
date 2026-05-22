@@ -991,6 +991,10 @@ export interface CompetitionPhase {
   status: PhaseStatus;
   awardCategories?: AwardCategory[];
   sourcePhaseIds?: string[];
+  /** How many of this phase's scored entries auto-advance to a downstream
+   *  phase that lists this one in its source_phase_ids. Null = no preset;
+   *  the organizer enters topN manually at selection time. */
+  advanceTopN?: number | null;
   createdAt: string;
   updatedAt: string;
   // Populated on fetch (aggregate counts from API)

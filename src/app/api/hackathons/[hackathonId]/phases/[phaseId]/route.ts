@@ -425,6 +425,19 @@ export async function PATCH(
     }
 
     // Validate boolean fields
+    if (
+      body.advanceTopN !== undefined &&
+      body.advanceTopN !== null &&
+      (typeof body.advanceTopN !== "number" ||
+        !Number.isInteger(body.advanceTopN) ||
+        body.advanceTopN < 1 ||
+        body.advanceTopN > 500)
+    ) {
+      return NextResponse.json(
+        { error: "advanceTopN must be a positive integer (1-500) or null" },
+        { status: 400 }
+      );
+    }
     if (body.requireRecommendation !== undefined && typeof body.requireRecommendation !== "boolean") {
       return NextResponse.json(
         { error: "requireRecommendation must be a boolean" },
@@ -641,6 +654,7 @@ export async function PATCH(
       ...(body.status !== undefined && { status: body.status }),
       ...(body.awardCategories !== undefined && { awardCategories: body.awardCategories }),
       ...(body.sourcePhaseIds !== undefined && { sourcePhaseIds: body.sourcePhaseIds }),
+      ...(body.advanceTopN !== undefined && { advanceTopN: body.advanceTopN }),
     });
 
     if (Object.keys(updatePayload).length === 0) {

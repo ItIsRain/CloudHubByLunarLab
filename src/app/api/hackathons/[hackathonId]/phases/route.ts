@@ -429,6 +429,19 @@ export async function POST(
       );
     }
 
+    if (
+      body.advanceTopN !== undefined &&
+      body.advanceTopN !== null &&
+      (typeof body.advanceTopN !== "number" ||
+        !Number.isInteger(body.advanceTopN) ||
+        body.advanceTopN < 1 ||
+        body.advanceTopN > 500)
+    ) {
+      return NextResponse.json(
+        { error: "advanceTopN must be a positive integer (1-500) or null" },
+        { status: 400 }
+      );
+    }
     if (body.requireRecommendation !== undefined && typeof body.requireRecommendation !== "boolean") {
       return NextResponse.json(
         { error: "requireRecommendation must be a boolean" },
@@ -506,6 +519,7 @@ export async function POST(
       submissionEnd: body.submissionEnd ?? null,
       location: body.location ?? null,
       sortOrder: body.sortOrder ?? 0,
+      advanceTopN: body.advanceTopN ?? null,
     });
 
     // Attach hackathon_id (not part of the form mapper)

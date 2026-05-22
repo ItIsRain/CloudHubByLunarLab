@@ -1007,6 +1007,7 @@ export function dbRowToCompetitionPhase(row: Record<string, unknown>): Competiti
     sortOrder: (row.sort_order as number) || 0,
     status: (row.status as PhaseStatus) || "draft",
     awardCategories: (row.award_categories as CompetitionPhase["awardCategories"]) || [],
+    advanceTopN: (row.advance_top_n as number | null | undefined) ?? null,
     sourcePhaseIds: (row.source_phase_ids as string[]) || [],
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
@@ -1081,5 +1082,6 @@ export function phaseFormToDbRow(phase: Partial<CompetitionPhase>): Record<strin
   if (phase.status !== undefined) row.status = phase.status;
   if (phase.awardCategories !== undefined) row.award_categories = phase.awardCategories;
   if (phase.sourcePhaseIds !== undefined) row.source_phase_ids = phase.sourcePhaseIds;
+  if (phase.advanceTopN !== undefined) row.advance_top_n = phase.advanceTopN;
   return row;
 }

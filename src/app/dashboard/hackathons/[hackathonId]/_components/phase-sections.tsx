@@ -982,11 +982,15 @@ export function DecisionsSection({
 interface FinalistsSectionProps {
   hackathonId: string;
   phase: CompetitionPhase;
+  /** Full phase list, used to read each source phase's advanceTopN preset
+   *  so the auto-select defaults match the organizer's configuration. */
+  allPhases?: CompetitionPhase[];
 }
 
 export function FinalistsSection({
   hackathonId,
   phase,
+  allPhases,
 }: FinalistsSectionProps) {
   const { data: finalistsData, isLoading } = usePhaseFinalists(
     hackathonId,
@@ -999,7 +1003,20 @@ export function FinalistsSection({
   const hasSourcePhases =
     phase.sourcePhaseIds && phase.sourcePhaseIds.length > 0;
 
-  const [topN, setTopN] = React.useState(15);
+  // Default topN to the sum of each source phase's advanceTopN preset.
+  // Falls back to 15 if no presets are configured anywhere.
+  const presetTopN = React.useMemo(() => {
+    if (!phase.sourcePhaseIds?.length || !allPhases?.length) return null;
+    const sum = phase.sourcePhaseIds
+      .map((id) => allPhases.find((p) => p.id === id)?.advanceTopN ?? 0)
+      .reduce((a, b) => a + b, 0);
+    return sum > 0 ? sum : null;
+  }, [phase.sourcePhaseIds, allPhases]);
+
+  const [topN, setTopN] = React.useState(presetTopN ?? 15);
+  React.useEffect(() => {
+    if (presetTopN != null) setTopN(presetTopN);
+  }, [presetTopN]);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [manualOpen, setManualOpen] = React.useState(false);
 
