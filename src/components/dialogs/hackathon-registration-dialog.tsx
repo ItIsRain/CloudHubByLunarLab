@@ -485,7 +485,7 @@ export function HackathonRegistrationDialog({
         )}
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          <div className="flex items-center gap-2 mr-auto">
+          <div className="flex items-center gap-2 mr-auto w-full sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
             {showReview ? (
               <Button type="button" variant="outline" onClick={handleBackFromReview} disabled={isSubmitting}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
@@ -498,7 +498,10 @@ export function HackathonRegistrationDialog({
               </Button>
             ) : null}
           </div>
-          <div className="flex items-center gap-2">
+          {/* On phones the right-side buttons stretch full-width and stack
+              when needed (Save Draft + Cancel + Submit is too wide for a
+              360px viewport even with shorter labels). */}
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
             {onSaveDraft && !showReview && (
               <Button
                 type="button"
@@ -558,7 +561,9 @@ function RegistrationField({
   // Check if this field is the quota-linked field
   const isQuotaField = quotaStatus?.quotaFieldId === field.id;
   const inputClasses =
-    "flex w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+    // text-base on phones avoids the iOS Safari auto-zoom on focus (any
+    // font-size < 16px triggers it). sm:text-sm keeps desktop tight.
+    "flex w-full rounded-xl border border-input bg-background px-4 py-2.5 text-base sm:text-sm ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 
   if (field.type === "heading") {
     return (
