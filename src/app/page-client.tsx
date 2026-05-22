@@ -305,14 +305,16 @@ export default function HomePage() {
                   unoptimized
                   className="h-8 w-auto brightness-0 dark:brightness-100"
                 />
-                {/* 42 Abu Dhabi Logo */}
+                {/* 42 Abu Dhabi Logo — source SVG is black-on-transparent, so
+                    dark:brightness-100 would leave it black on dark mode. Use
+                    dark:invert to flip the silhouette to white instead. */}
                 <Image
                   src="https://res.cloudinary.com/dhfysudgu/image/upload/v1779456271/42AD_nibcrg.svg"
                   alt="42 Abu Dhabi"
                   width={120}
                   height={40}
                   unoptimized
-                  className="h-8 w-auto brightness-0 dark:brightness-100"
+                  className="h-8 w-auto brightness-0 dark:invert"
                 />
               </div>
             </div>
