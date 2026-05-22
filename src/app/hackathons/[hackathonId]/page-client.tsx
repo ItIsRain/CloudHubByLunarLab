@@ -321,8 +321,9 @@ export default function HackathonDetailPage() {
     <div className="min-h-screen bg-muted/30">
       <Navbar />
 
-      {/* Cinematic Hero */}
-      <div className="relative h-[500px] overflow-hidden">
+      {/* Cinematic Hero — shorter on phones so the title + actions stay
+          above the fold, full height on tablet and up. */}
+      <div className="relative h-[380px] sm:h-[460px] lg:h-[500px] overflow-hidden">
         <Image
           src={hackathon.coverImage || "/placeholder-hackathon.jpg"}
           alt={hackathon.name}
@@ -369,11 +370,11 @@ export default function HackathonDetailPage() {
                     <Image src={hackathon.logo} alt="" width={40} height={40} className="object-contain" />
                   </div>
                 )}
-                <h1 className="font-display text-4xl sm:text-5xl font-bold mb-2">{hackathon.name}</h1>
-                {hackathon.tagline && <p className="text-white/80 text-xl">{hackathon.tagline}</p>}
+                <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold mb-2 leading-tight">{hackathon.name}</h1>
+                {hackathon.tagline && <p className="text-white/80 text-base sm:text-lg md:text-xl">{hackathon.tagline}</p>}
 
                 {/* Key Stats */}
-                <div className="flex flex-wrap items-center gap-6 mt-4 text-white/80">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:gap-6 mt-4 text-sm sm:text-base text-white/80">
                   {(() => {
                     const totalValue = (hackathon.prizes ?? []).reduce((sum, p) => sum + (p.value || 0), 0);
                     const prizeTypes = [...new Set((hackathon.prizes ?? []).map((p) => p.type))];
@@ -605,7 +606,10 @@ export default function HackathonDetailPage() {
             transition={{ delay: 0.1 }}
           >
             <Tabs defaultValue={winnersAnnounced && publicWinners.length > 0 && hackathon.status === "completed" ? "winners" : "overview"}>
-              <TabsList className="flex-wrap">
+              {/* On mobile we let the 9-tab row scroll horizontally instead
+                  of wrapping into 3-4 ugly lines. The scrollbar is hidden but
+                  the area still scrolls — desktop keeps wrap behaviour. */}
+              <TabsList className="-mx-4 sm:mx-0 flex w-[calc(100%+2rem)] sm:w-full justify-start sm:flex-wrap overflow-x-auto px-4 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="tracks">Tracks ({hackathon.tracks.length})</TabsTrigger>
                 <TabsTrigger value="schedule">Schedule</TabsTrigger>
