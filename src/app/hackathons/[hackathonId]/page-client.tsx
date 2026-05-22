@@ -125,6 +125,11 @@ export default function HackathonDetailPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const { data: regData } = useHackathonRegistration(hackathon?.id);
+  // Reviewer assignments across all hackathons for this user. Used to decide
+  // whether to show the "Judge" header button below. MUST be called
+  // unconditionally before any early return — moving it inside the body
+  // breaks Rules of Hooks.
+  const { data: reviewerPhasesData } = useMyReviewerPhases();
   const isRegistered = regData?.registered ?? false;
   const isRejected = regData?.rejected ?? false;
   const registrationStatus = regData?.registration?.status;
@@ -223,18 +228,16 @@ export default function HackathonDetailPage() {
   const hackTeams = teamsData?.data || [];
   const hackSubs = submissionsData?.data || [];
   const isOrganizer = user?.id === hackathon.organizerId;
-  // Is the current user a reviewer for any phase on THIS hackathon, and have
-  // winners not been announced yet? If both true, we surface a "Judge" button
-  // in the header so they can jump straight to scoring.
-  const { data: reviewerPhasesData } = useMyReviewerPhases();
-  const isJudgeOnThis = React.useMemo(() => {
-    if (!user) return false;
-    if (!reviewerPhasesData?.data?.length) return false;
-    return reviewerPhasesData.data.some((p) => p.hackathonId === hackathon.id);
-  }, [reviewerPhasesData, user, hackathon.id]);
+  // isJudgeOnThis + showJudgeButton are derived below from
+  // reviewerPhasesData/hackathon (the hook call lives near the top of the
+  // component to respect Rules of Hooks).
   const winnersAnnouncedTs = hackathon.winnersAnnouncement
     ? new Date(hackathon.winnersAnnouncement).getTime()
     : null;
+  const isJudgeOnThis =
+    !!user &&
+    !!reviewerPhasesData?.data?.length &&
+    reviewerPhasesData.data.some((p) => p.hackathonId === hackathon.id);
   const showJudgeButton =
     isJudgeOnThis &&
     !isOrganizer &&
