@@ -14,7 +14,7 @@ import {
 } from "@/lib/resend";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 import type { ScreeningRule, FormField } from "@/lib/types";
-import { checkHackathonAccess, canManage } from "@/lib/check-hackathon-access";
+import { checkHackathonAccess, canManage, canEdit } from "@/lib/check-hackathon-access";
 
 // ── GET: Fetch count of unpublished screened registrations ──
 
@@ -45,9 +45,11 @@ export async function GET(
         ? getSupabaseAdminClient()
         : await getSupabaseServerClient();
 
-    // Verify caller has access (owner/admin can run screening)
+    // GET = view the screening dashboard. Any collaborator with edit rights
+    // (owner / admin / editor) can read this — running an actual screening
+    // operation (the POST below) still requires canManage.
     const getAccess = await checkHackathonAccess(supabase, hackathonId, auth.userId);
-    if (!getAccess.hasAccess || !canManage(getAccess.role)) {
+    if (!getAccess.hasAccess || !canEdit(getAccess.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
