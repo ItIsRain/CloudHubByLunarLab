@@ -58,7 +58,7 @@ export async function GET(
 
     let query = supabase
       .from("screening_overrides")
-      .select("*, overrider:profiles!screening_overrides_overridden_by_fkey(full_name, email)")
+      .select("*, overrider:profiles!screening_overrides_overridden_by_fkey(name, email)")
       .eq("hackathon_id", hackathonId)
       .order("created_at", { ascending: false });
 
