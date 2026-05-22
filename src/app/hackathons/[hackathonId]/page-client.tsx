@@ -927,6 +927,49 @@ export default function HackathonDetailPage() {
 
               {/* Teams */}
               {hackathon.teamsEnabled !== false && <TabsContent value="teams" className="mt-6">
+                {(() => {
+                  // Compute once: is the current user already on any team in
+                  // this hackathon? You can't be on two teams in one event,
+                  // so if they're on one we hide the "Create Team" CTA.
+                  const isOnATeam =
+                    !!user &&
+                    hackTeams.some((t) =>
+                      t.members.some((m) => m.user.id === user.id)
+                    );
+                  // teamsEnabled is already guaranteed true at this point
+                  // (outer JSX guard at the start of the TabsContent).
+                  const canCreateTeam = !isOrganizer && !isOnATeam;
+                  return canCreateTeam && hackTeams.length > 0 ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                      <div>
+                        <h3 className="font-display text-lg font-bold">Teams</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Looking for teammates? Create your own team or join one
+                          below.
+                        </p>
+                      </div>
+                      <Button
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          if (!isAuthenticated) {
+                            toast.error("Please sign in to create a team");
+                            return;
+                          }
+                          if (!isRegistered) {
+                            toast.error(
+                              "Register for the competition before creating a team"
+                            );
+                            return;
+                          }
+                          setCreateTeamOpen(true);
+                        }}
+                      >
+                        <UserPlus className="h-4 w-4 mr-1" />
+                        Create Team
+                      </Button>
+                    </div>
+                  ) : null;
+                })()}
                 {hackTeams.length === 0 ? (
                   <div className="text-center py-16">
                     <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
@@ -934,8 +977,12 @@ export default function HackathonDetailPage() {
                     <p className="text-sm text-muted-foreground mb-4">Be the first to create a team!</p>
                     <Button onClick={() => {
                       if (!isAuthenticated) { toast.error("Please sign in to create a team"); return; }
+                      if (!isRegistered) { toast.error("Register for the competition before creating a team"); return; }
                       setCreateTeamOpen(true);
-                    }}>Create Team</Button>
+                    }}>
+                      <UserPlus className="h-4 w-4 mr-1" />
+                      Create Team
+                    </Button>
                   </div>
                 ) : (
                   <div className="grid sm:grid-cols-2 gap-4">
