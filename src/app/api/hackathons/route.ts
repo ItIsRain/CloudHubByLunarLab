@@ -88,7 +88,29 @@ export async function GET(request: NextRequest) {
     if (featured === "true") {
       query = query.eq("is_featured", true);
     }
-    if (organizerId) {
+    // When the caller wants their full "managed" set (their own hackathons
+    // AND ones they've been added to as a co-organizer), pull collaborator
+    // hackathon IDs first and broaden the filter to organizer_id = me OR
+    // id IN (collab ids).
+    const includeCollaborated = searchParams.get("includeCollaborated") === "true";
+    if (organizerId && includeCollaborated) {
+      const adminClient = getSupabaseAdminClient();
+      const { data: collabRows } = await adminClient
+        .from("hackathon_collaborators")
+        .select("hackathon_id")
+        .eq("user_id", organizerId)
+        .not("accepted_at", "is", null);
+      const collabIds = (collabRows || [])
+        .map((r) => r.hackathon_id as string)
+        .filter((id) => UUID_RE.test(id));
+      if (collabIds.length > 0) {
+        query = query.or(
+          `organizer_id.eq.${organizerId},id.in.(${collabIds.join(",")})`
+        );
+      } else {
+        query = query.eq("organizer_id", organizerId);
+      }
+    } else if (organizerId) {
       query = query.eq("organizer_id", organizerId);
     }
 

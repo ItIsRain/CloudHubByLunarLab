@@ -32,7 +32,6 @@ import {
   useSendEntityInvitation,
   useRevokeEntityInvitation,
 } from "@/hooks/use-invitations";
-import { CollaboratorsSection } from "./collaborators-section";
 import { toast } from "sonner";
 
 interface SettingsTabProps {
@@ -406,18 +405,6 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
           </Card>
         </motion.div>
       )}
-
-      {/* Team & Access */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-      >
-        <CollaboratorsSection
-          hackathonId={hackathonId}
-          isOwner={isOwner}
-        />
-      </motion.div>
 
       {/* Hackathon URL */}
       <motion.div

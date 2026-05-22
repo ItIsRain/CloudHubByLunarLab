@@ -190,7 +190,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Insert new collaborator
+    // Insert new collaborator. We auto-accept: the main organizer is
+    // explicitly granting access, so there's no "pending invitation" state.
+    // checkHackathonAccess requires accepted_at IS NOT NULL, so without
+    // setting it here the collaborator would never gain effective access.
+    const now = new Date().toISOString();
     const { data: newCollab, error: insertError } = await admin
       .from("hackathon_collaborators")
       .insert({
@@ -198,7 +202,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         user_id: targetUser.id,
         role,
         invited_by: auth.userId,
-        invited_at: new Date().toISOString(),
+        invited_at: now,
+        accepted_at: now,
       })
       .select(
         "id, hackathon_id, user_id, role, invited_by, invited_at, accepted_at, user:profiles!user_id(id, name, email, avatar)"
@@ -212,6 +217,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 400 }
       );
     }
+
+    // Best-effort in-app notification so the new co-organizer sees the
+    // competition appear in their dashboard. Failure here doesn't block.
+    const { data: hackForNotif } = await admin
+      .from("hackathons")
+      .select("name")
+      .eq("id", hackathonId)
+      .single();
+    admin
+      .from("notifications")
+      .insert({
+        user_id: targetUser.id,
+        type: "hackathon-update",
+        title: `You're a co-organizer of ${hackForNotif?.name || "a competition"}`,
+        message: `You can now manage this competition from your dashboard with the role: ${role}.`,
+        link: `/dashboard/hackathons/${hackathonId}`,
+      })
+      .then(() => {}, () => {});
 
     const mapped = {
       id: newCollab.id as string,

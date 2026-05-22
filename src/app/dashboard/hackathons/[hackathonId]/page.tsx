@@ -29,6 +29,7 @@ import {
   Shield,
   Layers,
   Flag,
+  UserCog,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ import { toast } from "sonner";
 import { OverviewTab } from "./_components/overview-tab";
 import { EditTab } from "./_components/edit-tab";
 import { TracksTab } from "./_components/tracks-tab";
+import { CollaboratorsSection } from "./_components/collaborators-section";
 import { ParticipantsTab } from "./_components/participants-tab";
 import { TeamsTab } from "./_components/teams-tab";
 import { SubmissionsTab } from "./_components/submissions-tab";
@@ -77,7 +79,14 @@ const statusConfig: Record<
   completed: { label: "Completed", variant: "muted" },
 };
 
-const tabs = [
+type TabDef = {
+  value: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  ownerOnly?: boolean;
+};
+
+const tabs: TabDef[] = [
   { value: "overview", label: "Overview", icon: LayoutDashboard },
   { value: "edit", label: "Edit", icon: Edit },
   { value: "tracks", label: "Tracks", icon: Flag },
@@ -98,6 +107,10 @@ const tabs = [
   { value: "announcements", label: "Announcements", icon: Megaphone },
   { value: "emails", label: "Emails", icon: Mail },
   { value: "analytics", label: "Analytics", icon: BarChart3 },
+  // Owner-only: managing co-organizers is the original organizer's privilege.
+  // Even admin collaborators don't see this tab — they manage everything else
+  // but can't invite or remove other co-organizers.
+  { value: "co-organizers", label: "Co-Organizers", icon: UserCog, ownerOnly: true },
   { value: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -290,7 +303,9 @@ function HackathonDashboardContent() {
         >
           <Tabs value={currentTab} onValueChange={handleTabChange}>
             <TabsList className="flex flex-wrap h-auto w-full gap-1 bg-muted/50 p-1.5 rounded-xl mb-6">
-              {tabs.map((tab) => (
+              {tabs
+                .filter((tab) => !tab.ownerOnly || isOwner)
+                .map((tab) => (
                 <TabsTrigger
                   key={tab.value}
                   value={tab.value}
@@ -362,6 +377,14 @@ function HackathonDashboardContent() {
             <TabsContent value="analytics">
               <AnalyticsTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
+            {isOwner && (
+              <TabsContent value="co-organizers">
+                <CollaboratorsSection
+                  hackathonId={hackathonId}
+                  isOwner={!!isOwner}
+                />
+              </TabsContent>
+            )}
             <TabsContent value="settings">
               <SettingsTab
                 hackathon={hackathon}

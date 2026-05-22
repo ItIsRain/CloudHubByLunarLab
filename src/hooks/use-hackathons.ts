@@ -4,7 +4,7 @@ import type { Hackathon, HackathonFilters, PaginatedResponse } from "@/lib/types
 import { useAuthStore } from "@/store/auth-store";
 
 
-function buildHackathonParams(filters?: HackathonFilters & { page?: number; pageSize?: number; organizerId?: string; featured?: boolean; ids?: string[] }): string {
+function buildHackathonParams(filters?: HackathonFilters & { page?: number; pageSize?: number; organizerId?: string; featured?: boolean; ids?: string[]; includeCollaborated?: boolean }): string {
   const params = new URLSearchParams();
   if (!filters) return "";
   if (filters.search) params.set("search", filters.search);
@@ -16,6 +16,7 @@ function buildHackathonParams(filters?: HackathonFilters & { page?: number; page
   if (filters.organizerId) params.set("organizerId", filters.organizerId);
   if (filters.featured) params.set("featured", "true");
   if (filters.ids?.length) params.set("ids", filters.ids.join(","));
+  if (filters.includeCollaborated) params.set("includeCollaborated", "true");
   const str = params.toString();
   return str ? `?${str}` : "";
 }
@@ -42,7 +43,15 @@ export function useMyHackathons(page?: number) {
     queryKey: ["hackathons", "mine", user?.id, page],
     queryFn: () =>
       fetchJson<PaginatedResponse<Hackathon>>(
-        `/api/hackathons${buildHackathonParams({ organizerId: user?.id, page, pageSize: 50 })}`
+        `/api/hackathons${buildHackathonParams({
+          organizerId: user?.id,
+          page,
+          pageSize: 50,
+          // Surface hackathons the user co-organizes alongside ones they own,
+          // so accepting a co-organizer invite makes the competition appear
+          // in their "My Competitions" dashboard immediately.
+          includeCollaborated: true,
+        })}`
       ),
     enabled: !!user?.id,
   });
