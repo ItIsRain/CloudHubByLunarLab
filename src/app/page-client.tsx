@@ -279,7 +279,7 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground">
                 Trusted by teams at
               </p>
-              <div className="flex items-center justify-center gap-10 opacity-70">
+              <div className="flex flex-wrap items-center justify-center gap-10 opacity-70">
                 {/* Ru'ya Logo */}
                 <Image
                   src="/RuYaLogo.svg"
@@ -294,6 +294,24 @@ export default function HomePage() {
                   alt="ADNOC"
                   width={120}
                   height={40}
+                  className="h-8 w-auto brightness-0 dark:brightness-100"
+                />
+                {/* MOEI Logo */}
+                <Image
+                  src="https://res.cloudinary.com/dhfysudgu/image/upload/v1779456177/MOEI_Logo_jo5hdn.svg"
+                  alt="UAE Ministry of Energy & Infrastructure"
+                  width={120}
+                  height={40}
+                  unoptimized
+                  className="h-8 w-auto brightness-0 dark:brightness-100"
+                />
+                {/* 42 Abu Dhabi Logo */}
+                <Image
+                  src="https://res.cloudinary.com/dhfysudgu/image/upload/v1779456271/42AD_nibcrg.svg"
+                  alt="42 Abu Dhabi"
+                  width={120}
+                  height={40}
+                  unoptimized
                   className="h-8 w-auto brightness-0 dark:brightness-100"
                 />
               </div>
