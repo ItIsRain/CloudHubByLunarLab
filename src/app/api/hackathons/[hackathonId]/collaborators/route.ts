@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess, canManage } from "@/lib/check-hackathon-access";
+import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 
 type RouteParams = { params: Promise<{ hackathonId: string }> };
 
@@ -190,10 +191,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Insert new collaborator. We auto-accept: the main organizer is
-    // explicitly granting access, so there's no "pending invitation" state.
-    // checkHackathonAccess requires accepted_at IS NOT NULL, so without
-    // setting it here the collaborator would never gain effective access.
+    // Insert new collaborator. Invitation requires explicit acceptance — the
+    // invitee gets an email with a token-bearing link and must click it. This
+    // matches the judge-invitation pattern and gives the invitee a chance to
+    // decline before they show up as an active collaborator. checkHackathonAccess
+    // requires accepted_at IS NOT NULL, so until they accept they have no
+    // effective access.
     const now = new Date().toISOString();
     const { data: newCollab, error: insertError } = await admin
       .from("hackathon_collaborators")
@@ -203,10 +206,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         role,
         invited_by: auth.userId,
         invited_at: now,
-        accepted_at: now,
+        // accepted_at intentionally null — flipped by /accept route
+        token: crypto.randomUUID(),
       })
       .select(
-        "id, hackathon_id, user_id, role, invited_by, invited_at, accepted_at, user:profiles!user_id(id, name, email, avatar)"
+        "id, hackathon_id, user_id, role, invited_by, invited_at, accepted_at, token, user:profiles!user_id(id, name, email, avatar)"
       )
       .single();
 
@@ -218,21 +222,63 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Best-effort in-app notification so the new co-organizer sees the
-    // competition appear in their dashboard. Failure here doesn't block.
-    const { data: hackForNotif } = await admin
-      .from("hackathons")
-      .select("name")
-      .eq("id", hackathonId)
-      .single();
+    // Look up the competition + inviter name to populate the email/notification.
+    const [{ data: hackForNotif }, { data: inviter }] = await Promise.all([
+      admin.from("hackathons").select("name").eq("id", hackathonId).single(),
+      admin.from("profiles").select("name, email").eq("id", auth.userId).single(),
+    ]);
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const acceptUrl = `${siteUrl}/co-organizer/accept?hackathonId=${hackathonId}&token=${newCollab.token as string}`;
+    const hackathonName = (hackForNotif?.name as string | undefined) || "a competition";
+    const inviterName =
+      (inviter?.name as string | undefined) || "The organizer";
+
+    // Best-effort: send invitation email. Failure here doesn't block creation
+    // of the invite row — organizer can re-send by deleting + re-inviting, or
+    // share the link manually.
+    sendEmail({
+      to: email.toLowerCase().trim(),
+      subject: `You're invited to co-organize ${hackathonName}`,
+      html: emailWrapper(`
+        <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;">
+          You're invited to co-organize
+        </h1>
+        <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
+          Hi <strong style="color:#fff;">${escapeHtml((targetUser as { id: string; name?: string }).name || "there")}</strong>,
+        </p>
+        <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          <strong style="color:#fff;">${escapeHtml(inviterName)}</strong>
+          has invited you to help administrate
+          <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong>
+          as a <strong style="color:#fff;">${escapeHtml(role)}</strong>. Accept
+          to gain access — the competition will appear in your dashboard and
+          you can edit it just like the main organizer.
+        </p>
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${acceptUrl}"
+             style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#e8440a,#d946a8);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;">
+            Accept Invitation
+          </a>
+        </div>
+        <p style="color:#a1a1aa;font-size:13px;line-height:1.5;margin:0;">
+          Click the button above or copy this link into your browser:<br/>
+          <a href="${acceptUrl}" style="color:#e8440a;text-decoration:underline;word-break:break-all;">${acceptUrl}</a>
+        </p>
+      `),
+    }).catch((err) => {
+      console.error("Failed to send co-organizer invitation email:", err);
+    });
+
+    // Best-effort in-app notification so the invitee sees something in their bell.
     admin
       .from("notifications")
       .insert({
         user_id: targetUser.id,
         type: "hackathon-update",
-        title: `You're a co-organizer of ${hackForNotif?.name || "a competition"}`,
-        message: `You can now manage this competition from your dashboard with the role: ${role}.`,
-        link: `/dashboard/hackathons/${hackathonId}`,
+        title: `Invited to co-organize ${hackathonName}`,
+        message: `${inviterName} invited you as a ${role}. Check your email or click here to accept.`,
+        link: `/co-organizer/accept?hackathonId=${hackathonId}&token=${newCollab.token as string}`,
       })
       .then(() => {}, () => {});
 
