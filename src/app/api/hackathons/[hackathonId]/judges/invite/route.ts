@@ -117,28 +117,30 @@ export async function POST(
       to: email,
       subject: `You're Invited to Judge ${hackathonName}`,
       html: emailWrapper(`
-        <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;">
-          You're Invited to Judge!
-        </h1>
-        <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
-          Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,
-        </p>
-        <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
-          You've been invited to serve as a judge for
-          <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong>.
-          We'd love your expertise to help evaluate the amazing projects
-          our participants have built.
-        </p>
-        <div style="text-align:center;margin:32px 0;">
-          <a href="${judgeUrl}"
-             style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#e8440a,#d946a8);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;">
-            Accept Invitation
-          </a>
+        <div style="padding:32px 32px 36px;">
+          <h1 style="margin:0 0 20px;color:#fff;font-size:24px;font-weight:700;line-height:1.3;">
+            You're Invited to Judge!
+          </h1>
+          <p style="color:#d4d4d8;font-size:15px;line-height:1.7;margin:0 0 12px;">
+            Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,
+          </p>
+          <p style="color:#d4d4d8;font-size:15px;line-height:1.7;margin:0 0 24px;">
+            You've been invited to serve as a judge for
+            <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong>.
+            We'd love your expertise to help evaluate the amazing projects
+            our participants have built.
+          </p>
+          <div style="text-align:center;margin:28px 0 24px;">
+            <a href="${judgeUrl}"
+               style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#e8440a,#d946a8);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;">
+              Accept Invitation
+            </a>
+          </div>
+          <p style="color:#a1a1aa;font-size:13px;line-height:1.6;margin:0;">
+            Click the button above or copy this link into your browser:<br/>
+            <a href="${judgeUrl}" style="color:#e8440a;text-decoration:underline;word-break:break-all;">${judgeUrl}</a>
+          </p>
         </div>
-        <p style="color:#a1a1aa;font-size:13px;line-height:1.5;margin:0;">
-          Click the button above or copy this link into your browser:<br/>
-          <a href="${judgeUrl}" style="color:#e8440a;text-decoration:underline;word-break:break-all;">${judgeUrl}</a>
-        </p>
       `),
     });
 

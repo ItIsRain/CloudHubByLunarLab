@@ -48,29 +48,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .eq("status", "published")
     .eq("visibility", "public");
 
-  const eventSubPages = [
-    "schedule",
-    "speakers",
-    "tickets",
-    "gallery",
-    "recap",
-    "live",
-  ];
-
-  const eventRoutes: MetadataRoute.Sitemap = (events ?? []).flatMap((e) => [
-    {
-      url: `${SITE_URL}/events/${e.slug}`,
-      lastModified: new Date(e.updated_at),
-      changeFrequency: "daily" as const,
-      priority: 0.8,
-    },
-    ...eventSubPages.map((sub) => ({
-      url: `${SITE_URL}/events/${e.slug}/${sub}`,
-      lastModified: new Date(e.updated_at),
-      changeFrequency: "weekly" as const,
-      priority: 0.6,
-    })),
-  ]);
+  // Only sitemap the main event page. The sub-pages (schedule, speakers,
+  // tickets, gallery, recap, live) are reachable via tabs on the main page
+  // and rarely have enough unique content to merit their own index entry —
+  // listing them en masse triggers "Crawled - currently not indexed" in GSC.
+  const eventRoutes: MetadataRoute.Sitemap = (events ?? []).map((e) => ({
+    url: `${SITE_URL}/events/${e.slug}`,
+    lastModified: new Date(e.updated_at),
+    changeFrequency: "daily" as const,
+    priority: 0.8,
+  }));
 
   // ── Dynamic hackathon routes ──────────────────────────────────
   const { data: hackathons } = await supabase
@@ -87,47 +74,44 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ])
     .eq("visibility", "public");
 
-  const hackathonSubPages = [
-    "overview",
-    "faq",
-    "schedule",
-    "teams",
-    "tracks",
-    "sponsors",
-    "submissions",
-    "mentors",
-    "leaderboard",
-    "resources",
-  ];
-
-  const hackathonRoutes: MetadataRoute.Sitemap = (hackathons ?? []).flatMap(
-    (h) => [
-      {
-        url: `${SITE_URL}/hackathons/${h.slug}`,
-        lastModified: new Date(h.updated_at),
-        changeFrequency: "daily" as const,
-        priority: 0.8,
-      },
-      ...hackathonSubPages.map((sub) => ({
-        url: `${SITE_URL}/hackathons/${h.slug}/${sub}`,
-        lastModified: new Date(h.updated_at),
-        changeFrequency: "weekly" as const,
-        priority: 0.6,
-      })),
-    ]
+  // Only sitemap the main hackathon page. The 10 sub-pages (overview, faq,
+  // schedule, teams, tracks, sponsors, submissions, mentors, leaderboard,
+  // resources) duplicate content the main page already exposes via tabs,
+  // and listing them all forces Google to crawl ~11x more URLs per
+  // hackathon than necessary — most got bucketed into "Crawled - currently
+  // not indexed" because they're thin/duplicative.
+  const hackathonRoutes: MetadataRoute.Sitemap = (hackathons ?? []).map(
+    (h) => ({
+      url: `${SITE_URL}/hackathons/${h.slug}`,
+      lastModified: new Date(h.updated_at),
+      changeFrequency: "daily" as const,
+      priority: 0.8,
+    })
   );
 
   // ── Public profile routes ─────────────────────────────────────
+  // Only sitemap profiles that actually have content. Empty profiles get
+  // flagged by GSC as "Crawled - currently not indexed" because they look
+  // like thin/low-value pages, which drags down site authority.
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("username, updated_at");
+    .select("username, updated_at, bio, headline, avatar")
+    .not("username", "is", null);
 
-  const profileRoutes: MetadataRoute.Sitemap = (profiles ?? []).map((p) => ({
-    url: `${SITE_URL}/profile/${p.username}`,
-    lastModified: new Date(p.updated_at),
-    changeFrequency: "weekly" as const,
-    priority: 0.5,
-  }));
+  const profileRoutes: MetadataRoute.Sitemap = (profiles ?? [])
+    .filter((p) => {
+      const hasContent =
+        (p.bio && (p.bio as string).trim().length > 20) ||
+        (p.headline && (p.headline as string).trim().length > 0) ||
+        !!p.avatar;
+      return hasContent && p.username;
+    })
+    .map((p) => ({
+      url: `${SITE_URL}/profile/${p.username}`,
+      lastModified: new Date(p.updated_at),
+      changeFrequency: "weekly" as const,
+      priority: 0.5,
+    }));
 
   // ── Dynamic blog post routes ─────────────────────────────────
   const { data: blogPosts } = await supabase

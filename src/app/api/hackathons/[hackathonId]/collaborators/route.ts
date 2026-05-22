@@ -241,30 +241,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       to: email.toLowerCase().trim(),
       subject: `You're invited to co-organize ${hackathonName}`,
       html: emailWrapper(`
-        <h1 style="margin:0 0 16px;color:#fff;font-size:24px;font-weight:700;">
-          You're invited to co-organize
-        </h1>
-        <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 8px;">
-          Hi <strong style="color:#fff;">${escapeHtml((targetUser as { id: string; name?: string }).name || "there")}</strong>,
-        </p>
-        <p style="color:#d4d4d8;font-size:15px;line-height:1.6;margin:0 0 24px;">
-          <strong style="color:#fff;">${escapeHtml(inviterName)}</strong>
-          has invited you to help administrate
-          <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong>
-          as a <strong style="color:#fff;">${escapeHtml(role)}</strong>. Accept
-          to gain access — the competition will appear in your dashboard and
-          you can edit it just like the main organizer.
-        </p>
-        <div style="text-align:center;margin:32px 0;">
-          <a href="${acceptUrl}"
-             style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#e8440a,#d946a8);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;">
-            Accept Invitation
-          </a>
+        <div style="padding:32px 32px 36px;">
+          <h1 style="margin:0 0 20px;color:#fff;font-size:24px;font-weight:700;line-height:1.3;">
+            You're invited to co-organize
+          </h1>
+          <p style="color:#d4d4d8;font-size:15px;line-height:1.7;margin:0 0 12px;">
+            Hi <strong style="color:#fff;">${escapeHtml((targetUser as { id: string; name?: string }).name || "there")}</strong>,
+          </p>
+          <p style="color:#d4d4d8;font-size:15px;line-height:1.7;margin:0 0 24px;">
+            <strong style="color:#fff;">${escapeHtml(inviterName)}</strong>
+            has invited you to help administrate
+            <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong>
+            as a <strong style="color:#fff;">${escapeHtml(role)}</strong>. Accept
+            to gain access — the competition will appear in your dashboard and
+            you can edit it just like the main organizer.
+          </p>
+          <div style="text-align:center;margin:28px 0 24px;">
+            <a href="${acceptUrl}"
+               style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#e8440a,#d946a8);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;">
+              Accept Invitation
+            </a>
+          </div>
+          <p style="color:#a1a1aa;font-size:13px;line-height:1.6;margin:0;">
+            Click the button above or copy this link into your browser:<br/>
+            <a href="${acceptUrl}" style="color:#e8440a;text-decoration:underline;word-break:break-all;">${acceptUrl}</a>
+          </p>
         </div>
-        <p style="color:#a1a1aa;font-size:13px;line-height:1.5;margin:0;">
-          Click the button above or copy this link into your browser:<br/>
-          <a href="${acceptUrl}" style="color:#e8440a;text-decoration:underline;word-break:break-all;">${acceptUrl}</a>
-        </p>
       `),
     }).catch((err) => {
       console.error("Failed to send co-organizer invitation email:", err);

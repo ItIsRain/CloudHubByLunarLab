@@ -1,7 +1,13 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import CoOrganizerAcceptClient from "./page-client";
 
 export const dynamic = "force-dynamic";
+
+// Token-bearing invite link — must never be indexed.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default function CoOrganizerAcceptPage() {
   return (
