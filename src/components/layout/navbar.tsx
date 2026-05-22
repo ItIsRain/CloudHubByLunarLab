@@ -20,6 +20,7 @@ import {
   Sun,
   Moon,
   Search,
+  Gavel,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ import { useTheme } from "@/providers/theme-provider";
 import { SearchSuggestions } from "@/components/layout/search-suggestions";
 import { NotificationPanel } from "@/components/special/notification-panel";
 import { useUnreadNotificationCount } from "@/hooks/use-notifications";
+import { useMyReviewerPhases } from "@/hooks/use-phase-scoring";
 import type { SearchSuggestions as SearchSuggestionsData } from "@/hooks/use-search";
 
 interface NavLink {
@@ -125,6 +127,26 @@ export function Navbar() {
   };
 
   const canCreate = hasRole("organizer") || hasRole("admin");
+
+  // Fetch the user's reviewer assignments only when logged in. The link
+  // disappears as soon as every hackathon they're judging has crossed its
+  // winners_announcement timestamp — no point linking to scoring screens
+  // after results are public.
+  const { data: reviewerPhasesData } = useMyReviewerPhases();
+  const judgeActiveHackathons = React.useMemo(() => {
+    if (!isAuthenticated) return [] as { hackathonId: string }[];
+    const phases = reviewerPhasesData?.data || [];
+    const now = Date.now();
+    const ids = new Set<string>();
+    for (const p of phases) {
+      const announced = p.hackathonWinnersAnnouncement
+        ? new Date(p.hackathonWinnersAnnouncement).getTime()
+        : null;
+      if (!announced || announced > now) ids.add(p.hackathonId);
+    }
+    return Array.from(ids).map((id) => ({ hackathonId: id }));
+  }, [reviewerPhasesData, isAuthenticated]);
+  const showJudgeLink = judgeActiveHackathons.length > 0;
 
   // Compute flat items count for keyboard nav
   const getFlatItems = React.useCallback(() => {
@@ -361,6 +383,23 @@ export function Navbar() {
                       </span>
                     )}
                   </Button>
+
+                  {/* Judge Competitions — only when the user has at least
+                      one active reviewer assignment whose hackathon hasn't
+                      announced winners yet. */}
+                  {showJudgeLink && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="hidden sm:flex gap-1.5"
+                    >
+                      <Link href="/judge">
+                        <Gavel className="h-4 w-4" />
+                        Judge Competitions
+                      </Link>
+                    </Button>
+                  )}
 
                   {/* Create Dropdown — organizers & admins only */}
                   {canCreate && (

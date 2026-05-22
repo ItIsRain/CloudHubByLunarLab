@@ -46,9 +46,11 @@ export async function GET(request: NextRequest) {
           hackathon:hackathons!competition_phases_hackathon_id_fkey(
             id,
             name,
+            slug,
             tagline,
             status,
-            cover_image
+            cover_image,
+            winners_announcement
           )
         )
       `)
@@ -78,10 +80,12 @@ export async function GET(request: NextRequest) {
           phaseStatus: phase?.status,
           campusFilter: phase?.campus_filter,
           hackathonId: hackathon?.id,
+          hackathonSlug: hackathon?.slug,
           hackathonName: hackathon?.name,
           hackathonTagline: hackathon?.tagline,
           hackathonStatus: hackathon?.status,
           hackathonBanner: hackathon?.cover_image,
+          hackathonWinnersAnnouncement: hackathon?.winners_announcement,
         };
       });
 

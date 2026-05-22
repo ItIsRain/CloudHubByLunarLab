@@ -27,6 +27,7 @@ import {
   Pencil,
   UserPlus,
   Lock,
+  Gavel,
   HelpCircle,
   EyeOff,
   LogOut,
@@ -59,6 +60,7 @@ import { useHackathonRegistration, useRegisterForHackathon, useCancelHackathonRe
 import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
 import { usePhases } from "@/hooks/use-phases";
 import { usePublicWinners, type PublicWinner } from "@/hooks/use-winners";
+import { useMyReviewerPhases } from "@/hooks/use-phase-scoring";
 import { useAuthStore } from "@/store/auth-store";
 import { cn, formatDate, formatCurrency, formatPrizeValue, getTimeRemaining, safeHref } from "@/lib/utils";
 import {
@@ -221,6 +223,22 @@ export default function HackathonDetailPage() {
   const hackTeams = teamsData?.data || [];
   const hackSubs = submissionsData?.data || [];
   const isOrganizer = user?.id === hackathon.organizerId;
+  // Is the current user a reviewer for any phase on THIS hackathon, and have
+  // winners not been announced yet? If both true, we surface a "Judge" button
+  // in the header so they can jump straight to scoring.
+  const { data: reviewerPhasesData } = useMyReviewerPhases();
+  const isJudgeOnThis = React.useMemo(() => {
+    if (!user) return false;
+    if (!reviewerPhasesData?.data?.length) return false;
+    return reviewerPhasesData.data.some((p) => p.hackathonId === hackathon.id);
+  }, [reviewerPhasesData, user, hackathon.id]);
+  const winnersAnnouncedTs = hackathon.winnersAnnouncement
+    ? new Date(hackathon.winnersAnnouncement).getTime()
+    : null;
+  const showJudgeButton =
+    isJudgeOnThis &&
+    !isOrganizer &&
+    (!winnersAnnouncedTs || winnersAnnouncedTs > Date.now());
   // Submissions tab/listing is hidden from the public until winners_announcement
   // has passed. Organizers always see it (so they can preview), and team members
   // implicitly see their own submission via the API even before then.
@@ -409,6 +427,13 @@ export default function HackathonDetailPage() {
                       <Link href={`/dashboard/hackathons/${hackathon.id}?tab=edit`}>
                         <Pencil className="h-4 w-4 mr-1" />
                         Edit Hackathon
+                      </Link>
+                    </Button>
+                  ) : showJudgeButton ? (
+                    <Button size="sm" asChild>
+                      <Link href={`/judge/${hackathon.id}`}>
+                        <Gavel className="h-4 w-4 mr-1" />
+                        Judge
                       </Link>
                     </Button>
                   ) : (hackathon.status === "published" || hackathon.status === "registration-open") && (

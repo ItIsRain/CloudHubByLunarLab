@@ -185,10 +185,12 @@ interface ReviewerPhase {
   phaseStatus: string;
   campusFilter: string | null;
   hackathonId: string;
+  hackathonSlug: string | null;
   hackathonName: string;
   hackathonTagline: string | null;
   hackathonStatus: string;
   hackathonBanner: string | null;
+  hackathonWinnersAnnouncement: string | null;
 }
 
 // ── Finalists for a phase (organizer view) ──────────────
