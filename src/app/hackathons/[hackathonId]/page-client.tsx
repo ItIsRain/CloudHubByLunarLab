@@ -130,6 +130,21 @@ export default function HackathonDetailPage() {
   // unconditionally before any early return — moving it inside the body
   // breaks Rules of Hooks.
   const { data: reviewerPhasesData } = useMyReviewerPhases();
+  // Controlled tab state so the mobile <select> dropdown and the desktop
+  // TabsList drive the same value. Initial value defers to "winners" if the
+  // hackathon is finished with announced winners, otherwise "overview".
+  const [currentTab, setCurrentTab] = React.useState<string>(() => {
+    const winnersData = hackathonData?.data;
+    if (
+      winnersData &&
+      winnersData.status === "completed" &&
+      winnersData.winnersAnnouncement &&
+      new Date(winnersData.winnersAnnouncement).getTime() <= Date.now()
+    ) {
+      return "winners";
+    }
+    return "overview";
+  });
   const isRegistered = regData?.registered ?? false;
   const isRejected = regData?.rejected ?? false;
   const registrationStatus = regData?.registration?.status;
@@ -321,9 +336,11 @@ export default function HackathonDetailPage() {
     <div className="min-h-screen bg-muted/30">
       <Navbar />
 
-      {/* Cinematic Hero — shorter on phones so the title + actions stay
-          above the fold, full height on tablet and up. */}
-      <div className="relative h-[380px] sm:h-[460px] lg:h-[500px] overflow-hidden">
+      {/* Cinematic Hero — image lives behind via absolute inset-0 + gradient,
+          content sits in normal flow so the hero grows to fit it. Padding-top
+          of pt-28 (~112px) reserves space for the fixed navbar so the title
+          can never slide under it. */}
+      <div className="relative min-h-[420px] sm:min-h-[480px] lg:min-h-[500px] overflow-hidden">
         <Image
           src={hackathon.coverImage || "/placeholder-hackathon.jpg"}
           alt={hackathon.name}
@@ -336,7 +353,7 @@ export default function HackathonDetailPage() {
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute bottom-8 left-0 right-0"
+          className="relative pt-28 sm:pt-32 pb-8 flex flex-col justify-end min-h-[420px] sm:min-h-[480px] lg:min-h-[500px]"
         >
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
@@ -605,11 +622,39 @@ export default function HackathonDetailPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <Tabs defaultValue={winnersAnnounced && publicWinners.length > 0 && hackathon.status === "completed" ? "winners" : "overview"}>
-              {/* On mobile we let the 9-tab row scroll horizontally instead
-                  of wrapping into 3-4 ugly lines. The scrollbar is hidden but
-                  the area still scrolls — desktop keeps wrap behaviour. */}
-              <TabsList className="-mx-4 sm:mx-0 flex w-[calc(100%+2rem)] sm:w-full justify-start sm:flex-wrap overflow-x-auto px-4 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <Tabs
+              value={currentTab}
+              onValueChange={setCurrentTab}
+            >
+              {/* Mobile: dropdown selector (compact, no swiping, full label
+                  always visible). Desktop: classic tab bar that wraps. */}
+              <div className="sm:hidden">
+                <select
+                  aria-label="Select section"
+                  value={currentTab}
+                  onChange={(e) => setCurrentTab(e.target.value)}
+                  className="w-full h-11 rounded-lg border border-input bg-background px-4 text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring appearance-none bg-[url('data:image/svg+xml;utf8,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22currentColor%22%20stroke-width=%222%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpolyline%20points=%226%209%2012%2015%2018%209%22/%3E%3C/svg%3E')] bg-[length:18px] bg-[right_0.75rem_center] bg-no-repeat pr-10"
+                >
+                  <option value="overview">Overview</option>
+                  <option value="tracks">Tracks ({hackathon.tracks.length})</option>
+                  <option value="schedule">Schedule</option>
+                  {hackathon.teamsEnabled !== false && (
+                    <option value="teams">Teams ({hackTeams.length})</option>
+                  )}
+                  {hackathon.submissionsEnabled !== false && canSeeSubmissionsTab && (
+                    <option value="submissions">Submissions ({hackSubs.length})</option>
+                  )}
+                  {winnersAnnounced && publicWinners.length > 0 && (
+                    <option value="winners">🏆 Winners ({publicWinners.length})</option>
+                  )}
+                  {hackathon.mentors.length > 0 && (
+                    <option value="mentors">Mentors</option>
+                  )}
+                  <option value="sponsors">Sponsors</option>
+                  <option value="faq">FAQ</option>
+                </select>
+              </div>
+              <TabsList className="hidden sm:flex flex-wrap">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="tracks">Tracks ({hackathon.tracks.length})</TabsTrigger>
                 <TabsTrigger value="schedule">Schedule</TabsTrigger>
@@ -838,31 +883,38 @@ export default function HackathonDetailPage() {
               {/* Schedule */}
               <TabsContent value="schedule" className="mt-6">
                 <Card>
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 sm:p-6">
                     <div className="space-y-4">
                       {timeline.map((item, i) => (
-                        <div key={i} className="flex items-center gap-4 py-3 border-b last:border-0">
-                          <div className={cn(
-                            "rounded-full flex-shrink-0",
-                            item.isPhase ? "h-4 w-4 border-2 border-accent bg-accent/20" : "h-3 w-3",
-                            !item.isPhase && (new Date(item.date) < new Date() ? "bg-primary" : "bg-muted")
-                          )} />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className={cn("font-medium", item.isPhase && "text-accent")}>{item.label}</p>
-                              {item.isPhase && item.phaseType && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize">
-                                  {item.phaseType}
-                                </Badge>
-                              )}
-                              {item.isPhase && item.campusFilter && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                                  {item.campusFilter}
-                                </Badge>
-                              )}
+                        <div
+                          key={i}
+                          className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4 py-3 border-b last:border-0"
+                        >
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <div className={cn(
+                              "rounded-full flex-shrink-0 mt-1.5 sm:mt-0",
+                              item.isPhase ? "h-4 w-4 border-2 border-accent bg-accent/20" : "h-3 w-3",
+                              !item.isPhase && (new Date(item.date) < new Date() ? "bg-primary" : "bg-muted")
+                            )} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className={cn("font-medium break-words", item.isPhase && "text-accent")}>
+                                  {item.label}
+                                </p>
+                                {item.isPhase && item.phaseType && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize">
+                                    {item.phaseType}
+                                  </Badge>
+                                )}
+                                {item.isPhase && item.campusFilter && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                    {item.campusFilter}
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          <span className="text-sm text-muted-foreground shrink-0">
+                          <span className="text-xs sm:text-sm text-muted-foreground pl-6 sm:pl-0 sm:shrink-0 sm:whitespace-nowrap">
                             {formatDate(item.date)}
                             {item.isPhase && item.endDate && ` — ${formatDate(item.endDate)}`}
                           </span>
