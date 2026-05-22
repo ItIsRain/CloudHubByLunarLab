@@ -307,12 +307,42 @@ function SubmissionFormEditor({ hackathon, hackathonId }: SubmissionsTabProps) {
   const [sections, setSections] = React.useState<FormSection[]>(
     hackathon.submissionSections || []
   );
+  // Linked track field — same JSON path the campus quota config uses.
+  const existingScreeningConfig =
+    (hackathon.screeningConfig as Record<string, unknown> | undefined) || {};
+  const [trackFieldId, setTrackFieldId] = React.useState<string>(
+    (existingScreeningConfig.trackFieldId as string | undefined) || ""
+  );
 
   // Sync from hackathon prop when it changes externally
   React.useEffect(() => {
     setFields(hackathon.submissionFields || []);
     setSections(hackathon.submissionSections || []);
-  }, [hackathon.submissionFields, hackathon.submissionSections]);
+    const cfg =
+      (hackathon.screeningConfig as Record<string, unknown> | undefined) || {};
+    setTrackFieldId((cfg.trackFieldId as string | undefined) || "");
+  }, [
+    hackathon.submissionFields,
+    hackathon.submissionSections,
+    hackathon.screeningConfig,
+  ]);
+
+  // Eligible fields for the Track-field linker: choice fields (select / radio
+  // / multi_select) across both the submission form and the registration form,
+  // since either could legitimately hold the team's track choice.
+  type LinkableField = { id: string; label: string; source: "submission" | "registration" };
+  const linkableFields: LinkableField[] = React.useMemo(() => {
+    const isChoice = (t: string) =>
+      t === "select" || t === "radio" || t === "multi_select";
+    const out: LinkableField[] = [];
+    for (const f of fields) {
+      if (isChoice(f.type)) out.push({ id: f.id, label: f.label || "(untitled)", source: "submission" });
+    }
+    for (const f of hackathon.registrationFields || []) {
+      if (isChoice(f.type)) out.push({ id: f.id, label: f.label || "(untitled)", source: "registration" });
+    }
+    return out;
+  }, [fields, hackathon.registrationFields]);
 
   const addField = () => {
     const newField: FormField = {
@@ -370,10 +400,22 @@ function SubmissionFormEditor({ hackathon, hackathonId }: SubmissionsTabProps) {
     }
 
     try {
+      // Persist trackFieldId alongside the form. We merge into the existing
+      // screening_config to avoid clobbering quotaFieldId / quotas / etc.
+      const nextScreeningConfig: Record<string, unknown> = {
+        ...existingScreeningConfig,
+      };
+      if (trackFieldId) {
+        nextScreeningConfig.trackFieldId = trackFieldId;
+      } else {
+        delete nextScreeningConfig.trackFieldId;
+      }
+
       await updateHackathon.mutateAsync({
         id: hackathonId,
         submissionFields: fields.map((f, i) => ({ ...f, order: i })),
         submissionSections: sections,
+        screeningConfig: nextScreeningConfig,
       });
       toast.success("Submission form saved!");
     } catch {
@@ -452,6 +494,38 @@ function SubmissionFormEditor({ hackathon, hackathonId }: SubmissionsTabProps) {
               Add Field
             </Button>
           )}
+
+          {/* Track field link — mirrors the campus pattern. The selected field's
+              answer populates the Track column on the Participants page once a
+              team submits. Click Save to persist. */}
+          <div className="mt-6 rounded-lg border border-dashed border-border p-4 space-y-2">
+            <div>
+              <h4 className="text-sm font-semibold">Link to track</h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Pick a select / radio / multi-select field whose answer is the
+                team&apos;s track choice. Once linked, that answer shows in the
+                Track column on the Participants page after the team submits.
+              </p>
+            </div>
+            <select
+              value={trackFieldId}
+              onChange={(e) => setTrackFieldId(e.target.value)}
+              className={selectClasses}
+            >
+              <option value="">— No linked field —</option>
+              {linkableFields.map((f) => (
+                <option key={`${f.source}:${f.id}`} value={f.id}>
+                  {f.label} ({f.source === "submission" ? "Submission" : "Registration"} form)
+                </option>
+              ))}
+            </select>
+            {linkableFields.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                Add a Dropdown / Radio / Multi-Select field above (or in the
+                Form Builder tab) to choose one here.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

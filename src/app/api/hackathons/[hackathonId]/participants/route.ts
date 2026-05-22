@@ -136,20 +136,28 @@ export async function GET(
       regQuery = regQuery.range(offset, offset + pageSize - 1);
     }
 
-    const [regResult, teamsResult, submissionsResult] = await Promise.all([
-      regQuery,
-      supabase
-        .from("teams")
-        .select("id, name, hackathon_id, team_members(user_id)")
-        .eq("hackathon_id", hackathonId),
-      // Pull each team's submission's track choice — track is chosen at
-      // submission time, never at registration, so participants without a
-      // submitted project have no track yet.
-      supabase
-        .from("submissions")
-        .select("team_id, track")
-        .eq("hackathon_id", hackathonId),
-    ]);
+    const [regResult, teamsResult, submissionsResult, hackTrackResult] =
+      await Promise.all([
+        regQuery,
+        supabase
+          .from("teams")
+          .select("id, name, hackathon_id, team_members(user_id)")
+          .eq("hackathon_id", hackathonId),
+        // Pull each team's submission so we can derive track from either
+        // the built-in `track` column or a custom form-data field.
+        supabase
+          .from("submissions")
+          .select("team_id, track, form_data")
+          .eq("hackathon_id", hackathonId),
+        // Pull tracks + the configured trackFieldId (mirrors the campus/quota
+        // pattern: screening_config.trackFieldId points to a form field whose
+        // value identifies the team's track choice).
+        supabase
+          .from("hackathons")
+          .select("tracks, screening_config")
+          .eq("id", hackathonId)
+          .single(),
+      ]);
 
     const { data: registrations, error, count } = regResult;
 
@@ -170,14 +178,58 @@ export async function GET(
       }
     }
 
-    // Build team_id -> track-name lookup from submissions
+    // Resolve the optional "this form field IS the track" link. Mirrors the
+    // campus pattern in screening_config.quotaFieldId. If set, the field's
+    // stored value is matched against the hackathon's tracks list — by id
+    // first, then by name/label — to look up the track's display name.
+    const screeningConfig =
+      (hackTrackResult.data?.screening_config as Record<string, unknown>) || {};
+    const trackFieldId = (screeningConfig.trackFieldId as string | undefined) || null;
+    const tracks =
+      (hackTrackResult.data?.tracks as { id?: string; name?: string }[] | undefined) || [];
+
+    function resolveTrackName(raw: unknown): string | null {
+      if (raw === null || raw === undefined || raw === "") return null;
+      const candidates: string[] = Array.isArray(raw)
+        ? raw.map((v) => String(v))
+        : [String(raw)];
+      for (const candidate of candidates) {
+        const match = tracks.find(
+          (t) => t.id === candidate || t.name === candidate
+        );
+        if (match?.name) return match.name;
+      }
+      return candidates[0] || null;
+    }
+
+    // Build team_id -> track-name lookup from submissions (built-in track
+    // column OR the configured form-data field). Registration form_data is
+    // checked inline below when no submission has been made yet.
     const teamTrackMap: Record<string, string> = {};
+
     if (submissionsResult.data) {
-      for (const sub of submissionsResult.data as { team_id: string; track: unknown }[]) {
+      for (const sub of submissionsResult.data as {
+        team_id: string;
+        track: unknown;
+        form_data: Record<string, unknown> | null;
+      }[]) {
+        if (!sub.team_id) continue;
+
+        // First preference: the linked form-data field on the submission.
+        if (trackFieldId && sub.form_data) {
+          const resolved = resolveTrackName(sub.form_data[trackFieldId]);
+          if (resolved) {
+            teamTrackMap[sub.team_id] = resolved;
+            continue;
+          }
+        }
+
+        // Fallback: the built-in track JSONB column.
         const track = sub.track as { name?: string } | string | null | undefined;
-        if (!track) continue;
-        const name = typeof track === "string" ? track : track.name;
-        if (name && sub.team_id) teamTrackMap[sub.team_id] = name;
+        if (track) {
+          const name = typeof track === "string" ? track : track.name;
+          if (name) teamTrackMap[sub.team_id] = name;
+        }
       }
     }
 
@@ -197,7 +249,19 @@ export async function GET(
           teamName: userTeamMap[userId] || null,
           trackName: (() => {
             const teamId = userTeamIdMap[userId];
-            return teamId ? teamTrackMap[teamId] ?? null : null;
+            const teamTrack = teamId ? teamTrackMap[teamId] : undefined;
+            if (teamTrack) return teamTrack;
+            // Final fallback: the trackFieldId resolves against this user's
+            // own registration form_data (covers hackathons where the track
+            // is captured at registration time, not submission time).
+            if (trackFieldId) {
+              const regFormData = reg.form_data as Record<string, unknown> | null;
+              if (regFormData) {
+                const resolved = resolveTrackName(regFormData[trackFieldId]);
+                if (resolved) return resolved;
+              }
+            }
+            return null;
           })(),
           formData: (reg.form_data as Record<string, unknown>) || null,
           completenessScore: typeof reg.completeness_score === "number" ? reg.completeness_score : 0,
