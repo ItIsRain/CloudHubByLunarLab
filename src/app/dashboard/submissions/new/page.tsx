@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,18 +13,29 @@ import {
   Globe,
   FileText,
   ImageIcon,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ImageUpload } from "@/components/forms/image-upload";
 import dynamic from "next/dynamic";
-const RichTextEditor = dynamic(() => import("@/components/forms/rich-text-editor").then(m => m.RichTextEditor), { ssr: false, loading: () => <div className="shimmer rounded-xl h-[200px]" /> });
+const RichTextEditor = dynamic(
+  () => import("@/components/forms/rich-text-editor").then((m) => m.RichTextEditor),
+  { ssr: false, loading: () => <div className="shimmer rounded-xl h-[200px]" /> }
+);
 import { TagSelector } from "@/components/forms/tag-selector";
 import { CustomFormFields } from "@/components/forms/custom-form-field";
-import { useHackathons } from "@/hooks/use-hackathons";
+import { useHackathons, useHackathon } from "@/hooks/use-hackathons";
 import { useCreateSubmission } from "@/hooks/use-submissions";
 import { useMyTeams } from "@/hooks/use-teams";
+import { usePhases } from "@/hooks/use-phases";
+import {
+  getCurrentSubmissionTarget,
+  type SubmissionTarget,
+} from "@/lib/submission-window";
+import { formatDateTime } from "@/lib/utils";
 import { Settings2 } from "lucide-react";
 
 const submissionSchema = z.object({
@@ -43,18 +54,32 @@ const submissionSchema = z.object({
 
 type SubmissionForm = z.infer<typeof submissionSchema>;
 
-export default function NewSubmissionPage() {
+function NewSubmissionPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefilledHackathonId = searchParams.get("hackathonId") || "";
+  const prefilledTeamId = searchParams.get("teamId") || "";
+  const prefilledPhaseId = searchParams.get("phaseId") || "";
+
   const { data: hackathonsData } = useHackathons();
   const hackathons = hackathonsData?.data || [];
   const { data: teamsData } = useMyTeams();
   const myTeams = teamsData?.data || [];
+
+  // Load the prefilled hackathon (covers cases where it's not in the
+  // user's general list — e.g. private competitions).
+  const { data: prefilledHackathonData } = useHackathon(
+    prefilledHackathonId || undefined
+  );
+  const { data: phasesData } = usePhases(prefilledHackathonId || undefined);
+
   const createMutation = useCreateSubmission();
   const [techStack, setTechStack] = useState<string[]>([]);
-  // Values for the hackathon's custom submission fields (configured in the
-  // organizer's Submissions tab → Form Editor). Stored as field-id keyed map
-  // and sent through as `formData` on the create payload.
-  const [customFormData, setCustomFormData] = useState<Record<string, unknown>>({});
+  // Values for the active submission target's custom fields — pulled from
+  // the phase when phases own submissions, otherwise from the hackathon's
+  // global submission_fields. Sent through as `formData` on create.
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const {
     register,
@@ -64,40 +89,96 @@ export default function NewSubmissionPage() {
     formState: { errors },
   } = useForm<SubmissionForm>({
     resolver: zodResolver(submissionSchema),
+    defaultValues: {
+      hackathonId: prefilledHackathonId,
+      teamId: prefilledTeamId,
+    },
   });
 
   const selectedHackathonId = watch("hackathonId");
-  const selectedHackathon = hackathons.find((h) => h.id === selectedHackathonId);
-  // Filter teams belonging to the selected hackathon
-  const hackathonTeams = myTeams.filter((t) => t.hackathonId === selectedHackathonId);
+  const selectedHackathon =
+    hackathons.find((h) => h.id === selectedHackathonId) ??
+    (prefilledHackathonData?.data ?? null);
+  const hackathonTeams = myTeams.filter(
+    (t) => t.hackathonId === selectedHackathonId
+  );
   const coverImage = watch("coverImage");
   const description = watch("description");
   const readme = watch("readme");
 
+  // Compute the active submission target so we know which custom fields
+  // to render and which phase to pin the submission to.
+  const submissionTarget: SubmissionTarget | null = useMemo(() => {
+    if (!selectedHackathon) return null;
+    return getCurrentSubmissionTarget(
+      selectedHackathon,
+      phasesData?.data ?? []
+    );
+  }, [selectedHackathon, phasesData]);
+
+  // Lock down the URL-pinned phase: if it doesn't match the currently
+  // active one (e.g. the user opened an old link after the phase rolled
+  // over) we still let them submit, but the submission will be pinned
+  // by the server to the active phase.
+  const phaseMismatch =
+    prefilledPhaseId &&
+    submissionTarget?.kind === "phase" &&
+    submissionTarget.phaseId !== prefilledPhaseId;
+
+  const customFields = submissionTarget?.kind !== "none" ? submissionTarget?.fields ?? [] : [];
+
+  // Reset hackathon-scoped form state when the hackathon changes.
+  useEffect(() => {
+    setFormData({});
+    setFormErrors({});
+  }, [selectedHackathonId]);
+
+  // Default the track to the active phase's track when there's a single
+  // choice, so the form passes validation without the user picking one
+  // they can't change anyway.
+  useEffect(() => {
+    if (selectedHackathon && selectedHackathon.tracks.length === 1) {
+      setValue("trackId", selectedHackathon.tracks[0].id);
+    }
+  }, [selectedHackathon, setValue]);
+
   const onSubmit = async (data: SubmissionForm) => {
-    // Validate required custom fields before sending — the schema only covers
-    // the built-in fields, so required custom fields would otherwise slip
-    // through with empty values.
-    const customFields = selectedHackathon?.submissionFields || [];
+    if (submissionTarget?.kind === "none") {
+      toast.error("This competition does not accept submissions.");
+      return;
+    }
+    if (submissionTarget && submissionTarget.status !== "active") {
+      toast.error(
+        submissionTarget.status === "upcoming"
+          ? "Submissions have not opened yet."
+          : "Submissions are closed."
+      );
+      return;
+    }
+
+    // Required-field check on custom fields (active target — phase-aware).
+    const missing: Record<string, string> = {};
     for (const f of customFields) {
-      if (!f.required) continue;
-      const v = customFormData[f.id];
-      const empty =
-        v === undefined ||
-        v === null ||
-        v === "" ||
-        (Array.isArray(v) && v.length === 0);
-      if (empty) {
-        toast.error(`${f.label || "A required field"} is required.`);
-        return;
+      if (f.required) {
+        const v = formData[f.id];
+        if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) {
+          missing[f.id] = "This field is required";
+        }
       }
+    }
+    if (Object.keys(missing).length > 0) {
+      setFormErrors(missing);
+      toast.error("Please answer all required questions.");
+      return;
     }
 
     try {
       const result = await createMutation.mutateAsync({
         ...data,
         techStack,
-        formData: customFormData,
+        formData,
+        phaseId:
+          submissionTarget?.kind === "phase" ? submissionTarget.phaseId : null,
       });
       toast.success("Project submitted successfully!");
       router.push(`/dashboard/submissions/${result.data.id}`);
@@ -105,6 +186,16 @@ export default function NewSubmissionPage() {
       toast.error(
         error instanceof Error ? error.message : "Failed to create submission"
       );
+    }
+  };
+
+  const handleCustomFieldChange = (fieldId: string, value: unknown) => {
+    setFormData((prev) => ({ ...prev, [fieldId]: value }));
+    if (formErrors[fieldId]) {
+      setFormErrors((prev) => {
+        const { [fieldId]: _removed, ...rest } = prev;
+        return rest;
+      });
     }
   };
 
@@ -124,6 +215,55 @@ export default function NewSubmissionPage() {
             </p>
           </div>
 
+          {/* Active target banner */}
+          {submissionTarget && submissionTarget.kind !== "none" && (
+            <Card
+              className={
+                submissionTarget.status === "active"
+                  ? "mb-6 border-success/30 bg-success/5"
+                  : "mb-6 border-warning/30 bg-warning/5"
+              }
+            >
+              <CardContent className="p-4 flex flex-wrap items-center gap-3">
+                <Badge variant="outline" className="text-xs">
+                  {submissionTarget.kind === "phase"
+                    ? submissionTarget.phase.name
+                    : "Project submission"}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {submissionTarget.status === "active"
+                    ? submissionTarget.deadline
+                      ? `Closes ${formatDateTime(submissionTarget.deadline)}`
+                      : "Open"
+                    : submissionTarget.status === "upcoming"
+                    ? `Opens ${
+                        submissionTarget.opensAt
+                          ? formatDateTime(submissionTarget.opensAt)
+                          : "soon"
+                      }`
+                    : "Submissions closed"}
+                </span>
+                <Badge
+                  variant={
+                    submissionTarget.kind === "phase" ? "secondary" : "outline"
+                  }
+                  className="text-[10px]"
+                >
+                  {submissionTarget.kind === "phase"
+                    ? "Phase submission"
+                    : "Overall hackathon"}
+                </Badge>
+                {phaseMismatch && (
+                  <span className="text-xs text-warning inline-flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Your link points to a different phase. Submitting will use
+                    the currently active phase instead.
+                  </span>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {/* Hackathon & Track */}
             <Card>
@@ -133,19 +273,26 @@ export default function NewSubmissionPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Competition *</label>
-                  <select
-                    {...register("hackathonId")}
-                    className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">Select competition</option>
-                    {hackathons
-                      .filter((h) => h.status !== "completed" && h.status !== "draft")
-                      .map((h) => (
-                        <option key={h.id} value={h.id}>
-                          {h.name}
-                        </option>
-                      ))}
-                  </select>
+                  {prefilledHackathonId && selectedHackathon ? (
+                    <div className="rounded-xl border border-input bg-muted/30 px-4 py-2.5 text-sm">
+                      {selectedHackathon.name}
+                      <input type="hidden" {...register("hackathonId")} />
+                    </div>
+                  ) : (
+                    <select
+                      {...register("hackathonId")}
+                      className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Select competition</option>
+                      {hackathons
+                        .filter((h) => h.status !== "completed" && h.status !== "draft")
+                        .map((h) => (
+                          <option key={h.id} value={h.id}>
+                            {h.name}
+                          </option>
+                        ))}
+                    </select>
+                  )}
                   {errors.hackathonId && (
                     <p className="text-xs text-destructive">{errors.hackathonId.message}</p>
                   )}
@@ -154,18 +301,26 @@ export default function NewSubmissionPage() {
                 {selectedHackathonId && (
                   <div className="space-y-1">
                     <label className="text-sm font-medium">Team *</label>
-                    <select
-                      {...register("teamId")}
-                      className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="">Select your team</option>
-                      {hackathonTeams.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
-                    {hackathonTeams.length === 0 && (
+                    {prefilledTeamId ? (
+                      <div className="rounded-xl border border-input bg-muted/30 px-4 py-2.5 text-sm">
+                        {hackathonTeams.find((t) => t.id === prefilledTeamId)
+                          ?.name ?? "Your team"}
+                        <input type="hidden" {...register("teamId")} />
+                      </div>
+                    ) : (
+                      <select
+                        {...register("teamId")}
+                        className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value="">Select your team</option>
+                        {hackathonTeams.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {hackathonTeams.length === 0 && !prefilledTeamId && (
                       <p className="text-xs text-muted-foreground">
                         You are not a member of any team in this hackathon.
                       </p>
@@ -176,7 +331,7 @@ export default function NewSubmissionPage() {
                   </div>
                 )}
 
-                {selectedHackathon && (
+                {selectedHackathon && selectedHackathon.tracks.length > 0 && (
                   <div className="space-y-1">
                     <label className="text-sm font-medium">Track *</label>
                     <select
@@ -328,41 +483,45 @@ export default function NewSubmissionPage() {
               </CardContent>
             </Card>
 
-            {/* Hackathon's custom submission fields (configured in the
-                organizer dashboard → Submissions tab → Form Editor). File
-                uploads here use Cloudinary; their URLs surface to judges as
+            {/* Organizer-defined questions from the active submission target.
+                Uses the per-phase fields when the phase has them; otherwise
+                falls back to the hackathon-level submission_fields. File
+                uploads route through Cloudinary; URLs surface to judges as
                 clickable links. */}
-            {selectedHackathon &&
-              (selectedHackathon.submissionFields?.length ?? 0) > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Settings2 className="h-5 w-5" />
-                      Additional Submission Fields
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CustomFormFields
-                      fields={selectedHackathon.submissionFields || []}
-                      values={customFormData}
-                      onChange={(fieldId, value) =>
-                        setCustomFormData((prev) => ({
-                          ...prev,
-                          [fieldId]: value,
-                        }))
-                      }
-                      uploadFolder={`cloudhub/submissions/${selectedHackathon.id}`}
-                    />
-                  </CardContent>
-                </Card>
-              )}
+            {customFields.length > 0 && selectedHackathon && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Settings2 className="h-5 w-5" />
+                    Additional Questions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CustomFormFields
+                    fields={customFields}
+                    values={formData}
+                    errors={formErrors}
+                    onChange={handleCustomFieldChange}
+                    uploadFolder={`cloudhub/submissions/${selectedHackathon.id}`}
+                  />
+                </CardContent>
+              </Card>
+            )}
 
             {/* Submit */}
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" loading={createMutation.isPending} className="gap-2">
+              <Button
+                type="submit"
+                loading={createMutation.isPending}
+                disabled={
+                  submissionTarget?.kind === "none" ||
+                  (submissionTarget !== null && submissionTarget.status !== "active")
+                }
+                className="gap-2"
+              >
                 <Upload className="h-4 w-4" />
                 Submit Project
               </Button>
@@ -371,5 +530,21 @@ export default function NewSubmissionPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+export default function NewSubmissionPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background pt-24 pb-16">
+          <div className="mx-auto max-w-3xl px-4">
+            <div className="shimmer rounded-xl h-96 w-full" />
+          </div>
+        </div>
+      }
+    >
+      <NewSubmissionPageInner />
+    </Suspense>
   );
 }

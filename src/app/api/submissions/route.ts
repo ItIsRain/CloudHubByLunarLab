@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
-import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
-import { canSubmit, getPhaseMessage, submissionsArePubliclyVisible } from "@/lib/hackathon-phases";
+import {
+  dbRowToCompetitionPhase,
+  dbRowToHackathon,
+  dbRowToSubmission,
+  submissionFormToDbRow,
+} from "@/lib/supabase/mappers";
+import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
+import { submissionsArePubliclyVisible } from "@/lib/hackathon-phases";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { fireWebhooks } from "@/lib/webhook-delivery";
+import { getCurrentSubmissionTarget } from "@/lib/submission-window";
 
 const SUBMISSION_SELECT =
   "*, team:teams(*, team_members(*, user:profiles!team_members_user_id_fkey(*)))";
@@ -37,6 +43,7 @@ export async function GET(request: NextRequest) {
     const teamId = url.searchParams.get("teamId");
     const userId = url.searchParams.get("userId");
     const status = url.searchParams.get("status");
+    const phaseIdFilter = url.searchParams.get("phaseId");
     const sortBy = url.searchParams.get("sortBy") || "recent";
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get("pageSize") || "50", 10) || 50));
@@ -115,6 +122,15 @@ export async function GET(request: NextRequest) {
       }
     }
     if (teamId) query = query.eq("team_id", teamId);
+    if (phaseIdFilter) {
+      // Special sentinel "null" lets callers fetch the global-round submission
+      // (where phase_id IS NULL) without having to omit the param entirely.
+      if (phaseIdFilter === "null") {
+        query = query.is("phase_id", null);
+      } else {
+        query = query.eq("phase_id", phaseIdFilter);
+      }
+    }
 
     // Unauthenticated users can ONLY see submitted submissions and cannot filter by userId/teamId
     if (!authUserId) {
@@ -238,17 +254,68 @@ export async function POST(request: NextRequest) {
     }
 
     const dbPayload = submissionFormToDbRow(body);
-
-    // Verify submission window is open
     const hackathonId = dbPayload.hackathon_id as string;
+
+    // Verify submission window is open, using the phase-aware helper so
+    // phased competitions gate against the active phase rather than the
+    // hackathon-level submission_deadline.
     if (hackathonId) {
-      const timeline = await getHackathonTimeline(supabase, hackathonId);
-      if (timeline && !canSubmit(timeline)) {
+      const [hackRes, phasesRes] = await Promise.all([
+        supabase.from("hackathons").select("*").eq("id", hackathonId).single(),
+        supabase
+          .from("competition_phases")
+          .select("*")
+          .eq("hackathon_id", hackathonId),
+      ]);
+
+      if (!hackRes.data) {
         return NextResponse.json(
-          { error: getPhaseMessage(timeline, "submit") },
+          { error: "Competition not found" },
+          { status: 404 }
+        );
+      }
+
+      const hackathon = dbRowToHackathon(hackRes.data as Record<string, unknown>);
+      const phases = (phasesRes.data || []).map((r) =>
+        dbRowToCompetitionPhase(r as Record<string, unknown>)
+      );
+      const target = getCurrentSubmissionTarget(hackathon, phases);
+
+      if (target.kind === "none") {
+        return NextResponse.json(
+          { error: "This competition does not accept submissions." },
           { status: 403 }
         );
       }
+      if (target.status !== "active") {
+        return NextResponse.json(
+          {
+            error:
+              target.status === "upcoming"
+                ? "Submissions have not opened yet."
+                : "Submissions are closed.",
+          },
+          { status: 403 }
+        );
+      }
+
+      // Resolve phase_id: client may pass it explicitly, otherwise pin to
+      // the currently-active target. If the client passes a phase that
+      // isn't the active one, reject — prevents stale clients from
+      // writing to a closed window.
+      const requestedPhaseId =
+        (dbPayload.phase_id as string | null | undefined) ?? undefined;
+      const expectedPhaseId = target.kind === "phase" ? target.phaseId : null;
+      if (requestedPhaseId !== undefined && requestedPhaseId !== expectedPhaseId) {
+        return NextResponse.json(
+          {
+            error:
+              "Submissions are only being accepted for the currently active phase.",
+          },
+          { status: 403 }
+        );
+      }
+      dbPayload.phase_id = expectedPhaseId;
     }
 
     // Verify user is a team member

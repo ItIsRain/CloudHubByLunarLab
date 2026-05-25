@@ -179,11 +179,15 @@ export function dbRowToNotification(row: Record<string, unknown>): Notification 
 // DB row → TeamMember
 // =====================================================
 
-export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
+export function dbRowToTeamMember(
+  row: Record<string, unknown>,
+  options: { includeEmail?: boolean } = {}
+): TeamMember {
   const userProfile = row.user as Record<string, unknown>;
+  const mapUser = options.includeEmail ? profileToUser : profileToPublicUser;
   return {
     id: row.id as string,
-    user: userProfile ? profileToPublicUser(userProfile) : ({} as User),
+    user: userProfile ? mapUser(userProfile) : ({} as User),
     role: (row.role as string) || "Developer",
     isLeader: (row.is_leader as boolean) || false,
     joinedAt: row.joined_at as string,
@@ -194,7 +198,10 @@ export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
 // DB row → Team
 // =====================================================
 
-export function dbRowToTeam(row: Record<string, unknown>): Team {
+export function dbRowToTeam(
+  row: Record<string, unknown>,
+  options: { includeMemberEmails?: boolean } = {}
+): Team {
   const rawMembers = (row.team_members as Record<string, unknown>[]) || [];
   return {
     id: row.id as string,
@@ -203,7 +210,9 @@ export function dbRowToTeam(row: Record<string, unknown>): Team {
     avatar: (row.avatar as string) || undefined,
     hackathonId: row.hackathon_id as string,
     track: (row.track as Track) || undefined,
-    members: rawMembers.map(dbRowToTeamMember),
+    members: rawMembers.map((m) =>
+      dbRowToTeamMember(m, { includeEmail: options.includeMemberEmails })
+    ),
     lookingForRoles: (row.looking_for_roles as string[]) || undefined,
     maxSize: (row.max_size as number) || 4,
     status: (row.status as TeamStatus) || "forming",
@@ -323,6 +332,7 @@ export function dbRowToSubmission(row: Record<string, unknown>): Submission {
   return {
     id: row.id as string,
     hackathonId: row.hackathon_id as string,
+    phaseId: (row.phase_id as string) || null,
     teamId: row.team_id as string,
     team: rawTeam ? dbRowToTeam(rawTeam) : ({ id: "", name: "Unknown Team", description: "", avatar: "", hackathonId: "", track: undefined, lookingForRoles: [], members: [], maxSize: 4, status: "forming", createdAt: "", updatedAt: "" } as unknown as Team),
     track: (row.track as Track) || ({ id: "general", name: "General", description: "General track", prizes: [] } as Track),
@@ -358,6 +368,8 @@ export function submissionFormToDbRow(form: Record<string, unknown>): Record<str
   const keyMap: Record<string, string> = {
     hackathonId: "hackathon_id",
     hackathon_id: "hackathon_id",
+    phaseId: "phase_id",
+    phase_id: "phase_id",
     teamId: "team_id",
     team_id: "team_id",
     projectName: "project_name",
@@ -1003,6 +1015,9 @@ export function dbRowToCompetitionPhase(row: Record<string, unknown>): Competiti
     endDate: (row.end_date as string) || null,
     submissionStart: (row.submission_start as string) || null,
     submissionEnd: (row.submission_end as string) || null,
+    submissionsEnabled: row.submissions_enabled === true,
+    submissionFields: (row.submission_fields as CompetitionPhase["submissionFields"]) || [],
+    submissionSections: (row.submission_sections as CompetitionPhase["submissionSections"]) || [],
     location: (row.location as string) || null,
     sortOrder: (row.sort_order as number) || 0,
     status: (row.status as PhaseStatus) || "draft",
@@ -1078,6 +1093,9 @@ export function phaseFormToDbRow(phase: Partial<CompetitionPhase>): Record<strin
   if (phase.endDate !== undefined) row.end_date = phase.endDate;
   if (phase.submissionStart !== undefined) row.submission_start = phase.submissionStart;
   if (phase.submissionEnd !== undefined) row.submission_end = phase.submissionEnd;
+  if (phase.submissionsEnabled !== undefined) row.submissions_enabled = phase.submissionsEnabled;
+  if (phase.submissionFields !== undefined) row.submission_fields = phase.submissionFields;
+  if (phase.submissionSections !== undefined) row.submission_sections = phase.submissionSections;
   if (phase.location !== undefined) row.location = phase.location;
   if (phase.sortOrder !== undefined) row.sort_order = phase.sortOrder;
   if (phase.status !== undefined) row.status = phase.status;

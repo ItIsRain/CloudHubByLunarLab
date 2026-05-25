@@ -348,6 +348,8 @@ export type SubmissionStatus = "draft" | "submitted" | "under-review" | "scored"
 export interface Submission {
   id: string;
   hackathonId: string;
+  /** Phase this submission belongs to. Null = the hackathon's global round. */
+  phaseId?: string | null;
   teamId: string;
   team: Team;
   track: Track;
@@ -986,6 +988,12 @@ export interface CompetitionPhase {
   endDate?: string | null;
   submissionStart?: string | null;
   submissionEnd?: string | null;
+  /** When true, this phase requires teams to submit a new submission within the phase window. */
+  submissionsEnabled: boolean;
+  /** Per-phase submission form fields. Overrides hackathon.submissionFields for this phase. */
+  submissionFields: FormField[];
+  /** Per-phase submission form sections. Overrides hackathon.submissionSections for this phase. */
+  submissionSections: FormSection[];
   location?: string | null;
   sortOrder: number;
   status: PhaseStatus;

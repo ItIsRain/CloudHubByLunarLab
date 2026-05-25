@@ -35,6 +35,10 @@ import {
   CheckCircle,
   ThumbsDown,
   FileEdit,
+  MoreVertical,
+  ArrowRightLeft,
+  Trash2,
+  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SafeHtml } from "@/components/ui/safe-html";
@@ -45,6 +49,13 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import dynamic from "next/dynamic";
 const ShareDialog = dynamic(() => import("@/components/dialogs/share-dialog").then(m => m.ShareDialog), { ssr: false });
 const AddToCalendarDialog = dynamic(() => import("@/components/dialogs/add-to-calendar-dialog").then(m => m.AddToCalendarDialog), { ssr: false });
@@ -52,17 +63,24 @@ const BookMentorDialog = dynamic(() => import("@/components/dialogs/book-mentor-
 const CreateTeamDialog = dynamic(() => import("@/components/dialogs/create-team-dialog").then(m => m.CreateTeamDialog), { ssr: false });
 const EditTeamDialog = dynamic(() => import("@/components/dialogs/edit-team-dialog").then(m => m.EditTeamDialog), { ssr: false });
 const JoinTeamDialog = dynamic(() => import("@/components/dialogs/join-team-dialog").then(m => m.JoinTeamDialog), { ssr: false });
+const TeamMembersDialog = dynamic(() => import("@/components/dialogs/team-members-dialog").then(m => m.TeamMembersDialog), { ssr: false });
 const HackathonRegistrationDialog = dynamic(() => import("@/components/dialogs/hackathon-registration-dialog").then(m => m.HackathonRegistrationDialog), { ssr: false });
 import { useHackathon } from "@/hooks/use-hackathons";
 import { useHackathonSubmissions } from "@/hooks/use-submissions";
-import { useHackathonTeams, useCreateTeam } from "@/hooks/use-teams";
+import {
+  useHackathonTeams,
+  useCreateTeam,
+  useDeleteTeam,
+  useTransferLeadership,
+} from "@/hooks/use-teams";
 import { useHackathonRegistration, useRegisterForHackathon, useCancelHackathonRegistration, useSaveHackathonDraft, useEditHackathonRegistration, useRespondRsvp } from "@/hooks/use-registrations";
 import { useBookmarkIds, useToggleBookmark } from "@/hooks/use-bookmarks";
 import { usePhases } from "@/hooks/use-phases";
+import { getCurrentSubmissionTarget, type SubmissionTarget } from "@/lib/submission-window";
 import { usePublicWinners, type PublicWinner } from "@/hooks/use-winners";
 import { useMyReviewerPhases } from "@/hooks/use-phase-scoring";
 import { useAuthStore } from "@/store/auth-store";
-import { cn, formatDate, formatCurrency, formatPrizeValue, getTimeRemaining, safeHref } from "@/lib/utils";
+import { cn, formatDate, formatDateTime, formatCurrency, formatPrizeValue, getTimeRemaining, safeHref, getInitials } from "@/lib/utils";
 import {
   distinctSponsorTiers,
   normalizeSponsorTier,
@@ -175,7 +193,13 @@ export default function HackathonDetailPage() {
   const [consentDialogOpen, setConsentDialogOpen] = React.useState(false);
   const [directConsent, setDirectConsent] = React.useState({ dataProcessing: false, marketing: false, thirdParty: false });
   const [selectedTeam, setSelectedTeam] = React.useState<import("@/lib/types").Team | null>(null);
+  const [deleteTeamOpen, setDeleteTeamOpen] = React.useState(false);
+  const [transferTeamOpen, setTransferTeamOpen] = React.useState(false);
+  const [viewTeamOpen, setViewTeamOpen] = React.useState(false);
+  const [transferTargetId, setTransferTargetId] = React.useState<string | null>(null);
   const createTeamMutation = useCreateTeam();
+  const deleteTeamMutation = useDeleteTeam();
+  const transferLeadershipMutation = useTransferLeadership();
 
   // Derived winners state — must be before early returns (Rules of Hooks)
   const winnersAnnounced = winnersData?.announced ?? false;
@@ -205,6 +229,26 @@ export default function HackathonDetailPage() {
     }
     return groups;
   }, [publicWinners]);
+
+  // Current user's team in this hackathon, used to short-circuit join
+  // attempts on other teams with the "you're already on a team" dialog.
+  // Declared before early returns to keep hook order stable.
+  const myCurrentTeam = React.useMemo(() => {
+    if (!user) return null;
+    const teams = teamsData?.data ?? [];
+    const found = teams.find((t) =>
+      t.members.some((m) => m.user.id === user.id)
+    );
+    return found ? { id: found.id, name: found.name } : null;
+  }, [teamsData, user]);
+
+  // Active submission window — phase-aware. Drives the Submissions tab
+  // banner and CTA. Returns kind: "none" when this hackathon doesn't
+  // accept submissions at all.
+  const submissionTarget = React.useMemo<SubmissionTarget | null>(() => {
+    if (!hackathon) return null;
+    return getCurrentSubmissionTarget(hackathon, phasesData?.data ?? []);
+  }, [hackathon, phasesData]);
 
   if (isLoading) {
     return (
@@ -1034,10 +1078,74 @@ export default function HackathonDetailPage() {
                               const isMember = user && team.members.some((m) => m.user.id === user.id);
 
                               if (isLeader) {
+                                const otherMembers = team.members.filter((m) => m.user.id !== user?.id);
                                 return (
-                                  <Button variant="outline" size="sm" className="w-full gap-1.5 mt-3" onClick={() => { setSelectedTeam(team); setEditTeamOpen(true); }}>
-                                    <Pencil className="h-3.5 w-3.5" />
-                                    Edit Team
+                                  <div className="flex gap-1.5 mt-3">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="flex-1 gap-1.5"
+                                      onClick={() => { setSelectedTeam(team); setEditTeamOpen(true); }}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                      Edit Team
+                                    </Button>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          aria-label="More team actions"
+                                          className="px-2"
+                                        >
+                                          <MoreVertical className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem
+                                          onSelect={() => {
+                                            setSelectedTeam(team);
+                                            setViewTeamOpen(true);
+                                          }}
+                                        >
+                                          <Users className="h-4 w-4 mr-2" />
+                                          View Team
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          disabled={otherMembers.length === 0}
+                                          onSelect={() => {
+                                            setSelectedTeam(team);
+                                            setTransferTargetId(null);
+                                            setTransferTeamOpen(true);
+                                          }}
+                                        >
+                                          <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                          Transfer Leadership
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onSelect={() => {
+                                            setSelectedTeam(team);
+                                            setDeleteTeamOpen(true);
+                                          }}
+                                        >
+                                          <Trash2 className="h-4 w-4 mr-2" />
+                                          Delete Team
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                );
+                              }
+
+                              if (isMember) {
+                                return (
+                                  <Button variant="outline" size="sm" className="w-full gap-1.5 mt-3" asChild>
+                                    <Link href={`/dashboard/team/${team.id}`}>
+                                      <Users className="h-3.5 w-3.5" />
+                                      View Members
+                                    </Link>
                                   </Button>
                                 );
                               }
@@ -1071,6 +1179,15 @@ export default function HackathonDetailPage() {
 
               {/* Submissions */}
               {hackathon.submissionsEnabled !== false && canSeeSubmissionsTab && <TabsContent value="submissions" className="mt-6">
+                {/* Current submission target banner */}
+                {submissionTarget && submissionTarget.kind !== "none" && (
+                  <SubmissionTargetBanner
+                    target={submissionTarget}
+                    hackathonId={hackathon.id}
+                    myTeamId={myCurrentTeam?.id ?? null}
+                    submissions={hackSubs}
+                  />
+                )}
                 {!submissionsPubliclyVisible && (
                   <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
                     Submissions are hidden from the public until winners are
@@ -1078,6 +1195,7 @@ export default function HackathonDetailPage() {
                     competition or have submitted to it.
                   </div>
                 )}
+
                 {hackSubs.length === 0 ? (
                   <div className="text-center py-16">
                     <Award className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
@@ -1400,6 +1518,7 @@ export default function HackathonDetailPage() {
         open={joinTeamOpen}
         onOpenChange={setJoinTeamOpen}
         team={selectedTeam}
+        currentTeam={myCurrentTeam}
       />
       {selectedTeam && (
         <EditTeamDialog
@@ -1408,6 +1527,139 @@ export default function HackathonDetailPage() {
           team={selectedTeam}
         />
       )}
+
+      <TeamMembersDialog
+        open={viewTeamOpen}
+        onOpenChange={setViewTeamOpen}
+        team={selectedTeam}
+      />
+
+      <Dialog open={deleteTeamOpen} onOpenChange={setDeleteTeamOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selectedTeam ? selectedTeam.name : "team"}?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the team and all its members
+              {selectedTeam && selectedTeam.members.length > 1
+                ? ` (${selectedTeam.members.length} people will be affected)`
+                : ""}
+              . This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteTeamOpen(false)}
+              disabled={deleteTeamMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteTeamMutation.isPending || !selectedTeam}
+              onClick={async () => {
+                if (!selectedTeam) return;
+                try {
+                  await deleteTeamMutation.mutateAsync(selectedTeam.id);
+                  toast.success(`Team "${selectedTeam.name}" deleted`);
+                  setDeleteTeamOpen(false);
+                  setSelectedTeam(null);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Failed to delete team");
+                }
+              }}
+            >
+              {deleteTeamMutation.isPending ? "Deleting..." : "Delete Team"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={transferTeamOpen}
+        onOpenChange={(open) => {
+          setTransferTeamOpen(open);
+          if (!open) setTransferTargetId(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer leadership</DialogTitle>
+            <DialogDescription>
+              Hand the team over to another member. They&apos;ll gain the
+              ability to edit, invite, and delete the team. You will become a
+              regular member.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedTeam && (
+            <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
+              {selectedTeam.members
+                .filter((m) => m.user.id !== user?.id)
+                .map((m) => {
+                  const selected = transferTargetId === m.user.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setTransferTargetId(m.user.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 rounded-xl p-3 border text-left transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      )}
+                    >
+                      <Avatar size="sm">
+                        <AvatarImage src={m.user.avatar} alt={m.user.name} />
+                        <AvatarFallback>{getInitials(m.user.name)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{m.user.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{m.role}</p>
+                      </div>
+                      {selected && <Crown className="h-4 w-4 text-warning shrink-0" />}
+                    </button>
+                  );
+                })}
+              {selectedTeam.members.filter((m) => m.user.id !== user?.id).length === 0 && (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  You&apos;re the only member. Invite someone else first.
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setTransferTeamOpen(false)}
+              disabled={transferLeadershipMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!transferTargetId || transferLeadershipMutation.isPending || !selectedTeam}
+              onClick={async () => {
+                if (!selectedTeam || !transferTargetId) return;
+                try {
+                  await transferLeadershipMutation.mutateAsync({
+                    teamId: selectedTeam.id,
+                    to_user_id: transferTargetId,
+                  });
+                  const newLeader = selectedTeam.members.find((m) => m.user.id === transferTargetId);
+                  toast.success(`Leadership transferred${newLeader ? ` to ${newLeader.user.name}` : ""}`);
+                  setTransferTeamOpen(false);
+                  setTransferTargetId(null);
+                  setSelectedTeam(null);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Failed to transfer leadership");
+                }
+              }}
+            >
+              {transferLeadershipMutation.isPending ? "Transferring..." : "Transfer Leadership"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {hackathon.registrationFields && hackathon.registrationFields.length > 0 && (
         <HackathonRegistrationDialog
           open={registrationDialogOpen}
@@ -1592,5 +1844,121 @@ export default function HackathonDetailPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// =====================================================
+// Submission target banner
+// =====================================================
+
+function SubmissionTargetBanner({
+  target,
+  hackathonId,
+  myTeamId,
+  submissions,
+}: {
+  target: SubmissionTarget;
+  hackathonId: string;
+  myTeamId: string | null;
+  submissions: import("@/lib/types").Submission[];
+}) {
+  if (target.kind === "none") return null;
+
+  const deadline = target.deadline;
+  const opensAt = target.opensAt;
+  const isPhase = target.kind === "phase";
+  const phaseName = isPhase ? target.phase.name : null;
+
+  const mySubmission = myTeamId
+    ? submissions.find(
+        (s) =>
+          s.teamId === myTeamId &&
+          (target.kind === "phase"
+            ? s.phaseId === target.phaseId
+            : !s.phaseId)
+      )
+    : null;
+
+  const headlineColor =
+    target.status === "active"
+      ? "border-success/30 bg-success/5"
+      : target.status === "upcoming"
+      ? "border-primary/30 bg-primary/5"
+      : "border-border bg-muted/30";
+
+  // Tag teams clearly so they know what they're submitting for.
+  const kindBadge = isPhase ? "Phase submission" : "Overall hackathon submission";
+  const kindBadgeVariant: "outline" | "secondary" = isPhase ? "secondary" : "outline";
+
+  // Date + time strings (e.g. "Tue, Jun 9, 2026 at 8:00 AM").
+  const opensAtLabel = opensAt ? formatDateTime(opensAt) : null;
+  const closesAtLabel = deadline ? formatDateTime(deadline) : null;
+
+  let statusLine: string;
+  if (target.status === "active") {
+    statusLine = closesAtLabel
+      ? `Submissions close on ${closesAtLabel}`
+      : "Submissions are open";
+  } else if (target.status === "upcoming") {
+    statusLine = opensAtLabel
+      ? `Submissions open on ${opensAtLabel}`
+      : "Submissions open soon";
+  } else {
+    statusLine = closesAtLabel
+      ? `Closed on ${closesAtLabel}`
+      : "Submissions closed";
+  }
+
+  return (
+    <Card className={cn("mb-6 overflow-hidden", headlineColor)}>
+      <CardContent className="p-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <Badge variant={kindBadgeVariant} className="text-xs">
+              {kindBadge}
+            </Badge>
+            <span className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {target.status === "active"
+                ? "Now open"
+                : target.status === "upcoming"
+                ? "Upcoming"
+                : "Closed"}
+            </span>
+          </div>
+          <h3 className="font-display text-lg font-bold truncate">
+            {phaseName ?? "Project submission"}
+          </h3>
+          <p className="text-sm text-muted-foreground mt-0.5">{statusLine}</p>
+          {/* When upcoming, also show the closing time so teams plan ahead. */}
+          {target.status === "upcoming" && closesAtLabel && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Closes on {closesAtLabel}
+            </p>
+          )}
+          {/* When active, also show when the window opened for context. */}
+          {target.status === "active" && opensAtLabel && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Opened on {opensAtLabel}
+            </p>
+          )}
+        </div>
+        {myTeamId && target.status === "active" && (
+          <Button asChild className="shrink-0">
+            <Link
+              href={
+                mySubmission
+                  ? `/dashboard/submissions/${mySubmission.id}/edit`
+                  : `/dashboard/submissions/new?hackathonId=${hackathonId}&teamId=${myTeamId}${
+                      isPhase ? `&phaseId=${target.phaseId}` : ""
+                    }`
+              }
+            >
+              {mySubmission ? "Edit submission" : "Submit your project"}
+            </Link>
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }

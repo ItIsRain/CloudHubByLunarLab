@@ -34,12 +34,43 @@ export async function POST(
     // Check team capacity and password
     const { data: team, error: teamError } = await supabase
       .from("teams")
-      .select("hackathon_id, max_size, join_password, team_members(id)")
+      .select("hackathon_id, max_size, join_password, team_members(id, user_id)")
       .eq("id", teamId)
       .single();
 
     if (teamError) {
       return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    }
+
+    // Reject if user is already on any team in this hackathon. Return a
+    // structured payload so the client can render an actionable dialog
+    // ("leave that team first") instead of a generic error toast.
+    const { data: existingMemberships } = await supabase
+      .from("team_members")
+      .select("team_id, teams!inner(id, name, hackathon_id)")
+      .eq("user_id", userId)
+      .eq("teams.hackathon_id", team.hackathon_id);
+
+    if (existingMemberships && existingMemberships.length > 0) {
+      const firstRow = existingMemberships[0] as Record<string, unknown>;
+      const joined = firstRow.teams as
+        | { id: string; name: string }
+        | { id: string; name: string }[]
+        | null;
+      const existingTeam = Array.isArray(joined) ? joined[0] : joined;
+      const alreadyOnTargetTeam = existingTeam?.id === teamId;
+      return NextResponse.json(
+        {
+          error: alreadyOnTargetTeam
+            ? "You are already a member of this team"
+            : `You are already on team "${existingTeam?.name ?? "another team"}" for this competition. Leave it before joining a different team.`,
+          code: "already_in_team",
+          existingTeam: existingTeam
+            ? { id: existingTeam.id, name: existingTeam.name }
+            : null,
+        },
+        { status: 409 }
+      );
     }
 
     // Verify team formation window is open

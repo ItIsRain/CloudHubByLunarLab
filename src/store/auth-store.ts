@@ -147,8 +147,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // to avoid circular dependencies.
     if (typeof window !== "undefined") {
       try {
-        const { queryClient } = await import("@/providers/query-provider");
-        queryClient.clear();
+        const { getBrowserQueryClient } = await import("@/providers/query-provider");
+        getBrowserQueryClient().clear();
       } catch (err) {
         console.warn("Failed to clear query cache on logout:", err);
       }
@@ -217,8 +217,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // Clear TanStack Query cache (same as logout)
     if (typeof window !== "undefined") {
       try {
-        const { queryClient } = await import("@/providers/query-provider");
-        queryClient.clear();
+        const { getBrowserQueryClient } = await import("@/providers/query-provider");
+        getBrowserQueryClient().clear();
       } catch (err) {
         console.warn("Failed to clear query cache on account delete:", err);
       }

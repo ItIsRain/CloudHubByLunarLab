@@ -18,6 +18,7 @@ import { CategoryMultiSelect } from "@/components/forms/category-multi-select";
 import { DateTimePicker } from "@/components/forms/date-time-picker";
 import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { useUpdateHackathon } from "@/hooks/use-hackathons";
+import { usePhases } from "@/hooks/use-phases";
 import { toast } from "sonner";
 import { cn, slugify } from "@/lib/utils";
 import type { Hackathon, FormField, FormFieldType } from "@/lib/types";
@@ -51,6 +52,13 @@ const selectClasses =
 
 export function EditTab({ hackathon, hackathonId }: EditTabProps) {
   const updateHackathon = useUpdateHackathon();
+  const { data: phasesData } = usePhases(hackathonId);
+  // Phases override the global submission_deadline once any of them opt
+  // into collecting a per-phase submission. We surface that state next
+  // to the field so organizers know why it's effectively inert.
+  const phaseSubmissionsOverride = (phasesData?.data ?? []).some(
+    (p) => p.submissionsEnabled === true
+  );
 
   const [formData, setFormData] = React.useState({
     name: "",
@@ -303,15 +311,35 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Submission Deadline
-                </label>
-                <DateTimePicker
-                  value={formData.submissionDeadline}
-                  onChange={(val) =>
-                    setFormData((prev) => ({ ...prev, submissionDeadline: val }))
-                  }
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-sm font-medium">
+                    Submission Deadline
+                  </label>
+                  {phaseSubmissionsOverride && (
+                    <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                      Overridden by phases
+                    </Badge>
+                  )}
+                </div>
+                <div
+                  className={cn(
+                    phaseSubmissionsOverride && "opacity-60"
+                  )}
+                >
+                  <DateTimePicker
+                    value={formData.submissionDeadline}
+                    onChange={(val) =>
+                      setFormData((prev) => ({ ...prev, submissionDeadline: val }))
+                    }
+                  />
+                </div>
+                {phaseSubmissionsOverride && (
+                  <p className="text-xs text-muted-foreground">
+                    A phase has &ldquo;Require a new submission&rdquo; turned on, so
+                    submissions follow that phase&apos;s window instead of this
+                    deadline. The value is kept but inactive.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Judging Starts</label>

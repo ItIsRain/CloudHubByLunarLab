@@ -22,26 +22,33 @@ function makeQueryClient() {
 
 let browserQueryClient: QueryClient | undefined = undefined;
 
-function getQueryClient() {
+function getQueryClient(): QueryClient {
   if (typeof window === "undefined") {
-    // Server: always make a new query client
+    // Server: always make a new query client per request to avoid cross-
+    // request state leaks.
     return makeQueryClient();
-  } else {
-    // Browser: make a new query client if we don't already have one
-    if (!browserQueryClient) browserQueryClient = makeQueryClient();
-    return browserQueryClient;
   }
+  if (!browserQueryClient) browserQueryClient = makeQueryClient();
+  return browserQueryClient;
 }
 
-/** Exported so the auth store can clear cache on logout */
-export const queryClient: QueryClient = getQueryClient();
+/**
+ * Lazy accessor for the browser-side query client. Use this from non-React
+ * code (e.g. the auth store on logout) instead of importing a module-level
+ * instance — eagerly creating one at module load can race with React 19/Next
+ * 16 SSR and break the QueryClientProvider context wiring.
+ */
+export function getBrowserQueryClient(): QueryClient {
+  return getQueryClient();
+}
 
 interface QueryProviderProps {
   children: React.ReactNode;
 }
 
 export function QueryProvider({ children }: QueryProviderProps) {
-  return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
+  // Stable per-tree client. On the server this creates a fresh client per
+  // render pass; on the client it reuses the cached browser singleton.
+  const [client] = React.useState(() => getQueryClient());
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

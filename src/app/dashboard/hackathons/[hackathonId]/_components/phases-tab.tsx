@@ -853,6 +853,12 @@ interface PhaseFormState {
   description: string;
   phaseType: PhaseType;
   evaluationMode: 'application' | 'submission';
+  /**
+   * When true, this phase collects a brand-new submission from each team
+   * inside its submission window. When false, the phase only reviews
+   * whatever submission already exists (or the hackathon's global one).
+   */
+  submissionsEnabled: boolean;
   campusFilter: string;
   startDate: string;
   endDate: string;
@@ -872,6 +878,7 @@ const defaultFormState: PhaseFormState = {
   description: "",
   phaseType: "bootcamp",
   evaluationMode: "application",
+  submissionsEnabled: false,
   campusFilter: "",
   startDate: "",
   endDate: "",
@@ -924,6 +931,7 @@ function CreatePhaseDialog({
         description: editingPhase.description ?? "",
         phaseType: editingPhase.phaseType,
         evaluationMode: editingPhase.evaluationMode ?? "application",
+        submissionsEnabled: editingPhase.submissionsEnabled === true,
         campusFilter: editingPhase.campusFilter ?? "",
         startDate: toDatetimeLocal(editingPhase.startDate),
         endDate: toDatetimeLocal(editingPhase.endDate),
@@ -984,6 +992,7 @@ function CreatePhaseDialog({
       description: form.description.trim() || undefined,
       phaseType: form.phaseType,
       evaluationMode: form.evaluationMode,
+      submissionsEnabled: form.submissionsEnabled,
       campusFilter: form.campusFilter || null,
       startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
       endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
@@ -1115,14 +1124,38 @@ function CreatePhaseDialog({
           {/* Submission window (only for submission mode) */}
           {form.evaluationMode === "submission" && (
             <>
-              {(hackathon.submissionFields?.length ?? 0) === 0 && (
-                <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
-                  <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
-                  <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                    No submission form fields configured yet. Go to the Submissions tab to set up the form teams will fill out.
-                  </p>
-                </div>
-              )}
+              <label className="flex items-start gap-3 rounded-lg border border-input p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-input"
+                  checked={form.submissionsEnabled}
+                  onChange={(e) =>
+                    updateField("submissionsEnabled", e.target.checked)
+                  }
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">
+                    Require a new submission for this phase
+                  </span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">
+                    When on, this phase opens its own submission window with the
+                    deadline below — teams submit again for this round. When off,
+                    judges score whatever was submitted in a prior phase (or the
+                    hackathon-level submission).
+                  </span>
+                </span>
+              </label>
+
+              {form.submissionsEnabled &&
+                (hackathon.submissionFields?.length ?? 0) === 0 && (
+                  <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+                    <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                      No submission form fields configured yet. Go to the
+                      Submissions tab to set up the form teams will fill out.
+                    </p>
+                  </div>
+                )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Submission Opens</label>

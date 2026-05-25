@@ -142,6 +142,27 @@ export function useDeleteTeam() {
   });
 }
 
+export class JoinTeamError extends Error {
+  code?: string;
+  existingTeam?: { id: string; name: string } | null;
+  status?: number;
+
+  constructor(
+    message: string,
+    options: {
+      code?: string;
+      existingTeam?: { id: string; name: string } | null;
+      status?: number;
+    } = {}
+  ) {
+    super(message);
+    this.name = "JoinTeamError";
+    this.code = options.code;
+    this.existingTeam = options.existingTeam;
+    this.status = options.status;
+  }
+}
+
 export function useJoinTeam() {
   const queryClient = useQueryClient();
 
@@ -163,10 +184,49 @@ export function useJoinTeam() {
         body: JSON.stringify({ user_id, role, password }),
       });
       if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json.error || "Failed to join team");
+        const json = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          code?: string;
+          existingTeam?: { id: string; name: string } | null;
+        };
+        throw new JoinTeamError(json.error || "Failed to join team", {
+          code: json.code,
+          existingTeam: json.existingTeam,
+          status: res.status,
+        });
       }
       return res.json() as Promise<{ data: Team }>;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({
+        queryKey: ["teams", variables.teamId],
+      });
+    },
+  });
+}
+
+export function useTransferLeadership() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      teamId,
+      to_user_id,
+    }: {
+      teamId: string;
+      to_user_id: string;
+    }) => {
+      const res = await fetch(`/api/teams/${teamId}/transfer-leadership`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to_user_id }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Failed to transfer leadership");
+      }
+      return res.json();
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });

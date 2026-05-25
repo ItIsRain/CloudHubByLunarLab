@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { dbRowToSubmission, submissionFormToDbRow } from "@/lib/supabase/mappers";
-import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
-import { canSubmit, getPhaseMessage, submissionsArePubliclyVisible } from "@/lib/hackathon-phases";
+import {
+  dbRowToCompetitionPhase,
+  dbRowToHackathon,
+  dbRowToSubmission,
+  submissionFormToDbRow,
+} from "@/lib/supabase/mappers";
+import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
+import { submissionsArePubliclyVisible } from "@/lib/hackathon-phases";
+import { getCurrentSubmissionTarget } from "@/lib/submission-window";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 
@@ -219,14 +225,48 @@ export async function PATCH(
       }
     }
 
-    // If status is being set to "submitted", enforce submission deadline
+    // If status is being set to "submitted", enforce the active submission
+    // window — phase-level when phases own submissions, hackathon-level
+    // otherwise.
     if (updates.status === "submitted") {
-      const timeline = await getHackathonTimeline(supabase, submission.hackathon_id);
-      if (timeline && !canSubmit(timeline)) {
-        return NextResponse.json(
-          { error: getPhaseMessage(timeline, "submit") },
-          { status: 403 }
+      const [hackRes, phasesRes] = await Promise.all([
+        supabase
+          .from("hackathons")
+          .select("*")
+          .eq("id", submission.hackathon_id)
+          .single(),
+        supabase
+          .from("competition_phases")
+          .select("*")
+          .eq("hackathon_id", submission.hackathon_id),
+      ]);
+
+      if (hackRes.data) {
+        const hackathon = dbRowToHackathon(
+          hackRes.data as Record<string, unknown>
         );
+        const phases = (phasesRes.data || []).map((r) =>
+          dbRowToCompetitionPhase(r as Record<string, unknown>)
+        );
+        const target = getCurrentSubmissionTarget(hackathon, phases);
+
+        if (target.kind === "none") {
+          return NextResponse.json(
+            { error: "This competition does not accept submissions." },
+            { status: 403 }
+          );
+        }
+        if (target.status !== "active") {
+          return NextResponse.json(
+            {
+              error:
+                target.status === "upcoming"
+                  ? "Submissions have not opened yet."
+                  : "Submissions are closed.",
+            },
+            { status: 403 }
+          );
+        }
       }
       if (!updates.submitted_at) {
         updates.submitted_at = new Date().toISOString();

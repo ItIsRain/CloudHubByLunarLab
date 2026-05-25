@@ -18,19 +18,46 @@ import {
   Loader2,
   X,
   Zap,
+  MoreVertical,
+  ArrowRightLeft,
+  Trash2,
+  Crown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import dynamic from "next/dynamic";
 const CreateTeamDialog = dynamic(() => import("@/components/dialogs/create-team-dialog").then(m => m.CreateTeamDialog), { ssr: false });
 const JoinTeamDialog = dynamic(() => import("@/components/dialogs/join-team-dialog").then(m => m.JoinTeamDialog), { ssr: false });
+const TeamMembersDialog = dynamic(() => import("@/components/dialogs/team-members-dialog").then(m => m.TeamMembersDialog), { ssr: false });
 const EditTeamDialog = dynamic(() => import("@/components/dialogs/edit-team-dialog").then(m => m.EditTeamDialog), { ssr: false });
 import { cn, getInitials } from "@/lib/utils";
 import { useHackathon } from "@/hooks/use-hackathons";
-import { useHackathonTeams, useCreateTeam, useAutoMatch, useTeamSuggestions } from "@/hooks/use-teams";
+import {
+  useHackathonTeams,
+  useCreateTeam,
+  useAutoMatch,
+  useTeamSuggestions,
+  useDeleteTeam,
+  useTransferLeadership,
+} from "@/hooks/use-teams";
 import { useHackathonRegistration } from "@/hooks/use-registrations";
 import { useHackathonPhase } from "@/hooks/use-hackathon-phase";
 import { useAuthStore } from "@/store/auth-store";
@@ -50,9 +77,15 @@ export default function TeamsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showTransferDialog, setShowTransferDialog] = useState(false);
+  const [showViewDialog, setShowViewDialog] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const user = useAuthStore((s) => s.user);
+  const deleteTeam = useDeleteTeam();
+  const transferLeadership = useTransferLeadership();
 
   const { data: hackathonData, isLoading } = useHackathon(hackathonId);
   const hackathon = hackathonData?.data;
@@ -79,6 +112,17 @@ export default function TeamsPage() {
     });
   }, [allTeams, search, statusFilter]);
 
+  // The current user's team in this hackathon (if any). Used to pre-empt
+  // join attempts with a "you're already on a team" dialog instead of the
+  // normal join UI.
+  const myTeam = useMemo(() => {
+    if (!user) return null;
+    const found = allTeams.find((t) =>
+      t.members.some((m) => m.user.id === user.id)
+    );
+    return found ? { id: found.id, name: found.name } : null;
+  }, [allTeams, user]);
+
   const createTeamMutation = useCreateTeam();
 
   const handleCreateTeam = async (data: { name: string; description?: string; maxSize: number; lookingForRoles: string[]; joinPassword?: string }) => {
@@ -94,6 +138,41 @@ export default function TeamsPage() {
       toast.success(`Team "${data.name}" created successfully!`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create team");
+    }
+  };
+
+  const handleDeleteTeam = async () => {
+    if (!selectedTeam) return;
+    try {
+      await deleteTeam.mutateAsync(selectedTeam.id);
+      toast.success(`Team "${selectedTeam.name}" deleted`);
+      setShowDeleteDialog(false);
+      setSelectedTeam(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete team");
+    }
+  };
+
+  const handleTransferLeadership = async () => {
+    if (!selectedTeam || !transferTargetId) return;
+    try {
+      await transferLeadership.mutateAsync({
+        teamId: selectedTeam.id,
+        to_user_id: transferTargetId,
+      });
+      const newLeader = selectedTeam.members.find(
+        (m) => m.user.id === transferTargetId
+      );
+      toast.success(
+        `Leadership transferred${newLeader ? ` to ${newLeader.user.name}` : ""}`
+      );
+      setShowTransferDialog(false);
+      setTransferTargetId(null);
+      setSelectedTeam(null);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to transfer leadership"
+      );
     }
   };
 
@@ -366,18 +445,84 @@ export default function TeamsPage() {
                         const isMember = user && team.members.some((m) => m.user.id === user.id);
 
                         if (isLeader) {
+                          const otherMembers = team.members.filter(
+                            (m) => m.user.id !== user?.id
+                          );
+                          return (
+                            <div className="flex gap-1.5">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 gap-1.5"
+                                onClick={() => {
+                                  setSelectedTeam(team);
+                                  setShowEditDialog(true);
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                Edit Team
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    aria-label="More team actions"
+                                    className="px-2"
+                                  >
+                                    <MoreVertical className="h-3.5 w-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      setSelectedTeam(team);
+                                      setShowViewDialog(true);
+                                    }}
+                                  >
+                                    <Users className="h-4 w-4 mr-2" />
+                                    View Team
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    disabled={otherMembers.length === 0}
+                                    onSelect={() => {
+                                      setSelectedTeam(team);
+                                      setTransferTargetId(null);
+                                      setShowTransferDialog(true);
+                                    }}
+                                  >
+                                    <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                    Transfer Leadership
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onSelect={() => {
+                                      setSelectedTeam(team);
+                                      setShowDeleteDialog(true);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete Team
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          );
+                        }
+
+                        if (isMember) {
                           return (
                             <Button
                               variant="outline"
                               size="sm"
                               className="w-full gap-1.5"
-                              onClick={() => {
-                                setSelectedTeam(team);
-                                setShowEditDialog(true);
-                              }}
+                              asChild
                             >
-                              <Pencil className="h-3.5 w-3.5" />
-                              Edit Team
+                              <Link href={`/dashboard/team/${team.id}`}>
+                                <Users className="h-3.5 w-3.5" />
+                                View Members
+                              </Link>
                             </Button>
                           );
                         }
@@ -434,6 +579,7 @@ export default function TeamsPage() {
         open={showJoinDialog}
         onOpenChange={setShowJoinDialog}
         team={selectedTeam}
+        currentTeam={myTeam}
       />
       {selectedTeam && (
         <EditTeamDialog
@@ -442,6 +588,125 @@ export default function TeamsPage() {
           team={selectedTeam}
         />
       )}
+
+      <TeamMembersDialog
+        open={showViewDialog}
+        onOpenChange={setShowViewDialog}
+        team={selectedTeam}
+      />
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selectedTeam ? selectedTeam.name : "team"}?
+            </DialogTitle>
+            <DialogDescription>
+              This permanently removes the team and all its members
+              {selectedTeam && selectedTeam.members.length > 1
+                ? ` (${selectedTeam.members.length} people will be affected)`
+                : ""}
+              . This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={deleteTeam.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteTeam}
+              disabled={deleteTeam.isPending}
+            >
+              {deleteTeam.isPending ? "Deleting..." : "Delete Team"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showTransferDialog}
+        onOpenChange={(open) => {
+          setShowTransferDialog(open);
+          if (!open) setTransferTargetId(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer leadership</DialogTitle>
+            <DialogDescription>
+              Hand the team over to another member. They&apos;ll gain the
+              ability to edit, invite, and delete the team. You will become a
+              regular member.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedTeam && (
+            <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
+              {selectedTeam.members
+                .filter((m) => m.user.id !== user?.id)
+                .map((m) => {
+                  const selected = transferTargetId === m.user.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setTransferTargetId(m.user.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 rounded-xl p-3 border text-left transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      )}
+                    >
+                      <Avatar size="sm">
+                        <AvatarImage src={m.user.avatar} alt={m.user.name} />
+                        <AvatarFallback>{getInitials(m.user.name)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">
+                          {m.user.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {m.role}
+                        </p>
+                      </div>
+                      {selected && (
+                        <Crown className="h-4 w-4 text-warning shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              {selectedTeam.members.filter((m) => m.user.id !== user?.id)
+                .length === 0 && (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  You&apos;re the only member. Invite someone else first.
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setShowTransferDialog(false)}
+              disabled={transferLeadership.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleTransferLeadership}
+              disabled={!transferTargetId || transferLeadership.isPending}
+            >
+              {transferLeadership.isPending
+                ? "Transferring..."
+                : "Transfer Leadership"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

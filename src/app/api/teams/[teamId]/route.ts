@@ -42,8 +42,17 @@ export async function GET(
       }
     }
 
+    // Only expose teammate emails to other members of the same team.
+    const rawMembers =
+      ((data as Record<string, unknown>).team_members as
+        | Record<string, unknown>[]
+        | undefined) ?? [];
+    const isTeammate = rawMembers.some((m) => m.user_id === user.id);
+
     return NextResponse.json({
-      data: dbRowToTeam(data as Record<string, unknown>),
+      data: dbRowToTeam(data as Record<string, unknown>, {
+        includeMemberEmails: isTeammate,
+      }),
     });
   } catch (err) {
     console.error(err);

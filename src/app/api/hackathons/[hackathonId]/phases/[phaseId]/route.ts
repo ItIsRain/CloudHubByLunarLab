@@ -220,9 +220,12 @@ export async function GET(
         reviewerCount: mappedPhase.reviewerCount,
         campusFilter: null, // Hide from reviewers
         registrationFields: hackathonFields?.registration_fields || [],
-        submissionFields: mappedPhase.evaluationMode === "submission"
-          ? (hackathonFields?.submission_fields || [])
-          : [],
+        submissionFields:
+          mappedPhase.evaluationMode === "submission"
+            ? (mappedPhase.submissionFields && mappedPhase.submissionFields.length > 0
+                ? mappedPhase.submissionFields
+                : hackathonFields?.submission_fields || [])
+            : [],
       },
     });
   } catch (err) {
@@ -603,6 +606,31 @@ export async function PATCH(
       }
     }
 
+    if (
+      body.submissionsEnabled !== undefined &&
+      typeof body.submissionsEnabled !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "submissionsEnabled must be a boolean" },
+        { status: 400 }
+      );
+    }
+
+    if (body.submissionFields !== undefined) {
+      const { validateFormFields } = await import("@/lib/form-fields-validator");
+      const err = validateFormFields(body.submissionFields, {
+        fieldName: "submissionFields",
+      });
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+    }
+    if (body.submissionSections !== undefined) {
+      const { validateFormSections } = await import("@/lib/form-fields-validator");
+      const err = validateFormSections(body.submissionSections, {
+        fieldName: "submissionSections",
+      });
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+    }
+
     // Validate submission dates when provided
     if (body.submissionStart !== undefined || body.submissionEnd !== undefined) {
       const existingRow = existing as Record<string, unknown>;
@@ -662,6 +690,9 @@ export async function PATCH(
       ...(body.endDate !== undefined && { endDate: body.endDate }),
       ...(body.submissionStart !== undefined && { submissionStart: body.submissionStart }),
       ...(body.submissionEnd !== undefined && { submissionEnd: body.submissionEnd }),
+      ...(body.submissionsEnabled !== undefined && { submissionsEnabled: body.submissionsEnabled }),
+      ...(body.submissionFields !== undefined && { submissionFields: body.submissionFields }),
+      ...(body.submissionSections !== undefined && { submissionSections: body.submissionSections }),
       ...(body.location !== undefined && { location: body.location }),
       ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
       ...(body.status !== undefined && { status: body.status }),

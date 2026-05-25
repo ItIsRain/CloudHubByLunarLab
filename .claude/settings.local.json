@@ -170,7 +170,14 @@
       "Bash(git stash *)",
       "mcp__plugin_supabase_supabase__list_projects",
       "PowerShell(Get-Content *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(git remote *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(xargs grep *)",
+      "Bash(git show *)",
+      "Bash(git pull *)",
+      "Bash(grep -n *)",
+      "Bash(GIT_EDITOR=true git rebase --continue)"
     ]
   }
 }

@@ -486,6 +486,31 @@ export async function POST(
       );
     }
 
+    if (
+      body.submissionsEnabled !== undefined &&
+      typeof body.submissionsEnabled !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "submissionsEnabled must be a boolean" },
+        { status: 400 }
+      );
+    }
+
+    if (body.submissionFields !== undefined) {
+      const { validateFormFields } = await import("@/lib/form-fields-validator");
+      const err = validateFormFields(body.submissionFields, {
+        fieldName: "submissionFields",
+      });
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+    }
+    if (body.submissionSections !== undefined) {
+      const { validateFormSections } = await import("@/lib/form-fields-validator");
+      const err = validateFormSections(body.submissionSections, {
+        fieldName: "submissionSections",
+      });
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+    }
+
     // Validate submission dates when in submission mode
     if (body.evaluationMode === "submission" || body.submissionStart || body.submissionEnd) {
       const subStart = body.submissionStart ? new Date(body.submissionStart).getTime() : null;
@@ -530,6 +555,9 @@ export async function POST(
       endDate: body.endDate ?? null,
       submissionStart: body.submissionStart ?? null,
       submissionEnd: body.submissionEnd ?? null,
+      submissionsEnabled: body.submissionsEnabled ?? false,
+      submissionFields: body.submissionFields ?? [],
+      submissionSections: body.submissionSections ?? [],
       location: body.location ?? null,
       sortOrder: body.sortOrder ?? 0,
       advanceTopN: body.advanceTopN ?? null,
