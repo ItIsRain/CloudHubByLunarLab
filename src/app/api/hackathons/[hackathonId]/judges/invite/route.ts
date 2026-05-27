@@ -5,6 +5,7 @@ import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
+import { getSiteUrl } from "@/lib/site-url";
 
 export async function POST(
   request: NextRequest,
@@ -111,7 +112,7 @@ export async function POST(
 
     const token = invitation.token as string;
     const hackathonName = hackathon.name as string;
-    const judgeUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/judge/${hackathonId}?token=${token}`;
+    const judgeUrl = `${getSiteUrl(request)}/judge/${hackathonId}?token=${token}`;
 
     await sendEmail({
       to: email,

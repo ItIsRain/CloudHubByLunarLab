@@ -527,7 +527,7 @@ export default function HackathonDetailPage() {
                     <Button size="sm" asChild>
                       <Link href={`/judge/${hackathon.id}`}>
                         <Gavel className="h-4 w-4 mr-1" />
-                        Judge
+                        Manage Judging
                       </Link>
                     </Button>
                   ) : isRejected ? (

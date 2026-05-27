@@ -4,8 +4,8 @@ import { sendMentorInvitationEmail } from "@/lib/resend";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
+import { getSiteUrl } from "@/lib/site-url";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
@@ -113,7 +113,7 @@ export async function POST(
       return NextResponse.json({ error: "Failed to create invitation" }, { status: 500 });
     }
 
-    const acceptUrl = `${SITE_URL}/hackathons/${hackathonId}/mentors/accept?token=${invitation.invitation_token}`;
+    const acceptUrl = `${getSiteUrl(request)}/hackathons/${hackathonId}/mentors/accept?token=${invitation.invitation_token}`;
 
     await sendMentorInvitationEmail({
       to: email,
