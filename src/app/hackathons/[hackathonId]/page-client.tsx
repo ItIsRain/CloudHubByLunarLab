@@ -155,8 +155,14 @@ export default function HackathonDetailPage() {
   const { data: myMentorshipsData } = useMyMentorships();
   // Accepted mentors for this hackathon (the new roster) — shown in the
   // Mentors tab with real booking. Supersedes the legacy hackathon.mentors blob.
-  const { data: rosterMentorsData } = useHackathonMentors(hackathonId);
-  const acceptedMentors = rosterMentorsData?.data ?? [];
+  // Use the resolved UUID (hackathon.id), not the URL param, which may be a
+  // slug — the mentors API only accepts a UUID.
+  const { data: rosterMentorsData } = useHackathonMentors(hackathon?.id);
+  // Public tab shows ACCEPTED mentors only (the API returns all statuses to the
+  // organizer, so filter client-side for a consistent public view).
+  const acceptedMentors = (rosterMentorsData?.data ?? []).filter(
+    (m) => m.status === "accepted"
+  );
   // Controlled tab state so the mobile <select> dropdown and the desktop
   // TabsList drive the same value. Initial value defers to "winners" if the
   // hackathon is finished with announced winners, otherwise "overview".

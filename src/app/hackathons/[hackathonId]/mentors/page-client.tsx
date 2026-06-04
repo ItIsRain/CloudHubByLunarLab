@@ -79,7 +79,8 @@ export default function HackathonMentorsPage() {
     );
   }
 
-  const mentors = mentorsData?.data ?? [];
+  // Accepted mentors only — the roster API returns all statuses to the organizer.
+  const mentors = (mentorsData?.data ?? []).filter((m) => m.status === "accepted");
 
   function handleBook(mentor: HackathonMentor) {
     if (!isAuthenticated) {
