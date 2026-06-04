@@ -60,7 +60,7 @@ import {
 import dynamic from "next/dynamic";
 const ShareDialog = dynamic(() => import("@/components/dialogs/share-dialog").then(m => m.ShareDialog), { ssr: false });
 const AddToCalendarDialog = dynamic(() => import("@/components/dialogs/add-to-calendar-dialog").then(m => m.AddToCalendarDialog), { ssr: false });
-const BookMentorDialog = dynamic(() => import("@/components/dialogs/book-mentor-dialog").then(m => m.BookMentorDialog), { ssr: false });
+const MentorSessionBookingDialog = dynamic(() => import("@/components/dialogs/mentor-session-booking-dialog").then(m => m.MentorSessionBookingDialog), { ssr: false });
 const CreateTeamDialog = dynamic(() => import("@/components/dialogs/create-team-dialog").then(m => m.CreateTeamDialog), { ssr: false });
 const EditTeamDialog = dynamic(() => import("@/components/dialogs/edit-team-dialog").then(m => m.EditTeamDialog), { ssr: false });
 const JoinTeamDialog = dynamic(() => import("@/components/dialogs/join-team-dialog").then(m => m.JoinTeamDialog), { ssr: false });
@@ -80,7 +80,7 @@ import { usePhases } from "@/hooks/use-phases";
 import { getCurrentSubmissionTarget, type SubmissionTarget } from "@/lib/submission-window";
 import { usePublicWinners, type PublicWinner } from "@/hooks/use-winners";
 import { useMyReviewerPhases } from "@/hooks/use-phase-scoring";
-import { useMyMentorships } from "@/hooks/use-mentorship";
+import { useMyMentorships, useHackathonMentors } from "@/hooks/use-mentorship";
 import { useAuthStore } from "@/store/auth-store";
 import { cn, formatDate, formatDateTime, formatCurrency, formatPrizeValue, getTimeRemaining, safeHref, getInitials } from "@/lib/utils";
 import {
@@ -153,6 +153,10 @@ export default function HackathonDetailPage() {
   // Mentorships across all hackathons for this user — decides whether to show
   // the "Manage Mentorship" header button. Called unconditionally (Rules of Hooks).
   const { data: myMentorshipsData } = useMyMentorships();
+  // Accepted mentors for this hackathon (the new roster) — shown in the
+  // Mentors tab with real booking. Supersedes the legacy hackathon.mentors blob.
+  const { data: rosterMentorsData } = useHackathonMentors(hackathonId);
+  const acceptedMentors = rosterMentorsData?.data ?? [];
   // Controlled tab state so the mobile <select> dropdown and the desktop
   // TabsList drive the same value. Initial value defers to "winners" if the
   // hackathon is finished with announced winners, otherwise "overview".
@@ -190,7 +194,7 @@ export default function HackathonDetailPage() {
   const [shareOpen, setShareOpen] = React.useState(false);
   const [calendarOpen, setCalendarOpen] = React.useState(false);
   const [mentorDialogOpen, setMentorDialogOpen] = React.useState(false);
-  const [selectedMentor, setSelectedMentor] = React.useState<string | null>(null);
+  const [selectedMentor, setSelectedMentor] = React.useState<import("@/lib/types").HackathonMentor | null>(null);
   const [createTeamOpen, setCreateTeamOpen] = React.useState(false);
   const [editTeamOpen, setEditTeamOpen] = React.useState(false);
   const [joinTeamOpen, setJoinTeamOpen] = React.useState(false);
@@ -710,7 +714,7 @@ export default function HackathonDetailPage() {
                   {winnersAnnounced && publicWinners.length > 0 && (
                     <option value="winners">🏆 Winners ({publicWinners.length})</option>
                   )}
-                  {hackathon.mentors.length > 0 && (
+                  {acceptedMentors.length > 0 && (
                     <option value="mentors">Mentors</option>
                   )}
                   <option value="sponsors">Sponsors</option>
@@ -729,7 +733,7 @@ export default function HackathonDetailPage() {
                     Winners ({publicWinners.length})
                   </TabsTrigger>
                 )}
-                {hackathon.mentors.length > 0 && <TabsTrigger value="mentors">Mentors</TabsTrigger>}
+                {acceptedMentors.length > 0 && <TabsTrigger value="mentors">Mentors</TabsTrigger>}
                 <TabsTrigger value="sponsors">Sponsors</TabsTrigger>
                 <TabsTrigger value="faq">FAQ</TabsTrigger>
               </TabsList>
@@ -1377,41 +1381,45 @@ export default function HackathonDetailPage() {
                 </TabsContent>
               )}
 
-              {/* Mentors */}
-              {hackathon.mentors.length > 0 && (
+              {/* Mentors (accepted roster — real booking) */}
+              {acceptedMentors.length > 0 && (
                 <TabsContent value="mentors" className="mt-6">
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {hackathon.mentors.map((mentor, i) => (
-                      <motion.div key={mentor.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                        <Card className="hover:shadow-md transition-shadow">
-                          <CardContent className="p-6 text-center">
-                            <Avatar className="h-20 w-20 mx-auto mb-3">
-                              <AvatarImage src={mentor.user.avatar} />
-                              <AvatarFallback className="text-xl">{mentor.user.name.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            <h4 className="font-display text-lg font-bold">{mentor.user.name}</h4>
-                            <p className="text-sm text-muted-foreground">{mentor.user.headline}</p>
-                            {mentor.bio && <p className="text-xs text-muted-foreground mt-2">{mentor.bio}</p>}
-                            <div className="flex flex-wrap gap-1 justify-center mt-3">
-                              {mentor.expertise.map((e) => (
-                                <Badge key={e} variant="secondary" className="text-xs">{e}</Badge>
-                              ))}
-                            </div>
-                            <Button
-                              size="sm"
-                              className="mt-4"
-                              onClick={() => {
-                                setSelectedMentor(mentor.id);
-                                setMentorDialogOpen(true);
-                              }}
-                            >
-                              <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
-                              Book Session
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
+                    {acceptedMentors.map((mentor, i) => {
+                      const mentorName = mentor.user?.name || mentor.name;
+                      return (
+                        <motion.div key={mentor.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                          <Card className="hover:shadow-md transition-shadow">
+                            <CardContent className="p-6 text-center">
+                              <Avatar className="h-20 w-20 mx-auto mb-3">
+                                <AvatarImage src={mentor.user?.avatar} />
+                                <AvatarFallback className="text-xl">{mentorName.charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              <h4 className="font-display text-lg font-bold">{mentorName}</h4>
+                              {mentor.user?.headline && <p className="text-sm text-muted-foreground">{mentor.user.headline}</p>}
+                              {mentor.bio && <p className="text-xs text-muted-foreground mt-2">{mentor.bio}</p>}
+                              <div className="flex flex-wrap gap-1 justify-center mt-3">
+                                {mentor.expertise.map((e) => (
+                                  <Badge key={e} variant="secondary" className="text-xs">{e}</Badge>
+                                ))}
+                              </div>
+                              <Button
+                                size="sm"
+                                className="mt-4"
+                                onClick={() => {
+                                  if (!isAuthenticated) { toast.error("Please sign in to book a mentoring session."); return; }
+                                  setSelectedMentor(mentor);
+                                  setMentorDialogOpen(true);
+                                }}
+                              >
+                                <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+                                Book a Session
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 </TabsContent>
               )}
@@ -1505,14 +1513,15 @@ export default function HackathonDetailPage() {
 
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} title={hackathon.name} url={`${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/hackathons/${hackathon.slug}`} />
       <AddToCalendarDialog open={calendarOpen} onOpenChange={setCalendarOpen} title={hackathon.name} startDate={hackathon.hackingStart} endDate={hackathon.hackingEnd} location={hackathon.location?.address || "Online"} />
-      {hackathon.mentors.length > 0 && (
-        <BookMentorDialog
-          open={mentorDialogOpen}
-          onOpenChange={setMentorDialogOpen}
-          mentor={hackathon.mentors.find((m) => m.id === selectedMentor) || hackathon.mentors[0]}
-          onBook={() => toast.success("Mentor session booked! (mock)")}
-        />
-      )}
+      <MentorSessionBookingDialog
+        open={mentorDialogOpen}
+        onOpenChange={(o) => {
+          setMentorDialogOpen(o);
+          if (!o) setSelectedMentor(null);
+        }}
+        hackathonId={hackathon.id}
+        mentor={selectedMentor}
+      />
       <CreateTeamDialog
         open={createTeamOpen}
         onOpenChange={setCreateTeamOpen}
