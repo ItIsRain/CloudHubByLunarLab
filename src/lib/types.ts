@@ -940,6 +940,76 @@ export interface MentorSession {
   updatedAt: string;
   mentor?: User;
   mentee?: User;
+  // Hackathon date-based booking extensions
+  meetingPhone?: string;
+  availabilityBlockId?: string;
+  /** Team the booking is associated with (null when the booker has no team). */
+  team?: { id: string; name: string; avatar?: string } | null;
+}
+
+// ── Hackathon Mentor Booking Types ───────────────────────
+
+export type MentorInviteStatus = "invited" | "accepted" | "declined";
+
+/** A real-account mentor linked to a hackathon (roster row). */
+export interface HackathonMentor {
+  id: string;
+  hackathonId: string;
+  /** Real user id once accepted; absent while only invited-by-email. */
+  userId?: string;
+  /** Only exposed to organizers/the mentor themselves, never public consumers. */
+  email?: string;
+  name: string;
+  expertise: string[];
+  bio?: string;
+  status: MentorInviteStatus;
+  defaultMeetingUrl?: string;
+  defaultMeetingPhone?: string;
+  invitedAt: string;
+  acceptedAt?: string;
+  user?: User;
+}
+
+/** A mentor's date-based availability window, split into bookable slots. */
+export interface MentorAvailabilityBlock {
+  id: string;
+  hackathonId: string;
+  mentorUserId: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm[:ss]
+  endTime: string; // HH:mm[:ss]
+  slotDurationMinutes: number;
+  timezone: string;
+  createdAt: string;
+}
+
+/** A single bookable slot derived from an availability block. */
+export interface MentorBookableSlot {
+  blockId: string;
+  date: string; // YYYY-MM-DD (block-local)
+  startTime: string; // HH:mm (block-local)
+  endTime: string; // HH:mm (block-local)
+  start: string; // ISO UTC instant
+  end: string; // ISO UTC instant
+  timezone: string;
+  durationMinutes: number;
+  isBooked: boolean;
+}
+
+/** Flattened entry returned by /api/hackathons/my-mentorships. */
+export interface MyMentorship {
+  mentorshipId: string;
+  mentorId: string | null;
+  hackathonId: string;
+  hackathonName: string;
+  hackathonSlug: string | null;
+  hackathonStatus: string | null;
+  hackathonBanner: string | null;
+  status: MentorInviteStatus;
+  defaultMeetingUrl?: string;
+  defaultMeetingPhone?: string;
+  invitedAt: string;
+  acceptedAt: string | null;
 }
 
 // Team Suggestion Types

@@ -212,6 +212,10 @@ function getStatusActions(status: string) {
   return actions;
 }
 
+// ── Pagination ─────────────────────────────────────────
+
+const APPLICATIONS_PER_PAGE = 50;
+
 // ── Select Styles ──────────────────────────────────────
 
 const selectClasses =
@@ -647,6 +651,7 @@ export function ApplicationsTab({
 
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [page, setPage] = React.useState(1);
   const [expandedRow, setExpandedRow] = React.useState<string | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
   const [reasonDialog, setReasonDialog] = React.useState<{
@@ -676,6 +681,10 @@ export function ApplicationsTab({
     queryFn: () => {
       const params = new URLSearchParams();
       params.set("includeFormData", "true");
+      // Fetch ALL matching rows (not just the first server page) so stats,
+      // selection and CSV export cover every applicant. The visible list is
+      // paginated client-side below.
+      params.set("all", "true");
       if (statusFilter && statusFilter !== "all")
         params.set("status", statusFilter);
       if (search) params.set("search", search);
@@ -689,7 +698,7 @@ export function ApplicationsTab({
   // Fetch total application counts (unfiltered) for Publish button logic
   const { data: totalCountsData } = useQuery<{ data: ApplicationParticipant[] }>({
     queryKey: ["hackathon-applications-counts", hackathonId],
-    queryFn: () => fetchJson(`/api/hackathons/${hackathonId}/participants`),
+    queryFn: () => fetchJson(`/api/hackathons/${hackathonId}/participants?all=true`),
     enabled: !!hackathonId,
   });
   const totalApplications = totalCountsData?.data?.length ?? 0;
@@ -1010,6 +1019,32 @@ export function ApplicationsTab({
       })),
     [applications, computeCompleteness]
   );
+
+  // Client-side pagination of the (already fully-fetched) list. Stats,
+  // selection and CSV export still operate on the full `enrichedApplications`.
+  const totalPages = Math.max(
+    1,
+    Math.ceil(enrichedApplications.length / APPLICATIONS_PER_PAGE)
+  );
+  const currentPage = Math.min(page, totalPages);
+  const pagedApplications = React.useMemo(
+    () =>
+      enrichedApplications.slice(
+        (currentPage - 1) * APPLICATIONS_PER_PAGE,
+        currentPage * APPLICATIONS_PER_PAGE
+      ),
+    [enrichedApplications, currentPage]
+  );
+
+  // Reset to the first page whenever the filters change the result set.
+  React.useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
+
+  // Collapse any expanded row when navigating between pages.
+  React.useEffect(() => {
+    setExpandedRow(null);
+  }, [currentPage]);
 
   // Status counts
   const statusCounts = React.useMemo(() => {
@@ -1814,7 +1849,7 @@ export function ApplicationsTab({
                       </tr>
                     </thead>
                     <tbody>
-                      {enrichedApplications.map((app, i) => {
+                      {pagedApplications.map((app, i) => {
                         const { name, email } = getApplicantInfo(app);
                         const badgeConf = statusBadgeConfig[app.status] || {
                           variant: "muted" as const,
@@ -2247,6 +2282,55 @@ export function ApplicationsTab({
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {enrichedApplications.length > 0 && totalPages > 1 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t px-4 py-3">
+                    <p className="text-xs text-muted-foreground">
+                      Showing{" "}
+                      <span className="font-medium text-foreground">
+                        {(currentPage - 1) * APPLICATIONS_PER_PAGE + 1}
+                      </span>
+                      –
+                      <span className="font-medium text-foreground">
+                        {Math.min(
+                          currentPage * APPLICATIONS_PER_PAGE,
+                          enrichedApplications.length
+                        )}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-medium text-foreground">
+                        {enrichedApplications.length}
+                      </span>{" "}
+                      applications
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={currentPage <= 1}
+                      >
+                        <ChevronRight className="h-4 w-4 rotate-180" />
+                        Previous
+                      </Button>
+                      <span className="text-xs text-muted-foreground tabular-nums px-1">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={currentPage >= totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Empty State */}
                 {enrichedApplications.length === 0 && !isLoading && (

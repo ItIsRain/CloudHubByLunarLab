@@ -112,54 +112,93 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const search = searchParams.get("search");
+    const allParam = searchParams.get("all");
+    const wantAll = allParam === "true" || allParam === "1";
     const page = Math.max(1, parseInt(searchParams.get("page") || "1") || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "50") || 50));
     const offset = (page - 1) * pageSize;
 
-    // When search is active, we must fetch all rows first (search is on joined profile
-    // fields which can't be filtered at the PostgREST level), then paginate in JS.
-    // Without search, use Supabase-level pagination for efficiency.
-    const useServerPagination = !search;
+    // We need to fetch ALL rows (no server-side page limit) when:
+    //  - search is active: it filters on joined profile fields that can't be
+    //    filtered at the PostgREST level, so we filter/paginate in JS, OR
+    //  - the caller explicitly asks for everything (`all=true`), e.g. the
+    //    organizer Applications tab which renders/exports the full list.
+    const needAllRows = !!search || wantAll;
 
-    // Fetch registrations, teams, and tracks in parallel
-    let regQuery = supabase
-      .from("hackathon_registrations")
-      .select("id, user_id, hackathon_id, status, form_data, completeness_score, eligibility_passed, screening_completed_at, screening_results, screening_flags, internal_notes, results_published_at, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)", { count: "exact" })
-      .eq("hackathon_id", hackathonId)
-      .order("created_at", { ascending: false });
+    const REG_SELECT =
+      "id, user_id, hackathon_id, status, form_data, completeness_score, eligibility_passed, screening_completed_at, screening_results, screening_flags, internal_notes, results_published_at, created_at, user:profiles!hackathon_registrations_user_id_fkey(*)";
 
-    if (status) {
-      regQuery = regQuery.eq("status", status);
+    // Build a registration query for a given row range. Reused for both the
+    // single-page path and the batched fetch-all path.
+    const buildRegQuery = (from: number, to: number) => {
+      let q = supabase
+        .from("hackathon_registrations")
+        .select(REG_SELECT, { count: "exact" })
+        .eq("hackathon_id", hackathonId)
+        .order("created_at", { ascending: false });
+      if (status) q = q.eq("status", status);
+      return q.range(from, to);
+    };
+
+    // Kick off the supporting queries (teams, submissions, tracks) in parallel
+    // with the registration fetch below.
+    const supportingQueries = Promise.all([
+      supabase
+        .from("teams")
+        .select("id, name, hackathon_id, team_members(user_id)")
+        .eq("hackathon_id", hackathonId),
+      // Pull each team's submission so we can derive track from either
+      // the built-in `track` column or a custom form-data field.
+      supabase
+        .from("submissions")
+        .select("team_id, track, form_data")
+        .eq("hackathon_id", hackathonId),
+      // Pull tracks + the configured trackFieldId (mirrors the campus/quota
+      // pattern: screening_config.trackFieldId points to a form field whose
+      // value identifies the team's track choice).
+      supabase
+        .from("hackathons")
+        .select("tracks, screening_config")
+        .eq("id", hackathonId)
+        .single(),
+    ]);
+
+    // Fetch registrations — either a single page, or every row in batches of
+    // 1000 to get past PostgREST's default max-rows ceiling.
+    let registrations: Record<string, unknown>[] = [];
+    let count = 0;
+    let error: { message: string } | null = null;
+
+    if (needAllRows) {
+      const BATCH_SIZE = 1000;
+      let from = 0;
+      while (true) {
+        const { data, error: batchErr, count: batchCount } = await buildRegQuery(
+          from,
+          from + BATCH_SIZE - 1
+        );
+        if (batchErr) {
+          error = batchErr;
+          break;
+        }
+        if (typeof batchCount === "number") count = batchCount;
+        const batch = (data as Record<string, unknown>[]) || [];
+        registrations.push(...batch);
+        if (batch.length < BATCH_SIZE) break;
+        from += BATCH_SIZE;
+      }
+    } else {
+      const { data, error: pageErr, count: pageCount } = await buildRegQuery(
+        offset,
+        offset + pageSize - 1
+      );
+      registrations = (data as Record<string, unknown>[]) || [];
+      count = pageCount || 0;
+      error = pageErr;
     }
 
-    if (useServerPagination) {
-      regQuery = regQuery.range(offset, offset + pageSize - 1);
-    }
-
-    const [regResult, teamsResult, submissionsResult, hackTrackResult] =
-      await Promise.all([
-        regQuery,
-        supabase
-          .from("teams")
-          .select("id, name, hackathon_id, team_members(user_id)")
-          .eq("hackathon_id", hackathonId),
-        // Pull each team's submission so we can derive track from either
-        // the built-in `track` column or a custom form-data field.
-        supabase
-          .from("submissions")
-          .select("team_id, track, form_data")
-          .eq("hackathon_id", hackathonId),
-        // Pull tracks + the configured trackFieldId (mirrors the campus/quota
-        // pattern: screening_config.trackFieldId points to a form field whose
-        // value identifies the team's track choice).
-        supabase
-          .from("hackathons")
-          .select("tracks, screening_config")
-          .eq("id", hackathonId)
-          .single(),
-      ]);
-
-    const { data: registrations, error, count } = regResult;
+    const [teamsResult, submissionsResult, hackTrackResult] =
+      await supportingQueries;
 
     if (error) {
       return NextResponse.json({ error: "Failed to fetch participants" }, { status: 400 });

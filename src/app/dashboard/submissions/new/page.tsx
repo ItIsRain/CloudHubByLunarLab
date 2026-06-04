@@ -31,6 +31,7 @@ import { useHackathons, useHackathon } from "@/hooks/use-hackathons";
 import { useCreateSubmission } from "@/hooks/use-submissions";
 import { useMyTeams } from "@/hooks/use-teams";
 import { usePhases } from "@/hooks/use-phases";
+import { useAuthStore } from "@/store/auth-store";
 import {
   getCurrentSubmissionTarget,
   type SubmissionTarget,
@@ -106,6 +107,17 @@ function NewSubmissionPageInner() {
   const description = watch("description");
   const readme = watch("readme");
 
+  // Only the team LEADER may submit. Detect whether the current user leads the
+  // selected team so we can gate the form (backend enforces this too).
+  const currentUser = useAuthStore((s) => s.user);
+  const selectedTeamId = watch("teamId");
+  const selectedTeam = myTeams.find((t) => t.id === selectedTeamId);
+  const isLeaderOfSelectedTeam =
+    !!currentUser &&
+    !!selectedTeam &&
+    selectedTeam.members.some((m) => m.user.id === currentUser.id && m.isLeader);
+  const blockedNonLeader = !!selectedTeam && !isLeaderOfSelectedTeam;
+
   // Compute the active submission target so we know which custom fields
   // to render and which phase to pin the submission to.
   const submissionTarget: SubmissionTarget | null = useMemo(() => {
@@ -143,6 +155,10 @@ function NewSubmissionPageInner() {
   }, [selectedHackathon, setValue]);
 
   const onSubmit = async (data: SubmissionForm) => {
+    if (blockedNonLeader) {
+      toast.error("Only the team leader can submit the team's project.");
+      return;
+    }
     if (submissionTarget?.kind === "none") {
       toast.error("This competition does not accept submissions.");
       return;
@@ -508,6 +524,17 @@ function NewSubmissionPageInner() {
               </Card>
             )}
 
+            {/* Leader-only notice */}
+            {blockedNonLeader && (
+              <Card className="border-warning/30 bg-warning/5">
+                <CardContent className="p-4 flex items-center gap-2 text-sm">
+                  <AlertCircle className="h-4 w-4 text-warning shrink-0" />
+                  Only the team leader can submit the project. Ask your team
+                  leader to submit on behalf of the team.
+                </CardContent>
+              </Card>
+            )}
+
             {/* Submit */}
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => router.back()}>
@@ -517,6 +544,7 @@ function NewSubmissionPageInner() {
                 type="submit"
                 loading={createMutation.isPending}
                 disabled={
+                  blockedNonLeader ||
                   submissionTarget?.kind === "none" ||
                   (submissionTarget !== null && submissionTarget.status !== "active")
                 }

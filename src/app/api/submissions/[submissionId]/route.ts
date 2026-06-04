@@ -183,13 +183,14 @@ export async function PATCH(
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
 
-    // Parallelize membership + organizer checks
+    // Only the team LEADER (or the hackathon organizer) may edit/submit.
     const [membershipRes, hackathonRes] = await Promise.all([
       supabase
         .from("team_members")
         .select("id")
         .eq("team_id", submission.team_id)
         .eq("user_id", auth.userId)
+        .eq("is_leader", true)
         .maybeSingle(),
       supabase
         .from("hackathons")
@@ -201,7 +202,10 @@ export async function PATCH(
     const isOrganizer = hackathonRes.data?.organizer_id === auth.userId;
 
     if (!membershipRes.data && !isOrganizer) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Only the team leader can edit or submit the team's project." },
+        { status: 403 }
+      );
     }
 
     const rawBody = await request.json();

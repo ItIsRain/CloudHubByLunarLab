@@ -221,6 +221,17 @@ export function EmailTemplatesTab({ hackathon, hackathonId }: { hackathon: Hacka
     );
   }
 
+  // "All" = every recipient group selected → email reaches everyone registered.
+  const allRecipientsSelected = RECIPIENT_STATUSES.every((s) =>
+    recipientStatuses.includes(s)
+  );
+
+  function toggleAllRecipients() {
+    setRecipientStatuses((prev) =>
+      RECIPIENT_STATUSES.every((s) => prev.includes(s)) ? [] : [...RECIPIENT_STATUSES]
+    );
+  }
+
   async function handleSendEmail(e: React.FormEvent) {
     e.preventDefault();
     if (!sendSubject.trim() || !sendBody.trim()) { toast.error("Subject and body are required."); return; }
@@ -601,6 +612,20 @@ export function EmailTemplatesTab({ hackathon, hackathonId }: { hackathon: Hacka
                   </label>
                   {/* Divider */}
                   <div className="w-px h-6 bg-border self-center" />
+                  {/* All recipients — sends to everyone regardless of status */}
+                  <button
+                    type="button"
+                    onClick={toggleAllRecipients}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs cursor-pointer transition-all duration-200",
+                      allRecipientsSelected
+                        ? "border-primary bg-primary text-primary-foreground font-medium"
+                        : "border-input hover:bg-muted/50"
+                    )}
+                  >
+                    <Users className="h-3 w-3" />
+                    All
+                  </button>
                   {RECIPIENT_STATUSES.map((status) => {
                     const checked = recipientStatuses.includes(status);
                     return (

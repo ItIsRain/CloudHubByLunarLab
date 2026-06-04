@@ -120,7 +120,11 @@ export default function TeamsPage() {
     const found = allTeams.find((t) =>
       t.members.some((m) => m.user.id === user.id)
     );
-    return found ? { id: found.id, name: found.name } : null;
+    if (!found) return null;
+    const isLeader = found.members.some(
+      (m) => m.user.id === user.id && m.isLeader
+    );
+    return { id: found.id, name: found.name, isLeader };
   }, [allTeams, user]);
 
   const createTeamMutation = useCreateTeam();

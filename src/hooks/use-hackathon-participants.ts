@@ -8,6 +8,9 @@ export function useHackathonParticipants(
   status?: string
 ) {
   const params = new URLSearchParams();
+  // Fetch every matching row (not just the first server page) so totals,
+  // client-side filtering and CSV export cover all participants.
+  params.set("all", "true");
   if (status && status !== "all") params.set("status", status);
   const qs = params.toString();
   return useQuery<{ data: HackathonParticipant[] }>({

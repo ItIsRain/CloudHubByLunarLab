@@ -14,10 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Lock, Loader2, AlertTriangle } from "lucide-react";
+import { Users, Lock, Loader2, AlertTriangle, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { getInitials } from "@/lib/utils";
-import { useJoinTeam, JoinTeamError } from "@/hooks/use-teams";
+import { useJoinTeam, useLeaveTeam, JoinTeamError } from "@/hooks/use-teams";
 import type { Team } from "@/lib/types";
 
 interface JoinTeamDialogProps {
@@ -29,7 +29,7 @@ interface JoinTeamDialogProps {
    * pass it here so the dialog can immediately render the "already in
    * another team" state instead of letting them attempt to join.
    */
-  currentTeam?: { id: string; name: string } | null;
+  currentTeam?: { id: string; name: string; isLeader?: boolean } | null;
 }
 
 export function JoinTeamDialog({
@@ -40,10 +40,11 @@ export function JoinTeamDialog({
 }: JoinTeamDialogProps) {
   const [password, setPassword] = useState("");
   const [conflict, setConflict] = useState<{
-    message: string;
     existingTeam: { id: string; name: string } | null;
+    isLeader: boolean;
   } | null>(null);
   const joinMutation = useJoinTeam();
+  const leaveMutation = useLeaveTeam();
 
   if (!team) return null;
 
@@ -56,12 +57,13 @@ export function JoinTeamDialog({
     conflict ??
     (blockingTeam
       ? {
-          message: `You are already on team "${blockingTeam.name}" for this competition. Leave it before joining a different team.`,
-          existingTeam: blockingTeam,
+          existingTeam: { id: blockingTeam.id, name: blockingTeam.name },
+          isLeader: blockingTeam.isLeader === true,
         }
       : null);
 
   const hasPassword = !!team.joinPassword;
+  const busy = joinMutation.isPending || leaveMutation.isPending;
 
   const handleOpenChange = (next: boolean) => {
     if (!next) {
@@ -84,8 +86,8 @@ export function JoinTeamDialog({
     } catch (err) {
       if (err instanceof JoinTeamError && err.code === "already_in_team") {
         setConflict({
-          message: err.message,
           existingTeam: err.existingTeam ?? null,
+          isLeader: err.isLeaderOfExisting === true,
         });
         return;
       }
@@ -93,7 +95,31 @@ export function JoinTeamDialog({
     }
   };
 
+  // Non-leader switching teams: leave the current team, then join the target.
+  const handleLeaveAndJoin = async () => {
+    const existing = effectiveConflict?.existingTeam;
+    if (!existing) return;
+    if (hasPassword && !password.trim()) {
+      toast.error("Enter the team password to continue.");
+      return;
+    }
+    try {
+      await leaveMutation.mutateAsync({ teamId: existing.id });
+      await joinMutation.mutateAsync({
+        teamId: team.id,
+        password: hasPassword ? password : undefined,
+      });
+      toast.success(`Left "${existing.name}" and joined "${team.name}"!`);
+      handleOpenChange(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to switch teams."
+      );
+    }
+  };
+
   if (effectiveConflict) {
+    const existing = effectiveConflict.existingTeam;
     return (
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-md">
@@ -102,20 +128,39 @@ export function JoinTeamDialog({
               <AlertTriangle className="h-5 w-5 text-warning" />
               You&apos;re already on a team
             </DialogTitle>
-            <DialogDescription>{effectiveConflict.message}</DialogDescription>
+            <DialogDescription>
+              {effectiveConflict.isLeader
+                ? `You lead "${existing?.name ?? "your team"}". Transfer leadership to a teammate or disband the team before joining "${team.name}".`
+                : `You're on "${existing?.name ?? "another team"}" for this competition. Leave it to join "${team.name}".`}
+            </DialogDescription>
           </DialogHeader>
 
-          {effectiveConflict.existingTeam && (
+          {existing && (
             <div className="rounded-xl border border-border p-4 space-y-2">
               <p className="text-xs uppercase tracking-wider text-muted-foreground">
                 Your current team
               </p>
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-primary" />
-                <p className="font-semibold">
-                  {effectiveConflict.existingTeam.name}
-                </p>
+                <p className="font-semibold">{existing.name}</p>
               </div>
+            </div>
+          )}
+
+          {/* Non-leaders can switch directly; a password-protected target
+              needs its password entered here first. */}
+          {!effectiveConflict.isLeader && hasPassword && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5" />
+                Password for {team.name} *
+              </label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter the team password"
+              />
             </div>
           )}
 
@@ -123,16 +168,25 @@ export function JoinTeamDialog({
             <Button variant="outline" onClick={() => handleOpenChange(false)}>
               Cancel
             </Button>
-            {effectiveConflict.existingTeam && (
+            {existing && effectiveConflict.isLeader ? (
               <Button asChild>
                 <Link
-                  href={`/dashboard/team/${effectiveConflict.existingTeam.id}`}
+                  href={`/dashboard/team/${existing.id}`}
                   onClick={() => handleOpenChange(false)}
                 >
-                  Open {effectiveConflict.existingTeam.name}
+                  Manage {existing.name}
                 </Link>
               </Button>
-            )}
+            ) : existing ? (
+              <Button onClick={handleLeaveAndJoin} disabled={busy}>
+                {busy ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4 mr-2" />
+                )}
+                Leave &amp; join {team.name}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

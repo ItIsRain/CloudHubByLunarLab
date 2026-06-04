@@ -10,10 +10,12 @@ import {
   Crown,
   ExternalLink,
   X,
-  Mail,
   MapPin,
   Calendar,
+  Download,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +26,8 @@ import {
   AvatarGroup,
 } from "@/components/ui/avatar";
 import { cn, getInitials, formatDate } from "@/lib/utils";
-import type { Hackathon, Team, TeamMember } from "@/lib/types";
+import type { Hackathon, Team, TeamMember, PaginatedResponse } from "@/lib/types";
+import { fetchJson } from "@/lib/fetch-json";
 import { useHackathonTeams } from "@/hooks/use-teams";
 
 interface TeamsTabProps {
@@ -41,14 +44,98 @@ const teamStatusConfig: Record<
   submitted: { label: "Submitted", variant: "gradient" },
 };
 
+/** Wrap a value in quotes and escape embedded quotes for safe CSV output. */
+function csvCell(value: unknown): string {
+  const str =
+    value === null || value === undefined ? "" : String(value);
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+/** Build a CSV (one row per team) from a list of teams. */
+function buildTeamsCsv(teams: Team[]): string {
+  const headers = [
+    "Team Name",
+    "Status",
+    "Track",
+    "Members",
+    "Max Size",
+    "Leader",
+    "Leader Email",
+    "Member Names",
+    "Member Emails",
+    "Looking For Roles",
+    "Description",
+    "Created",
+  ];
+
+  const rows = teams.map((team) => {
+    const leader = team.members.find((m) => m.isLeader);
+    return [
+      csvCell(team.name),
+      csvCell(team.status),
+      csvCell(team.track?.name ?? ""),
+      csvCell(team.members.length),
+      csvCell(team.maxSize),
+      csvCell(leader?.user.name ?? ""),
+      csvCell(leader?.user.email ?? ""),
+      csvCell(team.members.map((m) => m.user.name).join("; ")),
+      csvCell(
+        team.members
+          .map((m) => m.user.email)
+          .filter(Boolean)
+          .join("; ")
+      ),
+      csvCell((team.lookingForRoles ?? []).join("; ")),
+      csvCell(team.description ?? ""),
+      csvCell(team.createdAt),
+    ].join(",");
+  });
+
+  return [headers.map(csvCell).join(","), ...rows].join("\n");
+}
+
 export function TeamsTab({ hackathon, hackathonId }: TeamsTabProps) {
   const { data: teamsData, isLoading } = useHackathonTeams(hackathonId);
   const teams = teamsData?.data ?? [];
   const [selectedTeamId, setSelectedTeamId] = React.useState<string | null>(
     null
   );
+  const [isExporting, setIsExporting] = React.useState(false);
 
   const selectedTeam = teams.find((t) => t.id === selectedTeamId) ?? null;
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      // Fetch the full team list WITH member emails (staff-only). This is a
+      // separate request from the displayed list, which omits emails.
+      const res = await fetchJson<PaginatedResponse<Team>>(
+        `/api/teams?hackathonId=${hackathonId}&all=true&includeEmails=true`
+      );
+      const exportTeams = res.data ?? [];
+
+      if (exportTeams.length === 0) {
+        toast.info("No teams to export.");
+        return;
+      }
+
+      const csv = buildTeamsCsv(exportTeams);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${hackathon.slug || hackathonId}-teams.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(
+        `Exported ${exportTeams.length} team${exportTeams.length !== 1 ? "s" : ""}!`
+      );
+    } catch {
+      toast.error("Failed to export teams.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -57,13 +144,26 @@ export function TeamsTab({ hackathon, hackathonId }: TeamsTabProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="font-display text-2xl font-bold">Teams</h2>
             <p className="text-muted-foreground mt-1">
               {isLoading ? "--" : teams.length} teams registered
             </p>
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleExport}
+            disabled={isExporting || isLoading || teams.length === 0}
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export CSV
+          </Button>
         </div>
       </motion.div>
 

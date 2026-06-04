@@ -318,17 +318,24 @@ export async function POST(request: NextRequest) {
       dbPayload.phase_id = expectedPhaseId;
     }
 
-    // Verify user is a team member
+    // Verify the user is the team LEADER — only the leader may create/submit
+    // the team's project.
     const { data: membership } = await supabase
       .from("team_members")
-      .select("id")
+      .select("is_leader")
       .eq("team_id", dbPayload.team_id as string)
       .eq("user_id", auth.userId)
-      .single();
+      .maybeSingle();
 
     if (!membership) {
       return NextResponse.json(
         { error: "You must be a team member to create a submission" },
+        { status: 403 }
+      );
+    }
+    if (membership.is_leader !== true) {
+      return NextResponse.json(
+        { error: "Only the team leader can submit the team's project." },
         { status: 403 }
       );
     }

@@ -3,6 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { dbRowToTeam } from "@/lib/supabase/mappers";
 import { getHackathonTimeline, hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { canFormTeams, getPhaseMessage } from "@/lib/hackathon-phases";
+import { checkHackathonAccess } from "@/lib/check-hackathon-access";
 import { UUID_RE } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
@@ -21,6 +22,9 @@ export async function GET(request: NextRequest) {
     const hackathonId = url.searchParams.get("hackathonId");
     const userId = url.searchParams.get("userId");
     const status = url.searchParams.get("status");
+    const allParam = url.searchParams.get("all");
+    const wantAll = allParam === "true" || allParam === "1";
+    const wantEmails = url.searchParams.get("includeEmails") === "true";
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get("pageSize") || "50", 10) || 50));
     const offset = (page - 1) * pageSize;
@@ -33,50 +37,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let query = supabase
-      .from("teams")
-      .select(
-        "*, team_members(*, user:profiles!team_members_user_id_fkey(*))",
-        { count: "exact" }
-      )
-      .order("created_at", { ascending: false });
-
+    // Verify the caller can see this hackathon's teams.
     if (hackathonId) {
       const canAccess = await hasPrivateEntityAccess(supabase, "hackathon", hackathonId, user.id, user.email ?? undefined);
       if (!canAccess) {
         return NextResponse.json({ data: [], total: 0, page, pageSize, totalPages: 0, hasMore: false });
       }
-      query = query.eq("hackathon_id", hackathonId);
     }
-    if (status) {
-      query = query.eq("status", status);
+
+    // Member emails are private — only surface them to hackathon staff
+    // (organizer/collaborators) that explicitly opt in (e.g. CSV export).
+    let includeMemberEmails = false;
+    if (wantEmails && hackathonId) {
+      const staffAccess = await checkHackathonAccess(supabase, hackathonId, user.id);
+      includeMemberEmails = staffAccess.hasAccess;
     }
+
+    // When filtering by user, restrict to teams the user is a member of
+    // (only their own — prevents IDOR by ignoring a foreign userId).
+    let restrictTeamIds: string[] | null = null;
     if (userId) {
-      // Only allow querying own teams — prevent IDOR
       const effectiveUserId = userId === user.id ? userId : user.id;
-
-      // Filter teams where this user is a member
-      query = supabase
-        .from("teams")
-        .select(
-          "*, team_members(*, user:profiles!team_members_user_id_fkey(*))",
-          { count: "exact" }
-        )
-        .order("created_at", { ascending: false });
-
-      // Re-apply hackathonId filter (was set before this block)
-      if (hackathonId) {
-        query = query.eq("hackathon_id", hackathonId);
-      }
-
-      // We need to filter by user membership through a join
       const { data: memberTeamIds } = await supabase
         .from("team_members")
         .select("team_id")
         .eq("user_id", effectiveUserId);
 
-      const teamIds = (memberTeamIds || []).map((m) => m.team_id);
-      if (teamIds.length === 0) {
+      restrictTeamIds = (memberTeamIds || []).map((m) => m.team_id);
+      if (restrictTeamIds.length === 0) {
         return NextResponse.json({
           data: [],
           total: 0,
@@ -86,20 +74,57 @@ export async function GET(request: NextRequest) {
           hasMore: false,
         });
       }
-      query = query.in("id", teamIds);
     }
 
-    query = query.range(offset, offset + pageSize - 1);
+    // Factory so the query can be re-issued per batch when fetching all rows.
+    const buildQuery = (from: number, to: number) => {
+      let q = supabase
+        .from("teams")
+        .select(
+          "*, team_members(*, user:profiles!team_members_user_id_fkey(*))",
+          { count: "exact" }
+        )
+        .order("created_at", { ascending: false });
+      if (hackathonId) q = q.eq("hackathon_id", hackathonId);
+      if (status) q = q.eq("status", status);
+      if (restrictTeamIds) q = q.in("id", restrictTeamIds);
+      return q.range(from, to);
+    };
 
-    const { data, error, count } = await query;
+    // Fetch a single page, or every row in batches of 1000 (to get past
+    // PostgREST's default max-rows ceiling) when `all=true` is requested.
+    let rows: Record<string, unknown>[] = [];
+    let total = 0;
+    let queryError: { message: string } | null = null;
 
-    if (error) {
+    if (wantAll) {
+      const BATCH_SIZE = 1000;
+      let from = 0;
+      while (true) {
+        const { data, error, count } = await buildQuery(from, from + BATCH_SIZE - 1);
+        if (error) {
+          queryError = error;
+          break;
+        }
+        if (typeof count === "number") total = count;
+        const batch = (data as Record<string, unknown>[]) || [];
+        rows.push(...batch);
+        if (batch.length < BATCH_SIZE) break;
+        from += BATCH_SIZE;
+      }
+    } else {
+      const { data, error, count } = await buildQuery(offset, offset + pageSize - 1);
+      rows = (data as Record<string, unknown>[]) || [];
+      total = count || 0;
+      queryError = error;
+    }
+
+    if (queryError) {
       return NextResponse.json({ error: "Failed to fetch teams" }, { status: 400 });
     }
 
-    const total = count || 0;
-    const teams = (data || []).map((row) =>
-      dbRowToTeam(row as Record<string, unknown>)
+    const teams = rows.map((row) =>
+      dbRowToTeam(row as Record<string, unknown>, { includeMemberEmails })
     );
 
     return NextResponse.json({
@@ -107,8 +132,8 @@ export async function GET(request: NextRequest) {
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize),
-      hasMore: offset + pageSize < total,
+      totalPages: wantAll ? 1 : Math.ceil(total / pageSize),
+      hasMore: wantAll ? false : offset + pageSize < total,
     });
   } catch (err) {
     console.error(err);
@@ -256,7 +281,19 @@ export async function POST(request: NextRequest) {
       });
 
     if (memberError) {
-      return NextResponse.json({ error: "Failed to create team" }, { status: 400 });
+      // The creator couldn't be attached as leader — roll back the orphaned
+      // team so it doesn't linger leaderless. The most common cause is the
+      // one-team-per-hackathon trigger (creator is already on a team).
+      await supabase.from("teams").delete().eq("id", team.id);
+      const alreadyOnTeam = memberError.code === "23505";
+      return NextResponse.json(
+        {
+          error: alreadyOnTeam
+            ? "You are already on a team for this competition. Leave it before creating a new one."
+            : "Failed to create team",
+        },
+        { status: alreadyOnTeam ? 409 : 400 }
+      );
     }
 
     // Update team_count on the hackathon (fire-and-forget — denormalized counter)

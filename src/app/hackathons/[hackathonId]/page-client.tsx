@@ -28,6 +28,7 @@ import {
   UserPlus,
   Lock,
   Gavel,
+  GraduationCap,
   HelpCircle,
   EyeOff,
   LogOut,
@@ -79,6 +80,7 @@ import { usePhases } from "@/hooks/use-phases";
 import { getCurrentSubmissionTarget, type SubmissionTarget } from "@/lib/submission-window";
 import { usePublicWinners, type PublicWinner } from "@/hooks/use-winners";
 import { useMyReviewerPhases } from "@/hooks/use-phase-scoring";
+import { useMyMentorships } from "@/hooks/use-mentorship";
 import { useAuthStore } from "@/store/auth-store";
 import { cn, formatDate, formatDateTime, formatCurrency, formatPrizeValue, getTimeRemaining, safeHref, getInitials } from "@/lib/utils";
 import {
@@ -148,6 +150,9 @@ export default function HackathonDetailPage() {
   // unconditionally before any early return — moving it inside the body
   // breaks Rules of Hooks.
   const { data: reviewerPhasesData } = useMyReviewerPhases();
+  // Mentorships across all hackathons for this user — decides whether to show
+  // the "Manage Mentorship" header button. Called unconditionally (Rules of Hooks).
+  const { data: myMentorshipsData } = useMyMentorships();
   // Controlled tab state so the mobile <select> dropdown and the desktop
   // TabsList drive the same value. Initial value defers to "winners" if the
   // hackathon is finished with announced winners, otherwise "overview".
@@ -301,6 +306,12 @@ export default function HackathonDetailPage() {
     isJudgeOnThis &&
     !isOrganizer &&
     (!winnersAnnouncedTs || winnersAnnouncedTs > Date.now());
+  // An accepted mentor for THIS hackathon sees a "Manage Mentorship" button.
+  const showMentorButton =
+    !!user &&
+    !!myMentorshipsData?.data?.some(
+      (m) => m.hackathonId === hackathon.id && m.status === "accepted"
+    );
   // Submissions tab/listing is hidden from the public until winners_announcement
   // has passed. Organizers always see it (so they can preview), and team members
   // implicitly see their own submission via the API even before then.
@@ -487,6 +498,14 @@ export default function HackathonDetailPage() {
                   <Button size="sm" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20" onClick={() => setCalendarOpen(true)}>
                     <CalendarPlus className="h-4 w-4" />
                   </Button>
+                  {showMentorButton && (
+                    <Button size="sm" variant="secondary" asChild>
+                      <Link href={`/hackathons/${hackathon.id}/manage-mentorship`}>
+                        <GraduationCap className="h-4 w-4 mr-1" />
+                        Manage Mentorship
+                      </Link>
+                    </Button>
+                  )}
                   {isOrganizer ? (
                     <Button size="sm" asChild>
                       <Link href={`/dashboard/hackathons/${hackathon.id}?tab=edit`}>

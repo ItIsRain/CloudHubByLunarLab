@@ -1,4 +1,12 @@
-import type { User, UserRole, SubscriptionTier, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility, Conversation, ConversationParticipant, Message, MessageReaction, Community, CommunityMember, BlogPost, MentorAvailability, MentorSession, MentorSessionStatus, MentorSessionPlatform, Report, ReportType, ReportStatus, CompetitionForm, CompetitionFormStatus, CompetitionType, CompetitionApplication, ApplicationStatus, ApplicationFile, ScreeningRule, ScreeningRuleType, ScreeningOperator, ScreeningResult, ScreeningFlag, ScreeningFlagType, CampusQuota, FormField, FormSection } from "@/lib/types";
+import type { User, UserRole, SubscriptionTier, Event, Hackathon, Notification, NotificationType, Team, TeamMember, TeamStatus, Track, Submission, Score, SubmissionStatus, Testimonial, EntityInvitation, EntityVisibility, Conversation, ConversationParticipant, Message, MessageReaction, Community, CommunityMember, BlogPost, MentorAvailability, MentorSession, MentorSessionStatus, MentorSessionPlatform, Report, ReportType, ReportStatus, CompetitionForm, CompetitionFormStatus, CompetitionType, CompetitionApplication, ApplicationStatus, ApplicationFile, ScreeningRule, ScreeningRuleType, ScreeningOperator, ScreeningResult, ScreeningFlag, ScreeningFlagType, CampusQuota, FormField, FormSection, HackathonMentor, MentorAvailabilityBlock } from "@/lib/types";
+
+/**
+ * Supabase FK joins return an object OR an array depending on cardinality.
+ * Normalize to a single object (or null).
+ */
+function normalizeJoin(val: unknown): unknown {
+  return (Array.isArray(val) ? val[0] : val) ?? null;
+}
 
 // =====================================================
 // Profile ↔ User mappers
@@ -926,6 +934,7 @@ export function dbRowToMentorAvailability(row: Record<string, unknown>): MentorA
 export function dbRowToMentorSession(row: Record<string, unknown>): MentorSession {
   const mentorProfile = row.mentor as Record<string, unknown> | undefined;
   const menteeProfile = row.mentee as Record<string, unknown> | undefined;
+  const teamRow = normalizeJoin(row.team) as Record<string, unknown> | null;
 
   return {
     id: row.id as string,
@@ -939,6 +948,8 @@ export function dbRowToMentorSession(row: Record<string, unknown>): MentorSessio
     sessionDate: row.session_date as string,
     durationMinutes: (row.duration_minutes as number) || 30,
     meetingUrl: (row.meeting_url as string) || undefined,
+    meetingPhone: (row.meeting_phone as string) || undefined,
+    availabilityBlockId: (row.availability_block_id as string) || undefined,
     platform: (row.platform as MentorSessionPlatform) || undefined,
     notes: (row.notes as string) || undefined,
     mentorFeedbackRating: (row.mentor_feedback_rating as number) || undefined,
@@ -951,6 +962,55 @@ export function dbRowToMentorSession(row: Record<string, unknown>): MentorSessio
     updatedAt: row.updated_at as string,
     mentor: mentorProfile ? profileToPublicUser(mentorProfile) : undefined,
     mentee: menteeProfile ? profileToPublicUser(menteeProfile) : undefined,
+    team: teamRow
+      ? {
+          id: teamRow.id as string,
+          name: teamRow.name as string,
+          avatar: (teamRow.avatar as string) || undefined,
+        }
+      : null,
+  };
+}
+
+// =====================================================
+// DB row → HackathonMentor (roster) / MentorAvailabilityBlock
+// =====================================================
+
+export function dbRowToHackathonMentor(
+  row: Record<string, unknown>,
+  options: { includeEmail?: boolean } = {}
+): HackathonMentor {
+  const userProfile = normalizeJoin(row.user) as Record<string, unknown> | null;
+  return {
+    id: row.id as string,
+    hackathonId: row.hackathon_id as string,
+    userId: (row.user_id as string) || undefined,
+    email: options.includeEmail ? (row.email as string) : undefined,
+    name: row.name as string,
+    expertise: (row.expertise as string[]) || [],
+    bio: (row.bio as string) || undefined,
+    status: (row.status as HackathonMentor["status"]) || "invited",
+    defaultMeetingUrl: (row.default_meeting_url as string) || undefined,
+    defaultMeetingPhone: (row.default_meeting_phone as string) || undefined,
+    invitedAt: row.invited_at as string,
+    acceptedAt: (row.accepted_at as string) || undefined,
+    user: userProfile ? profileToPublicUser(userProfile) : undefined,
+  };
+}
+
+export function dbRowToMentorAvailabilityBlock(
+  row: Record<string, unknown>
+): MentorAvailabilityBlock {
+  return {
+    id: row.id as string,
+    hackathonId: row.hackathon_id as string,
+    mentorUserId: row.mentor_user_id as string,
+    date: row.date as string,
+    startTime: row.start_time as string,
+    endTime: row.end_time as string,
+    slotDurationMinutes: (row.slot_duration_minutes as number) ?? 30,
+    timezone: (row.timezone as string) || "UTC",
+    createdAt: row.created_at as string,
   };
 }
 

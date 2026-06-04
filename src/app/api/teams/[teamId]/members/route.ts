@@ -47,7 +47,7 @@ export async function POST(
     // ("leave that team first") instead of a generic error toast.
     const { data: existingMemberships } = await supabase
       .from("team_members")
-      .select("team_id, teams!inner(id, name, hackathon_id)")
+      .select("team_id, is_leader, teams!inner(id, name, hackathon_id)")
       .eq("user_id", userId)
       .eq("teams.hackathon_id", team.hackathon_id);
 
@@ -59,15 +59,19 @@ export async function POST(
         | null;
       const existingTeam = Array.isArray(joined) ? joined[0] : joined;
       const alreadyOnTargetTeam = existingTeam?.id === teamId;
+      const isLeaderOfExisting = firstRow.is_leader === true;
       return NextResponse.json(
         {
           error: alreadyOnTargetTeam
             ? "You are already a member of this team"
-            : `You are already on team "${existingTeam?.name ?? "another team"}" for this competition. Leave it before joining a different team.`,
+            : isLeaderOfExisting
+              ? `You lead team "${existingTeam?.name ?? "your team"}". Transfer leadership or disband it before joining another team.`
+              : `You are already on team "${existingTeam?.name ?? "another team"}" for this competition. Leave it before joining a different team.`,
           code: "already_in_team",
           existingTeam: existingTeam
             ? { id: existingTeam.id, name: existingTeam.name }
             : null,
+          isLeaderOfExisting,
         },
         { status: 409 }
       );

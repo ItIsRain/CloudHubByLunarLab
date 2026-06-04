@@ -392,4 +392,150 @@ export async function sendApplicationDeclinedEmail({ to, applicantName, hackatho
   });
 }
 
+// ── Mentor Booking Emails ────────────────────────────────
+
+/** Mentor invitation — organizer invites a mentor to a hackathon. */
+export async function sendMentorInvitationEmail({
+  to,
+  mentorName,
+  hackathonName,
+  acceptUrl,
+}: {
+  to: string;
+  mentorName: string;
+  hackathonName: string;
+  acceptUrl: string;
+}) {
+  return sendEmail({
+    to,
+    subject: `You're invited to mentor at ${hackathonName}`,
+    html: emailWrapper(`
+      ${statusBanner(COLORS.coral, `${COLORS.coral}08`, "&#127891;", "Mentor Invitation")}
+      ${bodySection(`
+        ${greeting(mentorName)}
+        ${paragraph(`You've been invited to be a <strong style="color:${COLORS.white};">mentor</strong> for ${eventName(hackathonName)}.`)}
+        ${paragraph(`As a mentor you'll set your availability and participants will book one-on-one sessions with you. Accept the invitation to get started.`)}
+        ${ctaButton(acceptUrl, "Accept Invitation")}
+        ${infoBox(`If the button doesn't work, copy and paste this link into your browser:<br/><span style="color:${COLORS.textMuted};word-break:break-all;">${escapeHtml(acceptUrl)}</span>`)}
+      `)}
+    `),
+  });
+}
+
+/** New booking request — sent to the mentor when a participant requests a slot. */
+export async function sendMentorBookingRequestEmail({
+  to,
+  mentorName,
+  bookedByLabel,
+  hackathonName,
+  slotLabel,
+  topic,
+  manageUrl,
+}: {
+  to: string;
+  mentorName: string;
+  bookedByLabel: string;
+  hackathonName: string;
+  slotLabel: string;
+  topic?: string;
+  manageUrl: string;
+}) {
+  return sendEmail({
+    to,
+    subject: `New mentoring request from ${bookedByLabel}`,
+    html: emailWrapper(`
+      ${statusBanner(COLORS.amber, COLORS.amberBg, "&#128197;", "New Booking Request")}
+      ${bodySection(`
+        ${greeting(mentorName)}
+        ${paragraph(`You've been booked by <strong style="color:${COLORS.white};">${escapeHtml(bookedByLabel)}</strong> for a mentoring session at ${eventName(hackathonName)}.`)}
+        ${infoBox(`<strong style="color:${COLORS.white};">When:</strong> ${escapeHtml(slotLabel)}${topic ? `<br/><strong style="color:${COLORS.white};">Topic:</strong> ${escapeHtml(topic)}` : ""}`)}
+        ${paragraph(`Review the request and approve or decline it from your mentorship dashboard. You can add a meeting link or phone number when you approve.`)}
+        ${ctaButton(manageUrl, "Manage Booking")}
+      `)}
+    `),
+  });
+}
+
+/** Booking approved — sent to the participant with the meeting link/phone. */
+export async function sendMentorBookingApprovedEmail({
+  to,
+  participantName,
+  mentorName,
+  hackathonName,
+  slotLabel,
+  meetingUrl,
+  meetingPhone,
+  sessionUrl,
+}: {
+  to: string;
+  participantName: string;
+  mentorName: string;
+  hackathonName: string;
+  slotLabel: string;
+  meetingUrl?: string;
+  meetingPhone?: string;
+  sessionUrl: string;
+}) {
+  const details: string[] = [
+    `<strong style="color:${COLORS.white};">Mentor:</strong> ${escapeHtml(mentorName)}`,
+    `<strong style="color:${COLORS.white};">When:</strong> ${escapeHtml(slotLabel)}`,
+  ];
+  if (meetingUrl) {
+    details.push(
+      `<strong style="color:${COLORS.white};">Meeting link:</strong> <a href="${escapeHtml(meetingUrl)}" style="color:${COLORS.green};word-break:break-all;">${escapeHtml(meetingUrl)}</a>`
+    );
+  }
+  if (meetingPhone) {
+    details.push(`<strong style="color:${COLORS.white};">Phone:</strong> ${escapeHtml(meetingPhone)}`);
+  }
+
+  return sendEmail({
+    to,
+    subject: `Your mentoring session with ${mentorName} is confirmed`,
+    html: emailWrapper(`
+      ${statusBanner(COLORS.green, COLORS.greenBg, "&#9989;", "Session Confirmed")}
+      ${bodySection(`
+        ${greeting(participantName)}
+        ${paragraph(`Your mentoring session at ${eventName(hackathonName)} has been <strong style="color:${COLORS.green};">confirmed</strong>.`)}
+        ${infoBox(details.join("<br/>"))}
+        ${ctaButton(sessionUrl, "View Session")}
+      `)}
+    `),
+  });
+}
+
+/** Booking declined — sent to the participant when the mentor declines/cancels. */
+export async function sendMentorBookingDeclinedEmail({
+  to,
+  participantName,
+  mentorName,
+  hackathonName,
+  slotLabel,
+  reason,
+  browseUrl,
+}: {
+  to: string;
+  participantName: string;
+  mentorName: string;
+  hackathonName: string;
+  slotLabel: string;
+  reason?: string;
+  browseUrl: string;
+}) {
+  return sendEmail({
+    to,
+    subject: `Update on your mentoring request for ${hackathonName}`,
+    html: emailWrapper(`
+      ${statusBanner(COLORS.textDim, COLORS.redBg, "&#128172;", "Request Declined")}
+      ${bodySection(`
+        ${greeting(participantName)}
+        ${paragraph(`Your mentoring request with <strong style="color:${COLORS.white};">${escapeHtml(mentorName)}</strong> for ${eventName(hackathonName)} (${escapeHtml(slotLabel)}) could not be confirmed.`)}
+        ${reason ? infoBox(`<strong style="color:${COLORS.white};">Note:</strong> ${escapeHtml(reason)}`) : ""}
+        ${paragraph(`You can book another available slot with this or another mentor.`)}
+        ${ctaButton(browseUrl, "Browse Mentors", "secondary")}
+      `)}
+    `),
+  });
+}
+
 export { emailWrapper, statusBanner, bodySection, greeting, paragraph, ctaButton, eventName, divider, infoBox, COLORS };

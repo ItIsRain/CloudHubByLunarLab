@@ -10,6 +10,8 @@ interface TeamFilters {
   status?: string;
   page?: number;
   pageSize?: number;
+  /** Fetch every matching row (ignores pagination) — used for full listings/exports. */
+  all?: boolean;
 }
 
 function buildTeamParams(filters?: TeamFilters): string {
@@ -20,6 +22,7 @@ function buildTeamParams(filters?: TeamFilters): string {
   if (filters.status) params.set("status", filters.status);
   if (filters.page) params.set("page", String(filters.page));
   if (filters.pageSize) params.set("pageSize", String(filters.pageSize));
+  if (filters.all) params.set("all", "true");
   const str = params.toString();
   return str ? `?${str}` : "";
 }
@@ -61,7 +64,8 @@ export function useHackathonTeams(hackathonId: string | undefined) {
     queryKey: ["teams", "hackathon", hackathonId],
     queryFn: () =>
       fetchJson<PaginatedResponse<Team>>(
-        `/api/teams${buildTeamParams({ hackathonId, pageSize: 50 })}`
+        // Fetch every team so the count and CSV export cover all of them.
+        `/api/teams${buildTeamParams({ hackathonId, all: true })}`
       ),
     enabled: !!hackathonId,
   });
@@ -145,6 +149,7 @@ export function useDeleteTeam() {
 export class JoinTeamError extends Error {
   code?: string;
   existingTeam?: { id: string; name: string } | null;
+  isLeaderOfExisting?: boolean;
   status?: number;
 
   constructor(
@@ -152,6 +157,7 @@ export class JoinTeamError extends Error {
     options: {
       code?: string;
       existingTeam?: { id: string; name: string } | null;
+      isLeaderOfExisting?: boolean;
       status?: number;
     } = {}
   ) {
@@ -159,6 +165,7 @@ export class JoinTeamError extends Error {
     this.name = "JoinTeamError";
     this.code = options.code;
     this.existingTeam = options.existingTeam;
+    this.isLeaderOfExisting = options.isLeaderOfExisting;
     this.status = options.status;
   }
 }
@@ -188,10 +195,12 @@ export function useJoinTeam() {
           error?: string;
           code?: string;
           existingTeam?: { id: string; name: string } | null;
+          isLeaderOfExisting?: boolean;
         };
         throw new JoinTeamError(json.error || "Failed to join team", {
           code: json.code,
           existingTeam: json.existingTeam,
+          isLeaderOfExisting: json.isLeaderOfExisting,
           status: res.status,
         });
       }
