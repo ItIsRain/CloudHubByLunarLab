@@ -53,6 +53,7 @@ interface ReviewerAssignment {
   assignedAt: string;
   applicantName: string | null;
   applicantEmail: string | null;
+  teamName: string | null;
   reviewer?: { name: string; email: string } | null;
   // Raw registration data when available (reviewer ?mine=true with full data)
   registration?: {

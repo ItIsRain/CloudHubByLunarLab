@@ -617,11 +617,13 @@ function QuickScoreContent() {
                   : new Map<string, { label: string; order: number }>();
                 const previewFields = getPreviewFields(formData, fieldMap);
 
-                // Resolve applicant name: submission project_name → profile → API field → form_data → fallback
+                // Resolve display name: team name (team submission) → person name
+                // → project name → form_data → fallback.
                 const resolvedName =
-                  (phase.evaluationMode === "submission" && assignment.submission?.project_name) ||
+                  assignment.teamName ||
                   applicant?.name ||
                   assignment.applicantName ||
+                  (phase.evaluationMode === "submission" && assignment.submission?.project_name) ||
                   extractNameFromFormData(formData, phase.registrationFields) ||
                   `Applicant ${index + 1}`;
 
@@ -744,9 +746,10 @@ function QuickScoreContent() {
   // ── JUDGING VIEW: Two-page flow ──
   const currentFormData = (currentAssignment?.registration?.form_data || {}) as Record<string, unknown>;
   const applicantName =
-    (phase.evaluationMode === "submission" && currentAssignment?.submission?.project_name) ||
+    currentAssignment?.teamName ||
     currentAssignment?.registration?.applicant?.name ||
     currentAssignment?.applicantName ||
+    (phase.evaluationMode === "submission" && currentAssignment?.submission?.project_name) ||
     extractNameFromFormData(currentFormData, phase.registrationFields) ||
     `Applicant ${selectedIndex + 1}`;
   const isAlreadyScored = currentRegId

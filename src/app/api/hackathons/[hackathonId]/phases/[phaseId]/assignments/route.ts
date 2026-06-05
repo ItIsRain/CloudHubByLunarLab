@@ -153,6 +153,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const isSubmissionMode = (phase as Record<string, unknown>).evaluation_mode === "submission";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let submissionMap: Record<string, any> = {};
+    // user_id -> their team name (for submission-mode display).
+    const userTeamNameMap: Record<string, string> = {};
     if (isSubmissionMode && isMineQuery) {
       // Look up submissions via: registration.user_id → team_members.user_id → teams.id → submissions.team_id
       const regUserIds = registrationUserIds; // already collected above
@@ -160,7 +162,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         // Get team memberships for these users within this hackathon
         const { data: teamMemberships } = await supabase
           .from("team_members")
-          .select("user_id, team_id, team:teams!team_members_team_id_fkey(id, hackathon_id)")
+          .select("user_id, team_id, team:teams!team_members_team_id_fkey(id, hackathon_id, name)")
           .in("user_id", regUserIds);
 
         // Filter to teams belonging to this hackathon
@@ -170,8 +172,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           const team = normalizeJoin((tm as Record<string, unknown>).team);
           if (team && team.hackathon_id === hackathonId) {
             const teamId = (tm as Record<string, unknown>).team_id as string;
+            const userId = (tm as Record<string, unknown>).user_id as string;
             teamIds.add(teamId);
-            userToTeam[(tm as Record<string, unknown>).user_id as string] = teamId;
+            userToTeam[userId] = teamId;
+            if (team.name) userTeamNameMap[userId] = team.name as string;
           }
         }
 
@@ -234,6 +238,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         reviewer: reviewerMap[a.reviewer_id] || null,
         applicantName: applicant?.name || null,
         applicantEmail: applicant?.email || null,
+        teamName: userId ? userTeamNameMap[userId] || null : null,
         registration,
         submission,
       };
@@ -273,6 +278,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           ...a,
           applicantName: null,
           applicantEmail: null,
+          teamName: null,
           registration: a.registration
             ? { ...a.registration, applicant: null, form_data: sanitizedFormData }
             : null,
