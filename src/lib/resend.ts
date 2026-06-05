@@ -175,6 +175,60 @@ export async function sendEmail({
   });
 }
 
+/**
+ * Send many (personalized) emails efficiently via Resend's Batch API.
+ *
+ * Sending bulk email as individual `emails.send` calls trips Resend's ~2 req/s
+ * rate limit, so most messages 429-fail and silently never arrive (a 130-person
+ * blast lands ~25). The batch endpoint accepts up to 100 messages per request,
+ * so the whole blast becomes a handful of calls with no rate-limit loss.
+ *
+ * Each item is a fully independent message (its own to/subject/html), so
+ * personalization (name, status, placeholders) is preserved.
+ */
+export async function sendEmailBatch(
+  emails: { to: string; subject: string; html: string }[]
+): Promise<{ sent: number; failed: number }> {
+  if (emails.length === 0) return { sent: 0, failed: 0 };
+
+  const client = getResend();
+  const CHUNK_SIZE = 100; // Resend batch hard limit
+  let sent = 0;
+  let failed = 0;
+
+  for (let i = 0; i < emails.length; i += CHUNK_SIZE) {
+    const chunk = emails.slice(i, i + CHUNK_SIZE);
+    const payload = chunk.map((e) => ({
+      from: `${FROM_NAME} <${FROM_EMAIL}>`,
+      to: e.to,
+      subject: e.subject.replace(/[\r\n]/g, " ").trim(),
+      html: e.html,
+    }));
+
+    try {
+      const { data, error } = await client.batch.send(payload);
+      if (error) {
+        failed += chunk.length;
+        console.error("[sendEmailBatch] batch error:", error);
+      } else {
+        const created = Array.isArray(data?.data) ? data.data.length : chunk.length;
+        sent += created;
+        failed += chunk.length - created;
+      }
+    } catch (err) {
+      failed += chunk.length;
+      console.error("[sendEmailBatch] batch threw:", err);
+    }
+
+    // Stay under the batch endpoint's rate limit between chunks.
+    if (i + CHUNK_SIZE < emails.length) {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    }
+  }
+
+  return { sent, failed };
+}
+
 // ── Welcome ──────────────────────────────────────────────
 
 export async function sendWelcomeEmail(email: string, name: string) {

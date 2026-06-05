@@ -5,7 +5,7 @@ import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { checkHackathonAccess, canEdit } from "@/lib/check-hackathon-access";
-import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { sendEmailBatch, emailWrapper, escapeHtml } from "@/lib/resend";
 import { profileToPublicUser } from "@/lib/supabase/mappers";
 
 const VALID_AUDIENCES = [
@@ -251,18 +251,11 @@ export async function POST(
       );
     }
 
-    // Send emails in batches of 50 using Promise.allSettled
+    // The announcement is identical for every recipient — build it once and
+    // send via Resend's batch API so a large blast isn't rate-limited away.
     const hackathonName = hackathon.name as string;
-    const BATCH_SIZE = 50;
-
-    for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
-      const batch = recipients.slice(i, i + BATCH_SIZE);
-      await Promise.allSettled(
-        batch.map((recipient) =>
-          sendEmail({
-            to: recipient.email,
-            subject: `[${hackathonName}] ${title.trim()}`,
-            html: emailWrapper(`
+    const announcementSubject = `[${hackathonName}] ${title.trim()}`;
+    const announcementHtml = emailWrapper(`
             <div style="padding:28px 32px;">
               <h1 style="margin:0 0 8px;color:#fff;font-size:22px;font-weight:700;">${escapeHtml(title.trim())}</h1>
               <p style="margin:0 0 4px;color:#a1a1aa;font-size:13px;">Announcement from <strong style="color:#e8440a;">${escapeHtml(hackathonName)}</strong></p>
@@ -273,11 +266,14 @@ export async function POST(
                 You are receiving this because you are registered for ${escapeHtml(hackathonName)}.
               </p>
             </div>
-          `),
-          })
-        )
-      );
-    }
+          `);
+    await sendEmailBatch(
+      recipients.map((r) => ({
+        to: r.email,
+        subject: announcementSubject,
+        html: announcementHtml,
+      }))
+    );
 
     // Create in-app notifications for all recipients
     const notifPayloads = (registrations || [])

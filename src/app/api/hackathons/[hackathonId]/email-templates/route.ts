@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
-import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { sendEmailBatch, emailWrapper, escapeHtml } from "@/lib/resend";
 import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess, canEdit, type HackathonRole } from "@/lib/check-hackathon-access";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -743,17 +743,18 @@ export async function PUT(
       });
     }
 
-    const BATCH_SIZE = 10;
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
     const hackathonName = hackathon.name as string;
     const organizerProfile = hackathon.organizer as { name?: string } | null;
     const organizerName = organizerProfile?.name || "Organizer";
     const startDate = hackathon.hacking_start ? new Date(hackathon.hacking_start as string).toLocaleDateString() : "TBD";
     const endDate = hackathon.hacking_end ? new Date(hackathon.hacking_end as string).toLocaleDateString() : "TBD";
-    let sent = 0;
-    let failed = 0;
 
-    const emailTasks: (() => Promise<void>)[] = [];
+    // Build a personalized message for every recipient, then send via Resend's
+    // batch API (up to 100 per request). Sending one-by-one trips Resend's
+    // ~2 req/s rate limit, which silently dropped most of a large blast.
+    const emailsToSend: { to: string; subject: string; html: string }[] = [];
+    const logRows: Record<string, unknown>[] = [];
 
     for (const reg of registrations) {
       const profile = reg.user as { email?: string; name?: string } | null;
@@ -784,12 +785,10 @@ export async function PUT(
         finalBody = finalBody.replaceAll(key, value);
       }
 
-      emailTasks.push(async () => {
-        try {
-          await sendEmail({
-            to: recipientEmail,
-            subject: finalSubject,
-            html: emailWrapper(`
+      emailsToSend.push({
+        to: recipientEmail,
+        subject: finalSubject,
+        html: emailWrapper(`
               <div style="padding:28px 32px;">
                 <p style="color:#e4e4e7;font-size:15px;line-height:1.7;margin:0 0 16px;">
                   Hi <strong style="color:#ffffff;">${escapeHtml(recipientName)}</strong>,
@@ -804,39 +803,29 @@ export async function PUT(
                 </div>
               </div>
             `),
-          });
-
-          supabase.from("email_log").insert({
-            hackathon_id: hackathonId,
-            template_id: templateId || null,
-            recipient_email: recipientEmail,
-            recipient_user_id: reg.user_id,
-            subject: finalSubject,
-            status: "sent",
-          }).then(() => {}, () => {});
-
-          sent++;
-        } catch {
-          failed++;
-          supabase.from("email_log").insert({
-            hackathon_id: hackathonId,
-            template_id: templateId || null,
-            recipient_email: recipientEmail,
-            recipient_user_id: reg.user_id,
-            subject: finalSubject,
-            status: "failed",
-          }).then(() => {}, () => {});
-        }
+      });
+      logRows.push({
+        hackathon_id: hackathonId,
+        template_id: templateId || null,
+        recipient_email: recipientEmail,
+        recipient_user_id: reg.user_id,
+        subject: finalSubject,
+        status: "sent",
       });
     }
 
-    for (let i = 0; i < emailTasks.length; i += BATCH_SIZE) {
-      const batch = emailTasks.slice(i, i + BATCH_SIZE);
-      await Promise.allSettled(batch.map((fn) => fn()));
+    const { sent, failed } = await sendEmailBatch(emailsToSend);
+
+    // Best-effort delivery log via the admin client (RLS-independent).
+    if (logRows.length > 0) {
+      getSupabaseAdminClient()
+        .from("email_log")
+        .insert(logRows)
+        .then(() => {}, () => {});
     }
 
     return NextResponse.json({
-      data: { sent, failed, total: registrations.length },
+      data: { sent, failed, total: emailsToSend.length },
     });
   } catch (err) {
     console.error(err);
