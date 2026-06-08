@@ -501,10 +501,10 @@ export async function sendMentorBookingRequestEmail({
       ${statusBanner(COLORS.amber, COLORS.amberBg, "&#128197;", "New Booking Request")}
       ${bodySection(`
         ${greeting(mentorName)}
-        ${paragraph(`You've been booked by <strong style="color:${COLORS.white};">${escapeHtml(bookedByLabel)}</strong> for a mentoring session at ${eventName(hackathonName)}.`)}
+        ${paragraph(`<strong style="color:${COLORS.white};">${escapeHtml(bookedByLabel)}</strong> has booked a mentoring session with you at ${eventName(hackathonName)}.`)}
         ${infoBox(`<strong style="color:${COLORS.white};">When:</strong> ${escapeHtml(slotLabel)}${topic ? `<br/><strong style="color:${COLORS.white};">Topic:</strong> ${escapeHtml(topic)}` : ""}`)}
-        ${paragraph(`Review the request and approve or decline it from your mentorship dashboard. You can add a meeting link or phone number when you approve.`)}
-        ${ctaButton(manageUrl, "Manage Booking")}
+        ${paragraph(`Please log in to the platform to <strong style="color:${COLORS.white};">confirm their booking</strong>. You can add a meeting link or phone number when you confirm (or decline if you're not available).`)}
+        ${ctaButton(manageUrl, "Confirm Booking")}
       `)}
     `),
   });
