@@ -4,7 +4,9 @@ import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { dbRowToMentorSession } from "@/lib/supabase/mappers";
 import {
   sendMentorBookingApprovedEmail,
+  buildMentorBookingApprovedEmail,
   sendMentorBookingDeclinedEmail,
+  sendEmailBatch,
 } from "@/lib/resend";
 import { UUID_RE } from "@/lib/constants";
 
@@ -176,7 +178,7 @@ export async function PATCH(
       const menteeName = (menteeRow?.name as string) || "Participant";
       const mentorName = (mentorRow?.name as string) || "Your mentor";
 
-      if (newStatus === "confirmed" && isMentor && menteeEmail) {
+      if (newStatus === "confirmed" && isMentor) {
         // Effective link/phone: per-session value or the mentor's default.
         const { data: rosterDefaults } = await admin
           .from("hackathon_mentors")
@@ -189,27 +191,82 @@ export async function PATCH(
         const meetingPhone =
           mapped.meetingPhone || (rosterDefaults?.default_meeting_phone as string) || undefined;
 
-        sendMentorBookingApprovedEmail({
-          to: menteeEmail,
-          participantName: menteeName,
+        const base = {
           mentorName,
           hackathonName,
           slotLabel,
           meetingUrl,
           meetingPhone,
           sessionUrl: `${SITE_URL}/hackathons/${hackathonId}/mentors`,
-        }).catch((e) => console.error("[mentor-booking] approve email failed:", e));
+        };
+        const teamId = mapped.teamId;
+        const teamName = mapped.team?.name;
 
-        admin
-          .from("notifications")
-          .insert({
-            user_id: session.mentee_id,
-            type: "team-message",
-            title: "Mentoring session confirmed",
-            message: `${mentorName} confirmed your session (${slotLabel}).`,
-            link: `/hackathons/${hackathonId}/mentors`,
-          })
-          .then(() => {}, () => {});
+        if (teamId) {
+          // Team booking → notify EVERY team member with the meeting details.
+          const { data: members } = await admin
+            .from("team_members")
+            .select("user_id, user:profiles!team_members_user_id_fkey(name, email)")
+            .eq("team_id", teamId);
+
+          const recipients = (members || [])
+            .map((m) => {
+              const prof = (Array.isArray(m.user) ? m.user[0] : m.user) as
+                | { name?: string; email?: string }
+                | null;
+              return prof?.email
+                ? { userId: m.user_id as string, name: prof.name || "Participant", email: prof.email }
+                : null;
+            })
+            .filter((r): r is { userId: string; name: string; email: string } => r !== null);
+
+          if (recipients.length > 0) {
+            const emails = recipients.map((r) =>
+              buildMentorBookingApprovedEmail({
+                ...base,
+                participantName: r.name,
+                teamName: teamName || undefined,
+                bookedByName: menteeName,
+              })
+            );
+            sendEmailBatch(
+              recipients.map((r, i) => ({ to: r.email, subject: emails[i].subject, html: emails[i].html }))
+            ).catch((e) => console.error("[mentor-booking] team approve emails failed:", e));
+
+            admin
+              .from("notifications")
+              .insert(
+                recipients.map((r) => ({
+                  user_id: r.userId,
+                  type: "team-message",
+                  title: "Mentoring session confirmed",
+                  message: `${mentorName} confirmed your team's session (${slotLabel}).`,
+                  link: `/hackathons/${hackathonId}/mentors`,
+                }))
+              )
+              .then(() => {}, () => {});
+          } else if (menteeEmail) {
+            // No member emails resolved — fall back to the booker.
+            sendMentorBookingApprovedEmail({ to: menteeEmail, participantName: menteeName, ...base }).catch(
+              (e) => console.error("[mentor-booking] approve email failed:", e)
+            );
+          }
+        } else if (menteeEmail) {
+          // Solo booking (no team) → just the booker.
+          sendMentorBookingApprovedEmail({ to: menteeEmail, participantName: menteeName, ...base }).catch(
+            (e) => console.error("[mentor-booking] approve email failed:", e)
+          );
+          admin
+            .from("notifications")
+            .insert({
+              user_id: session.mentee_id,
+              type: "team-message",
+              title: "Mentoring session confirmed",
+              message: `${mentorName} confirmed your session (${slotLabel}).`,
+              link: `/hackathons/${hackathonId}/mentors`,
+            })
+            .then(() => {}, () => {});
+        }
       }
 
       if (newStatus === "cancelled" && isMentor && menteeEmail) {

@@ -510,18 +510,7 @@ export async function sendMentorBookingRequestEmail({
   });
 }
 
-/** Booking approved — sent to the participant with the meeting link/phone. */
-export async function sendMentorBookingApprovedEmail({
-  to,
-  participantName,
-  mentorName,
-  hackathonName,
-  slotLabel,
-  meetingUrl,
-  meetingPhone,
-  sessionUrl,
-}: {
-  to: string;
+interface MentorBookingApprovedParams {
   participantName: string;
   mentorName: string;
   hackathonName: string;
@@ -529,11 +518,37 @@ export async function sendMentorBookingApprovedEmail({
   meetingUrl?: string;
   meetingPhone?: string;
   sessionUrl: string;
-}) {
+  /** When set, the email is framed as the team's session (sent to all members). */
+  teamName?: string;
+  /** Who placed the booking (shown to teammates for context). */
+  bookedByName?: string;
+}
+
+/**
+ * Build the "session confirmed" email (subject + html). Used both for a single
+ * recipient and for fanning out to every member of a team via sendEmailBatch.
+ */
+export function buildMentorBookingApprovedEmail({
+  participantName,
+  mentorName,
+  hackathonName,
+  slotLabel,
+  meetingUrl,
+  meetingPhone,
+  sessionUrl,
+  teamName,
+  bookedByName,
+}: MentorBookingApprovedParams): { subject: string; html: string } {
   const details: string[] = [
     `<strong style="color:${COLORS.white};">Mentor:</strong> ${escapeHtml(mentorName)}`,
     `<strong style="color:${COLORS.white};">When:</strong> ${escapeHtml(slotLabel)}`,
   ];
+  if (teamName) {
+    details.push(`<strong style="color:${COLORS.white};">Team:</strong> ${escapeHtml(teamName)}`);
+  }
+  if (bookedByName) {
+    details.push(`<strong style="color:${COLORS.white};">Booked by:</strong> ${escapeHtml(bookedByName)}`);
+  }
   if (meetingUrl) {
     details.push(
       `<strong style="color:${COLORS.white};">Meeting link:</strong> <a href="${escapeHtml(meetingUrl)}" style="color:${COLORS.green};word-break:break-all;">${escapeHtml(meetingUrl)}</a>`
@@ -543,19 +558,32 @@ export async function sendMentorBookingApprovedEmail({
     details.push(`<strong style="color:${COLORS.white};">Phone:</strong> ${escapeHtml(meetingPhone)}`);
   }
 
-  return sendEmail({
-    to,
-    subject: `Your mentoring session with ${mentorName} is confirmed`,
+  const lead = teamName
+    ? `Your team <strong style="color:${COLORS.white};">${escapeHtml(teamName)}</strong>'s mentoring session with ${eventName(mentorName)} at ${eventName(hackathonName)} has been <strong style="color:${COLORS.green};">confirmed</strong>.`
+    : `Your mentoring session at ${eventName(hackathonName)} has been <strong style="color:${COLORS.green};">confirmed</strong>.`;
+
+  return {
+    subject: teamName
+      ? `Your team's mentoring session with ${mentorName} is confirmed`
+      : `Your mentoring session with ${mentorName} is confirmed`,
     html: emailWrapper(`
       ${statusBanner(COLORS.green, COLORS.greenBg, "&#9989;", "Session Confirmed")}
       ${bodySection(`
         ${greeting(participantName)}
-        ${paragraph(`Your mentoring session at ${eventName(hackathonName)} has been <strong style="color:${COLORS.green};">confirmed</strong>.`)}
+        ${paragraph(lead)}
         ${infoBox(details.join("<br/>"))}
         ${ctaButton(sessionUrl, "View Session")}
       `)}
     `),
-  });
+  };
+}
+
+/** Booking approved — sent to the participant with the meeting link/phone. */
+export async function sendMentorBookingApprovedEmail(
+  params: MentorBookingApprovedParams & { to: string }
+) {
+  const { subject, html } = buildMentorBookingApprovedEmail(params);
+  return sendEmail({ to: params.to, subject, html });
 }
 
 /** Booking declined — sent to the participant when the mentor declines/cancels. */
