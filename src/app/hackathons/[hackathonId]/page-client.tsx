@@ -530,12 +530,11 @@ export default function HackathonDetailPage() {
                         Judge
                       </Link>
                     </Button>
-                  ) : (hackathon.status === "published" || hackathon.status === "registration-open") && (
-                    isRejected ? (
-                      <Badge variant="destructive" className="w-full justify-center whitespace-nowrap px-4 py-2 text-sm">
-                        Application {registrationStatus === "ineligible" ? "Ineligible" : registrationStatus === "declined" ? "Declined" : "Rejected"}
-                      </Badge>
-                    ) : isDraft ? (
+                  ) : isRejected ? (
+                    <Badge variant="destructive" className="w-full justify-center whitespace-nowrap px-4 py-2 text-sm">
+                      Application {registrationStatus === "ineligible" ? "Ineligible" : registrationStatus === "declined" ? "Declined" : "Rejected"}
+                    </Badge>
+                  ) : isDraft && (hackathon.status === "published" || hackathon.status === "registration-open") ? (
                       <Button size="sm" onClick={() => {
                         if (hackathon.registrationFields && hackathon.registrationFields.length > 0) {
                           setRegistrationDialogOpen(true);
@@ -661,7 +660,7 @@ export default function HackathonDetailPage() {
                           )}
                         </Button>
                       </div>
-                    ) : (
+                    ) : (hackathon.status === "published" || hackathon.status === "registration-open") ? (
                       <Button size="sm" onClick={() => {
                         if (!isAuthenticated) { toast.error("Please sign in to register"); return; }
                         // If hackathon has custom registration fields, open the form dialog
@@ -678,8 +677,7 @@ export default function HackathonDetailPage() {
                         ) : null}
                         Register Now
                       </Button>
-                    )
-                  )}
+                    ) : null}
                 </div>
               </div>
             </div>

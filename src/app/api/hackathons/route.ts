@@ -193,6 +193,7 @@ export async function GET(request: NextRequest) {
     // Within each group, preserve the DB sort order.
     const ACTIVE_STATUSES = new Set([
       "published", "registration-open", "registration_open",
+      "registration-closed", "registration_closed",
       "hacking", "submission", "judging",
     ]);
     hackathons.sort((a, b) => {

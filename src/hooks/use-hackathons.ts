@@ -57,6 +57,20 @@ export function useMyHackathons(page?: number) {
   });
 }
 
+/**
+ * Hackathons the current user is *competing in* (has a live registration for),
+ * as opposed to ones they organize. Powers the dashboard "Competing in" list.
+ */
+export function useMyRegisteredHackathons() {
+  const user = useAuthStore((s) => s.user);
+  return useQuery<PaginatedResponse<Hackathon>>({
+    queryKey: ["hackathons", "registered", user?.id],
+    queryFn: () =>
+      fetchJson<PaginatedResponse<Hackathon>>(`/api/hackathons/registered`),
+    enabled: !!user?.id,
+  });
+}
+
 export function useActiveHackathons() {
   return useQuery<PaginatedResponse<Hackathon>>({
     queryKey: ["hackathons", "active"],

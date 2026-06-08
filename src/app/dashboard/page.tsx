@@ -26,7 +26,7 @@ import { useAuthStore } from "@/store/auth-store";
 import { toast } from "sonner";
 import { cn, formatDate, formatCurrency, safeInternalLink } from "@/lib/utils";
 import { useMyEvents } from "@/hooks/use-events";
-import { useMyHackathons } from "@/hooks/use-hackathons";
+import { useMyHackathons, useMyRegisteredHackathons } from "@/hooks/use-hackathons";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useMyTeams } from "@/hooks/use-teams";
 import { useUsage } from "@/hooks/use-usage";
@@ -213,6 +213,7 @@ export default function DashboardPage() {
 
   const { data: eventsData, isLoading: eventsLoading } = useMyEvents();
   const { data: hackathonsData, isLoading: hackathonsLoading } = useMyHackathons();
+  const { data: registeredData, isLoading: registeredLoading } = useMyRegisteredHackathons();
   const { data: notificationsData, isLoading: notificationsLoading } = useNotifications({ pageSize: 5 });
   const { data: teamsData, isLoading: teamsLoading } = useMyTeams();
 
@@ -222,6 +223,13 @@ export default function DashboardPage() {
   const activeHackathons = myHackathons
     .filter((h) => h.status !== "completed")
     .slice(0, 2);
+  // Competitions the user is a participant in (not ones they organize — those
+  // already appear above). Surfaces an accepted/registered hackathon on the
+  // dashboard even after registration closes.
+  const organizedIds = new Set(myHackathons.map((h) => h.id));
+  const competingHackathons = (registeredData?.data || [])
+    .filter((h) => !organizedIds.has(h.id))
+    .slice(0, 3);
   const stats = buildStats(myEvents, myHackathons);
   const recentNotifications = notificationsData?.data || [];
   const userTeams = (teamsData?.data || []).slice(0, 3);
@@ -400,6 +408,40 @@ export default function DashboardPage() {
                   </Card>
                 )}
               </motion.div>
+
+              {/* Competing In — hackathons the user is a participant in */}
+              {(registeredLoading || competingHackathons.length > 0) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.35 }}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-display text-xl font-bold">
+                      Competing In
+                    </h2>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href="/explore/hackathons">
+                        Find more
+                        <ArrowRight className="h-4 w-4 ml-1" />
+                      </Link>
+                    </Button>
+                  </div>
+                  {registeredLoading ? (
+                    <div className="space-y-4">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="shimmer rounded-xl h-40 w-full" />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {competingHackathons.map((hackathon) => (
+                        <HackathonCard key={hackathon.id} hackathon={hackathon} />
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
             </div>
 
             {/* Right Column - Plan Usage, Notifications & Teams */}
