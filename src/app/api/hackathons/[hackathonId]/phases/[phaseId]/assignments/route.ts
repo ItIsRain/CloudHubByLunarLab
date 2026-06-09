@@ -3,6 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
+import { resolveAssignablePool } from "@/lib/phase-assignments";
 
 type RouteParams = { params: Promise<{ hackathonId: string; phaseId: string }> };
 
@@ -380,101 +381,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 2. Get eligible applicants, optionally filtered by campus
-    const screeningConfig = (hackathon.screening_config as Record<string, unknown>) || {};
-    const quotaFieldId = screeningConfig.quotaFieldId as string | undefined;
-    const campusFilter = phase.campus_filter as string | null;
-
-    let regQuery = supabase
-      .from("hackathon_registrations")
-      .select("id, user_id, form_data")
-      .eq("hackathon_id", hackathonId)
-      .in("status", ["accepted", "eligible", "confirmed"]);
-
-    const { data: registrations, error: regError } = await regQuery;
-
-    if (regError) {
-      return NextResponse.json({ error: "Failed to fetch registrations" }, { status: 400 });
+    // 2. Resolve the eligible applicant pool (status + campus + source-phase
+    //    filtered). Shared with the assignable-pool GET so the writer and the
+    //    picker always agree on who can be reviewed.
+    const pool = await resolveAssignablePool(supabase, hackathonId, hackathon, {
+      campus_filter: (phase.campus_filter as string | null) ?? null,
+      source_phase_ids: (phase.source_phase_ids as string[] | null) ?? null,
+    });
+    if (!pool.ok) {
+      return NextResponse.json({ error: pool.message }, { status: pool.status });
     }
-
-    if (!registrations || registrations.length === 0) {
-      return NextResponse.json(
-        { error: "No eligible applicants found" },
-        { status: 400 }
-      );
-    }
-
-    // Apply campus filter in JS (since it depends on JSONB field lookup)
-    let filteredRegistrations = registrations;
-    if (campusFilter && quotaFieldId) {
-      filteredRegistrations = registrations.filter((reg) => {
-        const formData = reg.form_data as Record<string, unknown> | null;
-        if (!formData) return false;
-        return String(formData[quotaFieldId] || "") === campusFilter;
-      });
-    }
-
-    // ── Source phase filter: only allow applicants who advanced from source phases ──
-    const sourcePhaseIds = (phase.source_phase_ids as string[] | null) || [];
-    if (sourcePhaseIds.length > 0) {
-      // Fetch decisions with "advance" from all source phases
-      const { data: advanceDecisions, error: decError } = await supabase
-        .from("phase_decisions")
-        .select("registration_id")
-        .in("phase_id", sourcePhaseIds)
-        .eq("decision", "advance");
-
-      if (decError) {
-        console.error("Failed to fetch source phase decisions:", decError);
-        return NextResponse.json(
-          { error: "Failed to verify source phase advancement" },
-          { status: 500 }
-        );
-      }
-
-      // Also check phase_finalists as an alternative advancement path
-      const { data: finalists, error: finError } = await supabase
-        .from("phase_finalists")
-        .select("registration_id")
-        .in("phase_id", sourcePhaseIds);
-
-      if (finError) {
-        console.error("Failed to fetch source phase finalists:", finError);
-      }
-
-      // Build set of registration IDs that advanced
-      const advancedRegIds = new Set<string>();
-      for (const d of advanceDecisions || []) {
-        advancedRegIds.add(d.registration_id as string);
-      }
-      for (const f of finalists || []) {
-        advancedRegIds.add(f.registration_id as string);
-      }
-
-      if (advancedRegIds.size === 0) {
-        return NextResponse.json(
-          { error: "No applicants have advanced from the source phase(s). Complete decisions in the source phase first." },
-          { status: 400 }
-        );
-      }
-
-      // Filter to only advanced applicants
-      filteredRegistrations = filteredRegistrations.filter((reg) =>
-        advancedRegIds.has(reg.id as string)
-      );
-    }
-
-    if (filteredRegistrations.length === 0) {
-      const filterDesc = sourcePhaseIds.length > 0
-        ? "No advanced applicants match the filters for this phase"
-        : campusFilter
-          ? "No applicants match the campus filter for this phase"
-          : "No eligible applicants found";
-      return NextResponse.json(
-        { error: filterDesc },
-        { status: 400 }
-      );
-    }
+    const filteredRegistrations = pool.registrations;
 
     // 3. Get existing assignments to skip duplicates
     const { data: existingAssignments } = await supabase
@@ -549,6 +466,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           registration_id: registrationId,
           assigned_at: new Date().toISOString(),
         });
+      }
+    } else if (assignMode === "selected" && manualReviewerId && Array.isArray((body as Record<string, unknown>).registrationIds)) {
+      // ── Manual multi-select: assign one reviewer to a chosen set of
+      //    participants/teams. Only IDs within the eligible pool are honored. ──
+      const targetReviewer = reviewers.find((r) => r.user_id === manualReviewerId);
+      if (!targetReviewer) {
+        return NextResponse.json(
+          { error: "Reviewer not found in this phase" },
+          { status: 404 }
+        );
+      }
+      const requestedIds = ((body as Record<string, unknown>).registrationIds as unknown[])
+        .map((id) => String(id))
+        .filter((id) => UUID_RE.test(id));
+      const eligibleIds = new Set(filteredRegistrations.map((r) => r.id));
+      for (const regId of requestedIds) {
+        if (!eligibleIds.has(regId)) continue;
+        const pairKey = `${manualReviewerId}:${regId}`;
+        if (existingPairs.has(pairKey)) continue;
+        newAssignments.push({
+          phase_id: phaseId,
+          reviewer_id: manualReviewerId,
+          registration_id: regId,
+          assigned_at: new Date().toISOString(),
+        });
+        existingPairs.add(pairKey);
       }
     } else {
       // ── Default: Round-robin auto-assign with load balancing ──

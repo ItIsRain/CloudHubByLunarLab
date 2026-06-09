@@ -141,10 +141,35 @@ export function usePhaseAssignments(hackathonId: string | undefined, phaseId: st
   });
 }
 
+/** One assignable participant in a phase (organizer picker). */
+export interface AssignablePerson {
+  registrationId: string;
+  userId: string;
+  name: string;
+  email: string;
+  teamId: string | null;
+  teamName: string | null;
+}
+
+export function useAssignablePool(
+  hackathonId: string | undefined,
+  phaseId: string | undefined,
+  enabled = true
+) {
+  return useQuery<{ data: AssignablePerson[]; teamsEnabled: boolean; reason?: string }>({
+    queryKey: ["phase-assignable", hackathonId, phaseId],
+    queryFn: () =>
+      fetchJson<{ data: AssignablePerson[]; teamsEnabled: boolean; reason?: string }>(
+        `/api/hackathons/${hackathonId}/phases/${phaseId}/assignable`
+      ),
+    enabled: !!hackathonId && !!phaseId && enabled,
+  });
+}
+
 export function useAutoAssign(hackathonId: string, phaseId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (opts?: { reviewerId?: string; mode?: "auto" | "all" | "single"; registrationId?: string }) =>
+    mutationFn: (opts?: { reviewerId?: string; mode?: "auto" | "all" | "single" | "selected"; registrationId?: string; registrationIds?: string[] }) =>
       mutate<{ data: { created: number; totalApplicants: number; totalReviewers: number } }>(
         `/api/hackathons/${hackathonId}/phases/${phaseId}/assignments`, "POST",
         opts ?? {}

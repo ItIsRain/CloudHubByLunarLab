@@ -466,7 +466,7 @@ function PhaseCard({ hackathonId, hackathon, phase, allPhases, onEdit }: PhaseCa
               <hr className="border-border" />
 
               {/* Assignments */}
-              <AssignmentsSection hackathonId={hackathonId} phase={phase} />
+              <AssignmentsSection hackathonId={hackathonId} phase={phase} teamsEnabled={hackathon.teamsEnabled} />
 
               {/* Pitch Rooms */}
               <hr className="border-border" />

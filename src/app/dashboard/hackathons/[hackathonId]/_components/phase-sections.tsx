@@ -23,6 +23,7 @@ import {
   UserCheck,
   Shield,
   CheckCircle2,
+  ListChecks,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { ReviewerAssignDialog } from "./reviewer-assign-dialog";
 import { toast } from "sonner";
 import type {
   CompetitionPhase,
@@ -407,11 +409,14 @@ export function ReviewersSection({
 interface AssignmentsSectionProps {
   hackathonId: string;
   phase: CompetitionPhase;
+  /** When true, the manual picker groups participants by team. */
+  teamsEnabled?: boolean;
 }
 
 export function AssignmentsSection({
   hackathonId,
   phase,
+  teamsEnabled = false,
 }: AssignmentsSectionProps) {
   const { data: assignmentsData, isLoading } = usePhaseAssignments(
     hackathonId,
@@ -421,6 +426,9 @@ export function AssignmentsSection({
   const autoAssign = useAutoAssign(hackathonId, phase.id);
   const clearAssignments = useClearAssignments(hackathonId, phase.id);
   const removeAssignment = useRemoveAssignment(hackathonId, phase.id);
+
+  // Which reviewer's manual-select dialog is open (null = closed).
+  const [pickerReviewer, setPickerReviewer] = React.useState<PhaseReviewer | null>(null);
 
   const assignments: ReviewerAssignment[] = assignmentsData?.data ?? [];
   const reviewers: PhaseReviewer[] = reviewersData?.data ?? [];
@@ -564,6 +572,15 @@ export function AssignmentsSection({
                   <Button
                     size="sm"
                     variant="outline"
+                    onClick={() => setPickerReviewer(reviewer)}
+                    className="gap-1.5 shrink-0"
+                  >
+                    <ListChecks className="h-3.5 w-3.5" />
+                    Select
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() =>
                       handleAssignAll(reviewer.userId, reviewer.name)
                     }
@@ -623,6 +640,20 @@ export function AssignmentsSection({
             </p>
           )}
         </div>
+      )}
+
+      {pickerReviewer && (
+        <ReviewerAssignDialog
+          open={!!pickerReviewer}
+          onOpenChange={(o) => !o && setPickerReviewer(null)}
+          hackathonId={hackathonId}
+          phaseId={phase.id}
+          reviewer={{ userId: pickerReviewer.userId, name: pickerReviewer.name }}
+          teamsEnabled={teamsEnabled}
+          currentAssignments={(assignmentsByReviewer.get(pickerReviewer.userId) ?? []).map(
+            (a) => ({ id: a.id, registrationId: a.registrationId })
+          )}
+        />
       )}
     </div>
   );
