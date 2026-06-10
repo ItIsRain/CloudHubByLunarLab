@@ -1131,8 +1131,10 @@ export interface ReviewerAssignment {
   assignedAt: string;
   // Populated on fetch
   reviewer?: PhaseReviewer;
-  applicantName?: string;
-  applicantEmail?: string;
+  applicantName?: string | null;
+  applicantEmail?: string | null;
+  /** Set when the assignment belongs to a team (team-based judging). */
+  teamName?: string | null;
 }
 
 export interface PhaseScore {

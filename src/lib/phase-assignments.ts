@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const normalizeJoin = (val: any) => (Array.isArray(val) ? val[0] : val) ?? null;
+
 /** A registration that is eligible to be reviewed in a given phase. */
 export interface AssignableRegistration {
   id: string;
@@ -24,7 +27,12 @@ export async function resolveAssignablePool(
   supabase: SupabaseClient,
   hackathonId: string,
   hackathon: { screening_config?: Record<string, unknown> | null },
-  phase: { campus_filter: string | null; source_phase_ids: string[] | null }
+  phase: { campus_filter: string | null; source_phase_ids: string[] | null },
+  // When the hackathon is team-based, the pool collapses to ONE representative
+  // registration per team (the team leader, or any eligible member) so the team
+  // is judged as a single unit — one assignment, one score, one decision.
+  // Participants not on a team remain in the pool as themselves.
+  teamsEnabled = false
 ): Promise<AssignablePoolResult> {
   const screeningConfig = (hackathon.screening_config as Record<string, unknown>) || {};
   const quotaFieldId = screeningConfig.quotaFieldId as string | undefined;
@@ -96,6 +104,47 @@ export async function resolveAssignablePool(
           ? "No applicants match the campus filter for this phase"
           : "No eligible applicants found";
     return { ok: false, status: 400, message };
+  }
+
+  // Team-based hackathon → collapse each team to a single representative
+  // registration so reviewers judge the team as one unit.
+  if (teamsEnabled) {
+    const regByUser = new Map<string, AssignableRegistration>();
+    for (const r of filtered) regByUser.set(r.user_id, r);
+
+    const { data: memberships } = await supabase
+      .from("team_members")
+      .select("user_id, team_id, is_leader, team:teams!team_members_team_id_fkey(id, hackathon_id)")
+      .in("user_id", [...regByUser.keys()]);
+
+    // Group eligible members by their team (only teams in THIS hackathon).
+    const teamMembers = new Map<string, { userId: string; isLeader: boolean }[]>();
+    const teamedUserIds = new Set<string>();
+    for (const m of memberships || []) {
+      const team = normalizeJoin((m as Record<string, unknown>).team);
+      if (!team || team.hackathon_id !== hackathonId) continue;
+      const userId = (m as Record<string, unknown>).user_id as string;
+      if (!regByUser.has(userId)) continue; // only eligible members represent a team
+      const teamId = (m as Record<string, unknown>).team_id as string;
+      const arr = teamMembers.get(teamId) ?? [];
+      arr.push({ userId, isLeader: (m as Record<string, unknown>).is_leader === true });
+      teamMembers.set(teamId, arr);
+      teamedUserIds.add(userId);
+    }
+
+    const reps: AssignableRegistration[] = [];
+    for (const members of teamMembers.values()) {
+      const leader = members.find((mm) => mm.isLeader);
+      const chosen = leader ?? members[0];
+      const rep = chosen && regByUser.get(chosen.userId);
+      if (rep) reps.push(rep);
+    }
+    // Teamless eligible participants stay in the pool as individuals.
+    for (const r of filtered) {
+      if (!teamedUserIds.has(r.user_id)) reps.push(r);
+    }
+
+    filtered = reps;
   }
 
   return { ok: true, registrations: filtered };

@@ -65,10 +65,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Phase not found in this competition" }, { status: 404 });
     }
 
-    const pool = await resolveAssignablePool(supabase, hackathonId, hackathon, {
-      campus_filter: (phase.campus_filter as string | null) ?? null,
-      source_phase_ids: (phase.source_phase_ids as string[] | null) ?? null,
-    });
+    const pool = await resolveAssignablePool(
+      supabase,
+      hackathonId,
+      hackathon,
+      {
+        campus_filter: (phase.campus_filter as string | null) ?? null,
+        source_phase_ids: (phase.source_phase_ids as string[] | null) ?? null,
+      },
+      hackathon.teams_enabled === true
+    );
 
     // An empty/ineligible pool is a valid, non-error state for the picker.
     if (!pool.ok) {

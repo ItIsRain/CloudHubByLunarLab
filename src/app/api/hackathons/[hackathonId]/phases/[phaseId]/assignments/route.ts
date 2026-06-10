@@ -154,50 +154,46 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const isSubmissionMode = (phase as Record<string, unknown>).evaluation_mode === "submission";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let submissionMap: Record<string, any> = {};
-    // user_id -> their team name (for submission-mode display).
+    // user_id -> their team name. Resolved for ALL views (organizer + reviewer)
+    // so team-based phases display the team name instead of a member's name.
     const userTeamNameMap: Record<string, string> = {};
-    if (isSubmissionMode && isMineQuery) {
-      // Look up submissions via: registration.user_id → team_members.user_id → teams.id → submissions.team_id
-      const regUserIds = registrationUserIds; // already collected above
-      if (regUserIds.length > 0) {
-        // Get team memberships for these users within this hackathon
-        const { data: teamMemberships } = await supabase
-          .from("team_members")
-          .select("user_id, team_id, team:teams!team_members_team_id_fkey(id, hackathon_id, name)")
-          .in("user_id", regUserIds);
+    if (registrationUserIds.length > 0) {
+      // Team memberships for these users within this hackathon.
+      const { data: teamMemberships } = await supabase
+        .from("team_members")
+        .select("user_id, team_id, team:teams!team_members_team_id_fkey(id, hackathon_id, name)")
+        .in("user_id", registrationUserIds);
 
-        // Filter to teams belonging to this hackathon
-        const teamIds = new Set<string>();
-        const userToTeam: Record<string, string> = {};
-        for (const tm of teamMemberships || []) {
-          const team = normalizeJoin((tm as Record<string, unknown>).team);
-          if (team && team.hackathon_id === hackathonId) {
-            const teamId = (tm as Record<string, unknown>).team_id as string;
-            const userId = (tm as Record<string, unknown>).user_id as string;
-            teamIds.add(teamId);
-            userToTeam[userId] = teamId;
-            if (team.name) userTeamNameMap[userId] = team.name as string;
-          }
+      const teamIds = new Set<string>();
+      const userToTeam: Record<string, string> = {};
+      for (const tm of teamMemberships || []) {
+        const team = normalizeJoin((tm as Record<string, unknown>).team);
+        if (team && team.hackathon_id === hackathonId) {
+          const teamId = (tm as Record<string, unknown>).team_id as string;
+          const userId = (tm as Record<string, unknown>).user_id as string;
+          teamIds.add(teamId);
+          userToTeam[userId] = teamId;
+          if (team.name) userTeamNameMap[userId] = team.name as string;
         }
+      }
 
-        if (teamIds.size > 0) {
-          const { data: submissions } = await supabase
-            .from("submissions")
-            .select("id, team_id, project_name, form_data, description, github_url, demo_url, tech_stack")
-            .eq("hackathon_id", hackathonId)
-            .in("team_id", [...teamIds]);
+      // Submission lookup (team_id → submission) only when a reviewer is
+      // fetching their own queue for a submission-mode phase — that's the only
+      // view that renders submission content.
+      if (isSubmissionMode && isMineQuery && teamIds.size > 0) {
+        const { data: submissions } = await supabase
+          .from("submissions")
+          .select("id, team_id, project_name, form_data, description, github_url, demo_url, tech_stack")
+          .eq("hackathon_id", hackathonId)
+          .in("team_id", [...teamIds]);
 
-          // Map team_id → submission
-          const teamSubmission: Record<string, Record<string, unknown>> = {};
-          for (const sub of submissions || []) {
-            teamSubmission[(sub as Record<string, unknown>).team_id as string] = sub as Record<string, unknown>;
-          }
-
-          // Map registration user_id → submission
-          for (const [userId, teamId] of Object.entries(userToTeam)) {
-            if (teamSubmission[teamId]) {
-              submissionMap[userId] = teamSubmission[teamId];
-            }
+        const teamSubmission: Record<string, Record<string, unknown>> = {};
+        for (const sub of submissions || []) {
+          teamSubmission[(sub as Record<string, unknown>).team_id as string] = sub as Record<string, unknown>;
+        }
+        for (const [userId, teamId] of Object.entries(userToTeam)) {
+          if (teamSubmission[teamId]) {
+            submissionMap[userId] = teamSubmission[teamId];
           }
         }
       }
@@ -320,7 +316,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Verify caller is the hackathon organizer
     const { data: hackathon } = await supabase
       .from("hackathons")
-      .select("organizer_id, screening_config")
+      .select("organizer_id, screening_config, teams_enabled")
       .eq("id", hackathonId)
       .single();
 
@@ -384,10 +380,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // 2. Resolve the eligible applicant pool (status + campus + source-phase
     //    filtered). Shared with the assignable-pool GET so the writer and the
     //    picker always agree on who can be reviewed.
-    const pool = await resolveAssignablePool(supabase, hackathonId, hackathon, {
-      campus_filter: (phase.campus_filter as string | null) ?? null,
-      source_phase_ids: (phase.source_phase_ids as string[] | null) ?? null,
-    });
+    const pool = await resolveAssignablePool(
+      supabase,
+      hackathonId,
+      hackathon,
+      {
+        campus_filter: (phase.campus_filter as string | null) ?? null,
+        source_phase_ids: (phase.source_phase_ids as string[] | null) ?? null,
+      },
+      hackathon.teams_enabled === true
+    );
     if (!pool.ok) {
       return NextResponse.json({ error: pool.message }, { status: pool.status });
     }

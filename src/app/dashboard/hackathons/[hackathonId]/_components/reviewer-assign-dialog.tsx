@@ -237,25 +237,28 @@ export function ReviewerAssignDialog({
                           {team.teamName}
                         </span>
                         <Badge variant="muted" className="shrink-0">
-                          {team.members.length}
+                          Team
                         </Badge>
                       </button>
-                      {/* Members (so the organizer can fine-tune within a team) */}
-                      <div className="pl-10">
-                        {team.members.map((m) => (
-                          <button
-                            type="button"
-                            key={m.registrationId}
-                            onClick={() => toggleOne(m.registrationId)}
-                            className="w-full flex items-center gap-3 px-3 py-1.5 hover:bg-muted/30 transition-colors text-left"
-                          >
-                            <CheckBox checked={selected.has(m.registrationId)} />
-                            <span className="flex-1 min-w-0 truncate text-xs text-muted-foreground">
-                              {m.name || m.email || m.registrationId.slice(0, 8)}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
+                      {/* If a team ever carries more than one entry, let the
+                          organizer fine-tune within it. */}
+                      {team.members.length > 1 && (
+                        <div className="pl-10">
+                          {team.members.map((m) => (
+                            <button
+                              type="button"
+                              key={m.registrationId}
+                              onClick={() => toggleOne(m.registrationId)}
+                              className="w-full flex items-center gap-3 px-3 py-1.5 hover:bg-muted/30 transition-colors text-left"
+                            >
+                              <CheckBox checked={selected.has(m.registrationId)} />
+                              <span className="flex-1 min-w-0 truncate text-xs text-muted-foreground">
+                                {m.name || m.email || m.registrationId.slice(0, 8)}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
