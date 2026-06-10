@@ -329,7 +329,13 @@ export default function HackathonDetailPage() {
     !!hackathon.winnersAnnouncement &&
     new Date(hackathon.winnersAnnouncement).getTime() <= Date.now();
   const canSeeSubmissionsTab =
-    submissionsPubliclyVisible || isOrganizer || hackSubs.length > 0;
+    submissionsPubliclyVisible ||
+    isOrganizer ||
+    hackSubs.length > 0 ||
+    // Participants (registered, or on a team in this hackathon) need the tab to
+    // submit and manage their project — even before any submission exists.
+    isRegistered ||
+    !!myCurrentTeam;
   const canEditApplication = (registrationStatus === "pending" || registrationStatus === "draft" || registrationStatus === "confirmed") && !isOrganizer;
 
   const getDeadline = () => {
