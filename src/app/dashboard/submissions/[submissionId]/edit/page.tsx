@@ -21,10 +21,13 @@ import { useSubmission, useUpdateSubmission } from "@/hooks/use-submissions";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { usePhases } from "@/hooks/use-phases";
 import { getCurrentSubmissionTarget, isSubmissionLocked } from "@/lib/submission-window";
+import { deriveSubmissionCore } from "@/lib/submission-fields";
 
 const editSchema = z.object({
-  projectName: z.string().min(2, "Project name is required"),
-  tagline: z.string().min(5, "Tagline is required").max(120),
+  // Required only in the legacy (no custom form) path; with a custom form these
+  // are derived from the configured fields.
+  projectName: z.string().optional(),
+  tagline: z.string().max(120).optional(),
   description: z.string().optional(),
   coverImage: z.string().optional(),
   demoVideo: z.string().optional(),
@@ -78,6 +81,10 @@ export default function EditSubmissionPage() {
     if (!hackathonData?.data) return false;
     return isSubmissionLocked(hackathonData.data, phasesData?.data ?? []);
   }, [hackathonData, phasesData]);
+
+  // When the organizer configured a submission form, edit it directly (and hide
+  // the built-in default sections so it isn't duplicated).
+  const customMode = targetFields.fields.length > 0;
 
   const {
     register,
@@ -160,10 +167,37 @@ export default function EditSubmissionPage() {
       return;
     }
 
+    // Legacy (no custom form) path keeps the built-in required fields.
+    if (!customMode) {
+      if (!data.projectName || data.projectName.trim().length < 2) {
+        toast.error("Project name is required.");
+        return;
+      }
+      if (!data.tagline || data.tagline.trim().length < 5) {
+        toast.error("A tagline is required.");
+        return;
+      }
+    }
+
+    // In custom-form mode, keep the NOT NULL columns in sync with the answers.
+    const core = customMode ? deriveSubmissionCore(targetFields.fields, formData) : null;
+    const payload = {
+      ...data,
+      projectName: customMode
+        ? core?.projectName || submission.projectName || "Untitled Project"
+        : data.projectName,
+      tagline: customMode ? core?.tagline || submission.tagline || "" : data.tagline,
+      description: customMode
+        ? core?.description || data.description || submission.description || ""
+        : data.description,
+      githubUrl: customMode ? core?.githubUrl || data.githubUrl || "" : data.githubUrl,
+      demoUrl: customMode ? core?.demoUrl || data.demoUrl || "" : data.demoUrl,
+    };
+
     try {
       await updateMutation.mutateAsync({
         id: submissionId,
-        ...data,
+        ...payload,
         techStack,
         formData,
       });
@@ -215,6 +249,8 @@ export default function EditSubmissionPage() {
           )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {!customMode && (
+              <>
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Project Details</CardTitle>
@@ -286,11 +322,15 @@ export default function EditSubmissionPage() {
                 <TagSelector value={techStack} onChange={setTechStack} maxTags={15} />
               </CardContent>
             </Card>
+              </>
+            )}
 
             {targetFields.fields.length > 0 && submission?.hackathonId && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Additional Questions</CardTitle>
+                  <CardTitle className="text-lg">
+                    {customMode ? "Project Submission" : "Additional Questions"}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <CustomFormFields
@@ -304,6 +344,7 @@ export default function EditSubmissionPage() {
               </Card>
             )}
 
+            {!customMode && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">README</CardTitle>
@@ -315,6 +356,7 @@ export default function EditSubmissionPage() {
                 />
               </CardContent>
             </Card>
+            )}
 
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => router.back()}>

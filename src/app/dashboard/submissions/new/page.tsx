@@ -36,15 +36,19 @@ import {
   getCurrentSubmissionTarget,
   type SubmissionTarget,
 } from "@/lib/submission-window";
+import { deriveSubmissionCore } from "@/lib/submission-fields";
 import { formatDateTime } from "@/lib/utils";
 import { Settings2 } from "lucide-react";
 
+// projectName / tagline / trackId are only required in the legacy (no custom
+// form) path — when the organizer configured a submission form we validate and
+// derive those from the custom fields instead, so they're optional here.
 const submissionSchema = z.object({
   hackathonId: z.string().min(1, "Select a competition"),
   teamId: z.string().min(1, "Select a team"),
-  trackId: z.string().min(1, "Select a track"),
-  projectName: z.string().min(2, "Project name is required"),
-  tagline: z.string().min(5, "Tagline is required").max(120),
+  trackId: z.string().optional(),
+  projectName: z.string().optional(),
+  tagline: z.string().max(120).optional(),
   description: z.string().optional(),
   coverImage: z.string().optional(),
   demoVideo: z.string().optional(),
@@ -138,6 +142,10 @@ function NewSubmissionPageInner() {
     submissionTarget.phaseId !== prefilledPhaseId;
 
   const customFields = submissionTarget?.kind !== "none" ? submissionTarget?.fields ?? [] : [];
+  // When the organizer configured a submission form, it BECOMES the form —
+  // we render exactly those fields and hide the built-in default sections so
+  // there's no duplication (and multi-select / every field type works).
+  const customMode = customFields.length > 0;
 
   // Reset hackathon-scoped form state when the hackathon changes.
   useEffect(() => {
@@ -188,9 +196,42 @@ function NewSubmissionPageInner() {
       return;
     }
 
+    // Legacy (no custom form) path keeps the built-in required fields.
+    if (!customMode) {
+      if (!data.projectName || data.projectName.trim().length < 2) {
+        toast.error("Project name is required.");
+        return;
+      }
+      if (!data.tagline || data.tagline.trim().length < 5) {
+        toast.error("A tagline is required.");
+        return;
+      }
+      if ((selectedHackathon?.tracks.length ?? 0) > 0 && !data.trackId) {
+        toast.error("Please select a track.");
+        return;
+      }
+    }
+
+    // In custom-form mode, derive the NOT NULL columns (project_name, tagline,
+    // description) and a couple of useful links from the answers. Everything is
+    // still saved verbatim in formData.
+    const core = customMode
+      ? deriveSubmissionCore(customFields, formData)
+      : null;
+    const payload = {
+      ...data,
+      projectName: customMode
+        ? core?.projectName || selectedTeam?.name || "Untitled Project"
+        : data.projectName,
+      tagline: customMode ? core?.tagline || "" : data.tagline,
+      description: customMode ? core?.description || data.description || "" : data.description,
+      githubUrl: customMode ? core?.githubUrl || data.githubUrl || "" : data.githubUrl,
+      demoUrl: customMode ? core?.demoUrl || data.demoUrl || "" : data.demoUrl,
+    };
+
     try {
       const result = await createMutation.mutateAsync({
-        ...data,
+        ...payload,
         techStack,
         formData,
         phaseId:
@@ -347,7 +388,7 @@ function NewSubmissionPageInner() {
                   </div>
                 )}
 
-                {selectedHackathon && selectedHackathon.tracks.length > 0 && (
+                {!customMode && selectedHackathon && selectedHackathon.tracks.length > 0 && (
                   <div className="space-y-1">
                     <label className="text-sm font-medium">Track *</label>
                     <select
@@ -369,7 +410,10 @@ function NewSubmissionPageInner() {
               </CardContent>
             </Card>
 
-            {/* Project Details */}
+            {/* Built-in default form — only when the organizer has NOT
+                configured a custom submission form. */}
+            {!customMode && (
+              <>
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -498,6 +542,8 @@ function NewSubmissionPageInner() {
                 />
               </CardContent>
             </Card>
+              </>
+            )}
 
             {/* Organizer-defined questions from the active submission target.
                 Uses the per-phase fields when the phase has them; otherwise
@@ -509,7 +555,7 @@ function NewSubmissionPageInner() {
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Settings2 className="h-5 w-5" />
-                    Additional Questions
+                    {customMode ? "Project Submission" : "Additional Questions"}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
