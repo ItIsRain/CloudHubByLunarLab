@@ -183,13 +183,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (isSubmissionMode && isMineQuery && teamIds.size > 0) {
         const { data: submissions } = await supabase
           .from("submissions")
-          .select("id, team_id, project_name, form_data, description, github_url, demo_url, tech_stack")
+          .select("id, team_id, phase_id, project_name, form_data, description, github_url, demo_url, tech_stack")
           .eq("hackathon_id", hackathonId)
           .in("team_id", [...teamIds]);
 
-        const teamSubmission: Record<string, Record<string, unknown>> = {};
+        // A team may have multiple submissions (per-phase). Show the one for
+        // THIS phase, falling back to the global (phase_id null) round, then to
+        // any submission — so a finalist's project carries into the next phase
+        // even if they haven't re-submitted for it.
+        const teamSubs: Record<string, Record<string, unknown>[]> = {};
         for (const sub of submissions || []) {
-          teamSubmission[(sub as Record<string, unknown>).team_id as string] = sub as Record<string, unknown>;
+          const teamId = (sub as Record<string, unknown>).team_id as string;
+          (teamSubs[teamId] ??= []).push(sub as Record<string, unknown>);
+        }
+        const teamSubmission: Record<string, Record<string, unknown>> = {};
+        for (const [teamId, subs] of Object.entries(teamSubs)) {
+          teamSubmission[teamId] =
+            subs.find((s) => s.phase_id === phaseId) ??
+            subs.find((s) => s.phase_id == null) ??
+            subs[0];
         }
         for (const [userId, teamId] of Object.entries(userToTeam)) {
           if (teamSubmission[teamId]) {
