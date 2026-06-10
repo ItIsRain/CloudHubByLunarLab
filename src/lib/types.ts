@@ -294,6 +294,8 @@ export interface Hackathon {
   allowSolo: boolean;
   teamsEnabled: boolean;
   submissionsEnabled: boolean;
+  /** When true, submissions cannot be created or edited after the deadline. */
+  lockSubmissionsAfterDeadline: boolean;
   registrationFields: FormField[];
   registrationSections: FormSection[];
   submissionFields: FormField[];

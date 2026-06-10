@@ -83,6 +83,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
     allowSolo: true,
     teamsEnabled: true,
     submissionsEnabled: true,
+    lockSubmissionsAfterDeadline: false,
     rules: "",
     eligibility: [] as string[],
     registrationFields: [] as FormField[],
@@ -118,6 +119,7 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
       allowSolo: hackathon.allowSolo ?? true,
       teamsEnabled: hackathon.teamsEnabled ?? true,
       submissionsEnabled: hackathon.submissionsEnabled ?? true,
+      lockSubmissionsAfterDeadline: hackathon.lockSubmissionsAfterDeadline ?? false,
       rules: hackathon.rules || "",
       eligibility: hackathon.eligibility || [],
       registrationFields: hackathon.registrationFields || [],
@@ -494,6 +496,29 @@ export function EditTab({ hackathon, hackathonId }: EditTabProps) {
                   </label>
                   <p className="text-xs text-muted-foreground">
                     Allow teams to submit projects for judging
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="lockSubmissionsAfterDeadline"
+                  name="lockSubmissionsAfterDeadline"
+                  checked={formData.lockSubmissionsAfterDeadline}
+                  onChange={handleChange}
+                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                />
+                <div>
+                  <label htmlFor="lockSubmissionsAfterDeadline" className="text-sm font-medium">
+                    Hard-lock submissions after the deadline
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Once the submission deadline passes, teams can no longer
+                    submit or edit their projects. Organizers can still make
+                    changes.
                   </p>
                 </div>
               </div>

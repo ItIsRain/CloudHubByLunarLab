@@ -147,6 +147,7 @@ export function dbRowToHackathon(
     allowSolo: (row.allow_solo as boolean) ?? true,
     teamsEnabled: (row.teams_enabled as boolean) ?? true,
     submissionsEnabled: (row.submissions_enabled as boolean) ?? true,
+    lockSubmissionsAfterDeadline: (row.lock_submissions_after_deadline as boolean) ?? false,
     registrationFields: (row.registration_fields as Hackathon["registrationFields"]) || [],
     registrationSections: (row.registration_sections as Hackathon["registrationSections"]) || [],
     submissionFields: (row.submission_fields as Hackathon["submissionFields"]) || [],
@@ -454,6 +455,7 @@ export function hackathonFormToDbRow(
     allowSolo: boolean;
     teamsEnabled?: boolean;
     submissionsEnabled?: boolean;
+    lockSubmissionsAfterDeadline?: boolean;
     visibility?: string;
     registrationFields?: unknown[];
     submissionFields?: unknown[];
@@ -504,6 +506,7 @@ export function hackathonFormToDbRow(
     allow_solo: form.allowSolo,
     teams_enabled: form.teamsEnabled ?? true,
     submissions_enabled: form.submissionsEnabled ?? true,
+    lock_submissions_after_deadline: form.lockSubmissionsAfterDeadline ?? false,
     organizer_id: organizerId,
     total_prize_pool: totalPrizePool,
     registration_start: form.registrationStart || null,

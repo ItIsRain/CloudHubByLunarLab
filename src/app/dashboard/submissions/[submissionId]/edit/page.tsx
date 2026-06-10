@@ -20,7 +20,7 @@ import { CustomFormFields } from "@/components/forms/custom-form-field";
 import { useSubmission, useUpdateSubmission } from "@/hooks/use-submissions";
 import { useHackathon } from "@/hooks/use-hackathons";
 import { usePhases } from "@/hooks/use-phases";
-import { getCurrentSubmissionTarget } from "@/lib/submission-window";
+import { getCurrentSubmissionTarget, isSubmissionLocked } from "@/lib/submission-window";
 
 const editSchema = z.object({
   projectName: z.string().min(2, "Project name is required"),
@@ -72,6 +72,12 @@ export default function EditSubmissionPage() {
     if (target.kind === "none") return { fields: [], sections: [] };
     return { fields: target.fields, sections: target.sections };
   }, [hackathonData, phasesData, submission?.phaseId]);
+
+  // Hard lock: organizer disabled edits past the deadline.
+  const locked = useMemo(() => {
+    if (!hackathonData?.data) return false;
+    return isSubmissionLocked(hackathonData.data, phasesData?.data ?? []);
+  }, [hackathonData, phasesData]);
 
   const {
     register,
@@ -134,6 +140,10 @@ export default function EditSubmissionPage() {
   }
 
   const onSubmit = async (data: EditForm) => {
+    if (locked) {
+      toast.error("Submissions are locked — the deadline has passed and edits are no longer allowed.");
+      return;
+    }
     // Required-field check on custom fields.
     const missing: Record<string, string> = {};
     for (const f of targetFields.fields) {
@@ -196,6 +206,13 @@ export default function EditSubmissionPage() {
           <p className="text-muted-foreground mb-8">
             Update your project details.
           </p>
+
+          {locked && (
+            <div className="mb-6 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              Submissions are locked — the deadline has passed. Your project can
+              no longer be edited or resubmitted.
+            </div>
+          )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <Card>
@@ -303,7 +320,7 @@ export default function EditSubmissionPage() {
               <Button type="button" variant="outline" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" loading={updateMutation.isPending} className="gap-2">
+              <Button type="submit" loading={updateMutation.isPending} disabled={locked} className="gap-2">
                 <Save className="h-4 w-4" />
                 Save Changes
               </Button>

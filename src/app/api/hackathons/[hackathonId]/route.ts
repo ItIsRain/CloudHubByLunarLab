@@ -191,6 +191,7 @@ export async function PATCH(
       allow_solo: "allow_solo", allowSolo: "allow_solo",
       teams_enabled: "teams_enabled", teamsEnabled: "teams_enabled",
       submissions_enabled: "submissions_enabled", submissionsEnabled: "submissions_enabled",
+      lock_submissions_after_deadline: "lock_submissions_after_deadline", lockSubmissionsAfterDeadline: "lock_submissions_after_deadline",
       total_prize_pool: "total_prize_pool", totalPrizePool: "total_prize_pool",
       judging_criteria: "judging_criteria", judgingCriteria: "judging_criteria",
       tracks: "tracks", prizes: "prizes", rules: "rules",

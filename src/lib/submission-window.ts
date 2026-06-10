@@ -187,6 +187,22 @@ export function canSubmitNow(target: SubmissionTarget): boolean {
 }
 
 /**
+ * Hard lock: when the organizer enabled `lockSubmissionsAfterDeadline`, no team
+ * may create OR edit their submission once the relevant deadline has passed
+ * (the active submission window is "all-closed"). Organizers bypass this at the
+ * API layer; this predicate only governs participants.
+ */
+export function isSubmissionLocked(
+  hackathon: Hackathon,
+  phases: CompetitionPhase[],
+  now: Date = new Date()
+): boolean {
+  if (hackathon.lockSubmissionsAfterDeadline !== true) return false;
+  const target = getCurrentSubmissionTarget(hackathon, phases, now);
+  return target.kind !== "none" && target.status === "all-closed";
+}
+
+/**
  * The full ordered list of submission rounds (for "show me all phase
  * deadlines" UIs like the team workspace). Returns an empty array when
  * there are no enabled phases — caller can fall back to a single-round

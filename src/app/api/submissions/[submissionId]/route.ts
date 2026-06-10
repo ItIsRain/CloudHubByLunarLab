@@ -9,7 +9,7 @@ import {
 } from "@/lib/supabase/mappers";
 import { hasPrivateEntityAccess } from "@/lib/supabase/auth-helpers";
 import { submissionsArePubliclyVisible } from "@/lib/hackathon-phases";
-import { getCurrentSubmissionTarget } from "@/lib/submission-window";
+import { getCurrentSubmissionTarget, isSubmissionLocked } from "@/lib/submission-window";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { fireWebhooks } from "@/lib/webhook-delivery";
 
@@ -184,7 +184,8 @@ export async function PATCH(
     }
 
     // Only the team LEADER (or the hackathon organizer) may edit/submit.
-    const [membershipRes, hackathonRes] = await Promise.all([
+    // Fetch the full hackathon + phases too, for the deadline lock below.
+    const [membershipRes, hackathonRes, phasesRes] = await Promise.all([
       supabase
         .from("team_members")
         .select("id")
@@ -194,9 +195,13 @@ export async function PATCH(
         .maybeSingle(),
       supabase
         .from("hackathons")
-        .select("organizer_id")
+        .select("*")
         .eq("id", submission.hackathon_id)
         .single(),
+      supabase
+        .from("competition_phases")
+        .select("*")
+        .eq("hackathon_id", submission.hackathon_id),
     ]);
 
     const isOrganizer = hackathonRes.data?.organizer_id === auth.userId;
@@ -204,6 +209,26 @@ export async function PATCH(
     if (!membershipRes.data && !isOrganizer) {
       return NextResponse.json(
         { error: "Only the team leader can edit or submit the team's project." },
+        { status: 403 }
+      );
+    }
+
+    // Map once; reused for the hard lock and the submit-window check.
+    const hackathon = hackathonRes.data
+      ? dbRowToHackathon(hackathonRes.data as Record<string, unknown>)
+      : null;
+    const phases = (phasesRes.data || []).map((r) =>
+      dbRowToCompetitionPhase(r as Record<string, unknown>)
+    );
+
+    // Hard lock: once the organizer enables it and the deadline passes, teams
+    // can no longer edit (content OR status). Organizers keep edit access.
+    if (!isOrganizer && hackathon && isSubmissionLocked(hackathon, phases)) {
+      return NextResponse.json(
+        {
+          error:
+            "Submissions are locked — the deadline has passed and edits are no longer allowed.",
+        },
         { status: 403 }
       );
     }
@@ -231,27 +256,9 @@ export async function PATCH(
 
     // If status is being set to "submitted", enforce the active submission
     // window — phase-level when phases own submissions, hackathon-level
-    // otherwise.
+    // otherwise. (Organizers may still re-open/fix a submission.)
     if (updates.status === "submitted") {
-      const [hackRes, phasesRes] = await Promise.all([
-        supabase
-          .from("hackathons")
-          .select("*")
-          .eq("id", submission.hackathon_id)
-          .single(),
-        supabase
-          .from("competition_phases")
-          .select("*")
-          .eq("hackathon_id", submission.hackathon_id),
-      ]);
-
-      if (hackRes.data) {
-        const hackathon = dbRowToHackathon(
-          hackRes.data as Record<string, unknown>
-        );
-        const phases = (phasesRes.data || []).map((r) =>
-          dbRowToCompetitionPhase(r as Record<string, unknown>)
-        );
+      if (hackathon && !isOrganizer) {
         const target = getCurrentSubmissionTarget(hackathon, phases);
 
         if (target.kind === "none") {
