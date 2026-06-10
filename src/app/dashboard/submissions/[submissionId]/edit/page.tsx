@@ -7,7 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { Save, ArrowLeft } from "lucide-react";
+import { Save, ArrowLeft, Upload } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,36 +146,42 @@ export default function EditSubmissionPage() {
     );
   }
 
-  const onSubmit = async (data: EditForm) => {
+  // finalize=true publishes the final version (status "submitted"); false saves
+  // a draft. Required-field validation only applies when publishing, so a team
+  // can save an incomplete draft and finish later.
+  const submitForm = async (data: EditForm, finalize: boolean) => {
     if (locked) {
       toast.error("Submissions are locked — the deadline has passed and edits are no longer allowed.");
       return;
     }
-    // Required-field check on custom fields.
-    const missing: Record<string, string> = {};
-    for (const f of targetFields.fields) {
-      if (f.required) {
-        const v = formData[f.id];
-        if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) {
-          missing[f.id] = "This field is required";
+
+    if (finalize) {
+      // Required-field check on custom fields.
+      const missing: Record<string, string> = {};
+      for (const f of targetFields.fields) {
+        if (f.required) {
+          const v = formData[f.id];
+          if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) {
+            missing[f.id] = "This field is required";
+          }
         }
       }
-    }
-    if (Object.keys(missing).length > 0) {
-      setFormErrors(missing);
-      toast.error("Please answer all required questions.");
-      return;
-    }
-
-    // Legacy (no custom form) path keeps the built-in required fields.
-    if (!customMode) {
-      if (!data.projectName || data.projectName.trim().length < 2) {
-        toast.error("Project name is required.");
+      if (Object.keys(missing).length > 0) {
+        setFormErrors(missing);
+        toast.error("Please answer all required questions before publishing.");
         return;
       }
-      if (!data.tagline || data.tagline.trim().length < 5) {
-        toast.error("A tagline is required.");
-        return;
+
+      // Legacy (no custom form) path keeps the built-in required fields.
+      if (!customMode) {
+        if (!data.projectName || data.projectName.trim().length < 2) {
+          toast.error("Project name is required.");
+          return;
+        }
+        if (!data.tagline || data.tagline.trim().length < 5) {
+          toast.error("A tagline is required.");
+          return;
+        }
       }
     }
 
@@ -200,8 +206,13 @@ export default function EditSubmissionPage() {
         ...payload,
         techStack,
         formData,
+        status: finalize ? "submitted" : "draft",
       });
-      toast.success("Submission updated successfully!");
+      toast.success(
+        finalize
+          ? "Published! Your final version has been submitted."
+          : "Draft saved."
+      );
       router.push(`/dashboard/submissions/${submissionId}`);
     } catch (error) {
       toast.error(
@@ -248,7 +259,7 @@ export default function EditSubmissionPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit((d) => submitForm(d, true))} className="space-y-6">
             {!customMode && (
               <>
             <Card>
@@ -358,13 +369,24 @@ export default function EditSubmissionPage() {
             </Card>
             )}
 
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex flex-wrap justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" loading={updateMutation.isPending} disabled={locked} className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                loading={updateMutation.isPending}
+                disabled={locked}
+                onClick={handleSubmit((d) => submitForm(d, false))}
+                className="gap-2"
+              >
                 <Save className="h-4 w-4" />
-                Save Changes
+                Save as Draft
+              </Button>
+              <Button type="submit" loading={updateMutation.isPending} disabled={locked} className="gap-2">
+                <Upload className="h-4 w-4" />
+                Publish Final Version
               </Button>
             </div>
           </form>

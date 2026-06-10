@@ -1239,24 +1239,26 @@ export default function HackathonDetailPage() {
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {hackSubs.map((sub, i) => (
                       <motion.div key={sub.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                        <Card className="hover:shadow-md transition-shadow">
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <Badge variant={sub.status === "winner" ? "default" : "outline"} className="text-xs">
-                                {sub.status === "winner" && <Trophy className="h-3 w-3 mr-1" />}
-                                {sub.status}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">{sub.upvotes} votes</span>
-                            </div>
-                            <h4 className="font-medium">{sub.projectName}</h4>
-                            <p className="text-sm text-muted-foreground">{sub.tagline}</p>
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {sub.techStack.slice(0, 3).map((t) => (
-                                <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
+                        <Link href={`/dashboard/submissions/${sub.id}`} className="block h-full">
+                          <Card className="hover:shadow-md hover:border-primary/40 transition-all cursor-pointer h-full">
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <Badge variant={sub.status === "winner" ? "default" : sub.status === "draft" ? "secondary" : "outline"} className="text-xs capitalize">
+                                  {sub.status === "winner" && <Trophy className="h-3 w-3 mr-1" />}
+                                  {sub.status}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">{sub.upvotes} votes</span>
+                              </div>
+                              <h4 className="font-medium">{sub.projectName}</h4>
+                              <p className="text-sm text-muted-foreground">{sub.tagline}</p>
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {sub.techStack.slice(0, 3).map((t) => (
+                                  <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </Link>
                       </motion.div>
                     ))}
                   </div>

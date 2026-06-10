@@ -13,6 +13,7 @@ import {
   Edit,
   Share2,
   Star,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,8 +23,9 @@ import { SafeHtml } from "@/components/ui/safe-html";
 import dynamic from "next/dynamic";
 const ShareDialog = dynamic(() => import("@/components/dialogs/share-dialog").then(m => m.ShareDialog), { ssr: false });
 import { cn, formatDate, getInitials, safeHref } from "@/lib/utils";
-import { useSubmission } from "@/hooks/use-submissions";
+import { useSubmission, useUpdateSubmission } from "@/hooks/use-submissions";
 import { useHackathons } from "@/hooks/use-hackathons";
+import { useAuthStore } from "@/store/auth-store";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -40,11 +42,27 @@ export default function SubmissionDetailPage() {
   const submissionId = params.submissionId as string;
   const [showShare, setShowShare] = useState(false);
   const [upvoted, setUpvoted] = useState(false);
+  const currentUser = useAuthStore((s) => s.user);
   const { data: hackathonsData } = useHackathons();
   const hackathons = hackathonsData?.data || [];
   const { data: submissionData, isLoading } = useSubmission(submissionId);
+  const updateMutation = useUpdateSubmission();
 
   const submission = submissionData?.data;
+
+  const isLeader = !!currentUser && !!submission?.team?.members?.some(
+    (m) => m.user.id === currentUser.id && m.isLeader
+  );
+  const isDraft = submission?.status === "draft";
+
+  const handlePublish = async () => {
+    try {
+      await updateMutation.mutateAsync({ id: submissionId, status: "submitted" });
+      toast.success("Published! Your final version has been submitted.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to publish submission");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -138,6 +156,16 @@ export default function SubmissionDetailPage() {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                {isDraft && isLeader && (
+                  <Button
+                    onClick={handlePublish}
+                    loading={updateMutation.isPending}
+                    className="gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Publish Final Version
+                  </Button>
+                )}
                 <Button
                   variant={upvoted ? "default" : "outline"}
                   onClick={handleUpvote}
@@ -282,7 +310,9 @@ export default function SubmissionDetailPage() {
 
           {/* Metadata */}
           <p className="text-sm text-muted-foreground text-center">
-            Submitted on {formatDate(submission.submittedAt)}
+            {submission.status === "draft" || !submission.submittedAt
+              ? "Draft — not yet published"
+              : `Submitted on ${formatDate(submission.submittedAt)}`}
           </p>
         </motion.div>
       </div>

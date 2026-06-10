@@ -14,6 +14,7 @@ import {
   FileText,
   ImageIcon,
   AlertCircle,
+  Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -162,7 +163,10 @@ function NewSubmissionPageInner() {
     }
   }, [selectedHackathon, setValue]);
 
-  const onSubmit = async (data: SubmissionForm) => {
+  // finalize=true publishes immediately (status "submitted"); false saves a
+  // draft the team can finish later. Required fields are only enforced on
+  // publish.
+  const submitForm = async (data: SubmissionForm, finalize: boolean) => {
     if (blockedNonLeader) {
       toast.error("Only the team leader can submit the team's project.");
       return;
@@ -180,35 +184,37 @@ function NewSubmissionPageInner() {
       return;
     }
 
-    // Required-field check on custom fields (active target — phase-aware).
-    const missing: Record<string, string> = {};
-    for (const f of customFields) {
-      if (f.required) {
-        const v = formData[f.id];
-        if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) {
-          missing[f.id] = "This field is required";
+    if (finalize) {
+      // Required-field check on custom fields (active target — phase-aware).
+      const missing: Record<string, string> = {};
+      for (const f of customFields) {
+        if (f.required) {
+          const v = formData[f.id];
+          if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) {
+            missing[f.id] = "This field is required";
+          }
         }
       }
-    }
-    if (Object.keys(missing).length > 0) {
-      setFormErrors(missing);
-      toast.error("Please answer all required questions.");
-      return;
-    }
+      if (Object.keys(missing).length > 0) {
+        setFormErrors(missing);
+        toast.error("Please answer all required questions before publishing.");
+        return;
+      }
 
-    // Legacy (no custom form) path keeps the built-in required fields.
-    if (!customMode) {
-      if (!data.projectName || data.projectName.trim().length < 2) {
-        toast.error("Project name is required.");
-        return;
-      }
-      if (!data.tagline || data.tagline.trim().length < 5) {
-        toast.error("A tagline is required.");
-        return;
-      }
-      if ((selectedHackathon?.tracks.length ?? 0) > 0 && !data.trackId) {
-        toast.error("Please select a track.");
-        return;
+      // Legacy (no custom form) path keeps the built-in required fields.
+      if (!customMode) {
+        if (!data.projectName || data.projectName.trim().length < 2) {
+          toast.error("Project name is required.");
+          return;
+        }
+        if (!data.tagline || data.tagline.trim().length < 5) {
+          toast.error("A tagline is required.");
+          return;
+        }
+        if ((selectedHackathon?.tracks.length ?? 0) > 0 && !data.trackId) {
+          toast.error("Please select a track.");
+          return;
+        }
       }
     }
 
@@ -234,10 +240,15 @@ function NewSubmissionPageInner() {
         ...payload,
         techStack,
         formData,
+        status: finalize ? "submitted" : "draft",
         phaseId:
           submissionTarget?.kind === "phase" ? submissionTarget.phaseId : null,
       });
-      toast.success("Project submitted successfully!");
+      toast.success(
+        finalize
+          ? "Project published! Your final version has been submitted."
+          : "Draft saved. You can keep editing until the deadline."
+      );
       router.push(`/dashboard/submissions/${result.data.id}`);
     } catch (error) {
       toast.error(
@@ -321,7 +332,7 @@ function NewSubmissionPageInner() {
             </Card>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit((d) => submitForm(d, true))} className="space-y-6">
             {/* Hackathon & Track */}
             <Card>
               <CardHeader>
@@ -582,9 +593,24 @@ function NewSubmissionPageInner() {
             )}
 
             {/* Submit */}
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex flex-wrap justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => router.back()}>
                 Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                loading={createMutation.isPending}
+                disabled={
+                  blockedNonLeader ||
+                  submissionTarget?.kind === "none" ||
+                  (submissionTarget !== null && submissionTarget.status !== "active")
+                }
+                onClick={handleSubmit((d) => submitForm(d, false))}
+                className="gap-2"
+              >
+                <Save className="h-4 w-4" />
+                Save as Draft
               </Button>
               <Button
                 type="submit"
@@ -597,7 +623,7 @@ function NewSubmissionPageInner() {
                 className="gap-2"
               >
                 <Upload className="h-4 w-4" />
-                Submit Project
+                Publish Final Version
               </Button>
             </div>
           </form>
