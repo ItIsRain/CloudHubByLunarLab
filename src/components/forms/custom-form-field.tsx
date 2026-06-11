@@ -23,6 +23,58 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Map the MIME types organizers pick to their file extensions, so we can
+// validate a chosen file even when the browser reports a missing or generic
+// type (common for .pptx / .docx / .xlsx).
+const MIME_TO_EXT: Record<string, string[]> = {
+  "application/pdf": [".pdf"],
+  "application/msword": [".doc"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+  "application/vnd.ms-excel": [".xls"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+  "application/vnd.ms-powerpoint": [".ppt"],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+  "text/plain": [".txt"],
+  "text/csv": [".csv"],
+  "application/zip": [".zip"],
+  "video/mp4": [".mp4"],
+  "video/webm": [".webm"],
+  "image/jpeg": [".jpg", ".jpeg"],
+  "image/png": [".png"],
+  "image/gif": [".gif"],
+  "image/webp": [".webp"],
+};
+
+/**
+ * Robustly decide whether a file satisfies the field's allowed types. Handles
+ * exact MIME matches, "image/*"-style wildcards, bare extension entries
+ * (".pptx"), and — crucially — falls back to the file extension when the
+ * browser reports an empty or generic MIME type.
+ */
+function fileMatchesAllowed(file: File, allowed?: string[]): boolean {
+  if (!allowed?.length) return true;
+  const name = file.name.toLowerCase();
+  const dot = name.lastIndexOf(".");
+  const ext = dot >= 0 ? name.slice(dot) : "";
+  const type = (file.type || "").toLowerCase();
+
+  return allowed.some((raw) => {
+    const t = raw.toLowerCase().trim();
+    if (!t) return false;
+    if (t.startsWith(".")) return ext === t; // bare extension entry
+    if (t.endsWith("/*")) {
+      const prefix = t.slice(0, t.indexOf("/") + 1); // e.g. "image/"
+      if (type.startsWith(prefix)) return true;
+      const exts = Object.entries(MIME_TO_EXT)
+        .filter(([m]) => m.startsWith(prefix))
+        .flatMap(([, e]) => e);
+      return exts.includes(ext);
+    }
+    if (type === t) return true; // exact MIME match
+    return (MIME_TO_EXT[t] || []).includes(ext); // MIME → extension fallback
+  });
+}
+
 function formatFileTypes(types: string[]): string {
   return types
     .map((t) => {
@@ -68,11 +120,7 @@ function FileUploadField({
     }
 
     if (field.validation?.allowedFileTypes?.length) {
-      const ext = `.${file.name.split(".").pop()?.toLowerCase()}`;
-      const allowed = field.validation.allowedFileTypes.some(
-        (t) => t.toLowerCase() === ext || file.type.includes(t.replace(".", ""))
-      );
-      if (!allowed) {
+      if (!fileMatchesAllowed(file, field.validation.allowedFileTypes)) {
         toast.error(
           `File type not allowed. Accepted: ${formatFileTypes(field.validation.allowedFileTypes)}`
         );

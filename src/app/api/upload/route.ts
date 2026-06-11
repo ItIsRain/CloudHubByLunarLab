@@ -24,6 +24,21 @@ const ALLOWED_TYPES = new Set([
   "video/mp4", "video/webm",
 ]);
 
+// Browsers frequently report an empty or generic ("application/octet-stream")
+// MIME type for Office files (.pptx/.docx/.xlsx). Validate by extension as a
+// fallback so legitimate, allowed formats aren't wrongly rejected.
+const ALLOWED_EXTENSIONS = new Set([
+  ".jpg", ".jpeg", ".png", ".gif", ".webp",
+  ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+  ".ppt", ".pptx", ".txt", ".csv", ".zip",
+  ".mp4", ".webm",
+]);
+
+function getExtension(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i >= 0 ? name.slice(i).toLowerCase() : "";
+}
+
 const ALLOWED_FOLDERS = new Set([
   "cloudhub/uploads",
   "cloudhub/applications",
@@ -32,6 +47,10 @@ const ALLOWED_FOLDERS = new Set([
   "cloudhub/hackathons",
   "cloudhub/blog",
 ]);
+
+// Submission file fields upload to cloudhub/submissions/<hackathonId>. Allow
+// that prefix (with a safe, restricted sub-path) without enumerating every id.
+const SUBMISSIONS_FOLDER_RE = /^cloudhub\/submissions(\/[A-Za-z0-9_-]+){0,2}$/;
 
 export async function POST(request: NextRequest) {
   try {
@@ -58,7 +77,10 @@ export async function POST(request: NextRequest) {
     const context = (formData.get("context") as string) || "";
 
     // Validate folder against allowlist to prevent path traversal
-    const folder = ALLOWED_FOLDERS.has(rawFolder) ? rawFolder : "cloudhub/uploads";
+    const folder =
+      ALLOWED_FOLDERS.has(rawFolder) || SUBMISSIONS_FOLDER_RE.test(rawFolder)
+        ? rawFolder
+        : "cloudhub/uploads";
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -71,7 +93,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!ALLOWED_TYPES.has(file.type)) {
+    // Accept by MIME OR by extension — browsers report unreliable MIME types
+    // for Office documents, so the extension fallback prevents false rejections.
+    const ext = getExtension(file.name);
+    if (!ALLOWED_TYPES.has(file.type) && !ALLOWED_EXTENSIONS.has(ext)) {
       return NextResponse.json(
         { error: "File type not allowed. Please upload a supported format (images, PDF, DOC, PPT, XLS, CSV, TXT, ZIP, or MP4)." },
         { status: 400 }
@@ -86,10 +111,18 @@ export async function POST(request: NextRequest) {
     };
     if (context) params.context = context;
 
+    // Classify by MIME, falling back to extension (Office files often have no
+    // reliable MIME). Drives both delivery access and the Cloudinary endpoint.
+    const isImage =
+      file.type.startsWith("image/") ||
+      [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
+    const isVideo =
+      file.type.startsWith("video/") || [".mp4", ".webm"].includes(ext);
+
     // Raw resources (PDFs, docs) use authenticated access by default.
     // Cloudinary delivers them via signed URLs — no public access mode needed.
     // Only images/videos need public access for display in the browser.
-    if (file.type.startsWith("image/") || file.type.startsWith("video/")) {
+    if (isImage || isVideo) {
       params.type = "upload"; // default, publicly accessible for display
     }
 
@@ -113,10 +146,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine resource type
-    let resourceType = "auto";
-    if (file.type.startsWith("image/")) resourceType = "image";
-    else if (file.type.startsWith("video/")) resourceType = "video";
-    else resourceType = "raw";
+    let resourceType = "raw";
+    if (isImage) resourceType = "image";
+    else if (isVideo) resourceType = "video";
 
     const uploadRes = await fetch(
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`,
