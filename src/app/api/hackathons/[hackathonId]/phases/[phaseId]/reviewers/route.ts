@@ -5,6 +5,7 @@ import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getSiteUrl } from "@/lib/site-url";
 
 type RouteParams = { params: Promise<{ hackathonId: string; phaseId: string }> };
 
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Enrich with profile data for reviewers who have accounts
     const userIds = (reviewers || []).map((r) => r.user_id).filter(Boolean);
-    let profileMap: Record<string, { id: string; name: string; email: string; avatar_url: string | null }> = {};
+    const profileMap: Record<string, { id: string; name: string; email: string; avatar_url: string | null }> = {};
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
@@ -239,8 +240,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Send invitation email (fire-and-forget)
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-    const acceptUrl = `${siteUrl}/judge/${hackathonId}/phases/${phaseId}/quick-score?reviewerToken=${invitationToken}`;
+    const acceptUrl = `${getSiteUrl(request)}/judge/${hackathonId}/phases/${phaseId}/quick-score?reviewerToken=${invitationToken}`;
     const hackathonName = hackathon.name as string;
     const phaseName = phase.name as string;
 

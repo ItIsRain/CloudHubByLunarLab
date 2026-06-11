@@ -9,8 +9,7 @@ import {
   sendEmailBatch,
 } from "@/lib/resend";
 import { UUID_RE } from "@/lib/constants";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+import { getSiteUrl } from "@/lib/site-url";
 
 const SESSION_SELECT =
   "*, mentor:profiles!mentor_sessions_mentor_id_fkey(*), mentee:profiles!mentor_sessions_mentee_id_fkey(*), team:teams!mentor_sessions_team_id_fkey(id, name, avatar), block:mentor_availability_blocks!mentor_sessions_availability_block_id_fkey(timezone)";
@@ -197,7 +196,7 @@ export async function PATCH(
           slotLabel,
           meetingUrl,
           meetingPhone,
-          sessionUrl: `${SITE_URL}/hackathons/${hackathonId}/mentors`,
+          sessionUrl: `${getSiteUrl(request)}/hackathons/${hackathonId}/mentors`,
         };
         const teamId = mapped.teamId;
         const teamName = mapped.team?.name;
@@ -277,7 +276,7 @@ export async function PATCH(
           hackathonName,
           slotLabel,
           reason: update.cancellation_reason as string | undefined,
-          browseUrl: `${SITE_URL}/hackathons/${hackathonId}/mentors`,
+          browseUrl: `${getSiteUrl(request)}/hackathons/${hackathonId}/mentors`,
         }).catch((e) => console.error("[mentor-booking] decline email failed:", e));
 
         admin

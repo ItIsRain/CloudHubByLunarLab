@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dbRowToApplication } from "@/lib/supabase/mappers";
 import { writeAuditLog } from "@/lib/audit";
 import { UUID_RE } from "@/lib/constants";
+import { getSiteUrl } from "@/lib/site-url";
 import {
   sendApplicationAcceptedEmail,
   sendApplicationRejectedEmail,
@@ -226,7 +227,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const formName = ((form as Record<string, unknown>).name as string) || "the competition";
 
     if (applicantEmail) {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+      const siteUrl = getSiteUrl(request);
       const emailParams = { to: applicantEmail, applicantName, hackathonName: formName, hackathonId: formId, linkUrl: `${siteUrl}/apply/${formId}` };
       const emailSenders: Record<string, () => Promise<unknown>> = {
         accepted: () => sendApplicationAcceptedEmail(emailParams),

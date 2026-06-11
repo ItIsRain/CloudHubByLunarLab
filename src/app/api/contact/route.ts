@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { getSiteUrl } from "@/lib/site-url";
 
 const contactSchema = z.object({
   name: z.string().min(2).max(100),
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     const { name, email, subject, message } = parsed.data;
 
     // Send notification email to team
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const siteUrl = getSiteUrl(request);
     await sendEmail({
       to: "hello@lnr.ae",
       subject: `[CloudHub Contact] ${escapeHtml(subject)}`,

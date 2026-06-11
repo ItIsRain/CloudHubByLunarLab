@@ -4,6 +4,7 @@ import { dbRowToEntityInvitation } from "@/lib/supabase/mappers";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { UUID_RE } from "@/lib/constants";
+import { getSiteUrl } from "@/lib/site-url";
 
 export async function POST(request: NextRequest) {
   try {
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
     }
 
     const token = invitation.token as string;
-    const acceptUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/invite/accept?token=${token}`;
+    const acceptUrl = `${getSiteUrl(request)}/invite/accept?token=${token}`;
 
     await sendEmail({
       to: email,

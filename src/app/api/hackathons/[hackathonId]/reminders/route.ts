@@ -5,6 +5,7 @@ import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
 import { UUID_RE } from "@/lib/constants";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { getSiteUrl } from "@/lib/site-url";
 
 const VALID_REMINDER_TYPES = [
   "incomplete_application",
@@ -247,8 +248,7 @@ export async function POST(
         });
       }
 
-      const siteUrl =
-        process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+      const siteUrl = getSiteUrl(request);
       const hackathonName = hackathon.name as string;
       const organizerProfile = hackathon.organizer as {
         name?: string;

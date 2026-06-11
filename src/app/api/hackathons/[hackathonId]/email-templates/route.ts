@@ -6,6 +6,7 @@ import { sendEmailBatch, emailWrapper, escapeHtml } from "@/lib/resend";
 import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess, canEdit, type HackathonRole } from "@/lib/check-hackathon-access";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getSiteUrl } from "@/lib/site-url";
 
 const VALID_CATEGORIES = [
   "acceptance",
@@ -743,7 +744,7 @@ export async function PUT(
       });
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const siteUrl = getSiteUrl(request);
     const hackathonName = hackathon.name as string;
     const organizerProfile = hackathon.organizer as { name?: string } | null;
     const organizerName = organizerProfile?.name || "Organizer";

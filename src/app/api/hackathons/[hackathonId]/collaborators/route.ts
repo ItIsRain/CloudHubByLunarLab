@@ -5,6 +5,7 @@ import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess, canManage } from "@/lib/check-hackathon-access";
 import { sendEmail, emailWrapper, escapeHtml } from "@/lib/resend";
+import { getSiteUrl } from "@/lib/site-url";
 
 type RouteParams = { params: Promise<{ hackathonId: string }> };
 
@@ -228,7 +229,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       admin.from("profiles").select("name, email").eq("id", auth.userId).single(),
     ]);
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const siteUrl = getSiteUrl(request);
     const acceptUrl = `${siteUrl}/co-organizer/accept?hackathonId=${hackathonId}&token=${newCollab.token as string}`;
     const hackathonName = (hackForNotif?.name as string | undefined) || "a competition";
     const inviterName =

@@ -5,8 +5,7 @@ import { dbRowToMentorSession, dbRowToMentorAvailabilityBlock } from "@/lib/supa
 import { findSlotByStart } from "@/lib/mentor-slots";
 import { sendMentorBookingRequestEmail } from "@/lib/resend";
 import { UUID_RE } from "@/lib/constants";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+import { getSiteUrl } from "@/lib/site-url";
 
 const SESSION_SELECT =
   "*, mentor:profiles!mentor_sessions_mentor_id_fkey(*), mentee:profiles!mentor_sessions_mentee_id_fkey(*), team:teams!mentor_sessions_team_id_fkey(id, name, avatar)";
@@ -253,7 +252,7 @@ export async function POST(
         hackathonName,
         slotLabel,
         topic: topic || undefined,
-        manageUrl: `${SITE_URL}/hackathons/${hackathonId}/manage-mentorship`,
+        manageUrl: `${getSiteUrl(request)}/hackathons/${hackathonId}/manage-mentorship`,
       }).catch((e) => console.error("[mentor-booking] email failed:", e));
     }
 

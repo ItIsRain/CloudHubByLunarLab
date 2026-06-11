@@ -5,6 +5,7 @@ import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess, canManage } from "@/lib/check-hackathon-access";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { sendEmail, emailWrapper, statusBanner, bodySection, greeting, ctaButton, COLORS } from "@/lib/resend";
+import { getSiteUrl } from "@/lib/site-url";
 
 /**
  * POST /api/hackathons/[hackathonId]/winners/email
@@ -123,7 +124,7 @@ export async function POST(
     const regMap = new Map((regs ?? []).map((r) => [r.id, r]));
     const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const siteUrl = getSiteUrl(request);
     const hackathonName = hackathon.name as string;
     const organizer = Array.isArray(hackathon.organizer) ? hackathon.organizer[0] : hackathon.organizer;
     const organizerName = (organizer as { name?: string } | null)?.name || "Organizer";
