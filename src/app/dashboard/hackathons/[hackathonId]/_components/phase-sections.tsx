@@ -69,6 +69,7 @@ import {
   useAutoAssignPhaseWinners,
 } from "@/hooks/use-phase-scoring";
 import { useHackathonParticipants } from "@/hooks/use-hackathon-participants";
+import { useHackathonTeams } from "@/hooks/use-teams";
 import {
   usePhaseConflicts,
   useDetectConflicts,
@@ -1345,10 +1346,14 @@ function ManualFinalistDialog({
   existingFinalistRegIds,
   manualSelect,
 }: ManualFinalistDialogProps) {
-  const { data: participantsData, isLoading } = useHackathonParticipants(
+  const { data: participantsData, isLoading: participantsLoading } =
+    useHackathonParticipants(open ? hackathonId : undefined);
+  const { data: teamsData, isLoading: teamsLoading } = useHackathonTeams(
     open ? hackathonId : undefined
   );
   const participants = participantsData?.data ?? [];
+  const teams = teamsData?.data ?? [];
+  const isLoading = participantsLoading || teamsLoading;
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -1371,16 +1376,79 @@ function ManualFinalistDialog({
     });
   }, [participants, existingFinalistRegIds]);
 
-  const filtered = React.useMemo(() => {
-    if (!searchQuery.trim()) return eligible;
-    const q = searchQuery.toLowerCase();
-    return eligible.filter((p) => {
+  // Group eligible participants by team. A participant belongs to a team if
+  // their userId appears in team.members[].user.id. Participants without a
+  // team show up as "Solo" rows so a single-person submission is still
+  // selectable when teams are enabled.
+  const { teamGroups, soloParticipants } = React.useMemo(() => {
+    const userIdToTeamId = new Map<string, string>();
+    for (const team of teams) {
+      for (const m of team.members ?? []) {
+        if (m.user?.id) userIdToTeamId.set(m.user.id, team.id);
+      }
+    }
+
+    const byTeam = new Map<
+      string,
+      {
+        team: import("@/lib/types").Team;
+        eligibleMembers: typeof eligible;
+      }
+    >();
+    const solos: typeof eligible = [];
+
+    for (const p of eligible) {
+      const teamId = userIdToTeamId.get(p.userId);
+      if (teamId) {
+        const team = teams.find((t) => t.id === teamId);
+        if (!team) {
+          solos.push(p);
+          continue;
+        }
+        const existing = byTeam.get(teamId);
+        if (existing) {
+          existing.eligibleMembers.push(p);
+        } else {
+          byTeam.set(teamId, { team, eligibleMembers: [p] });
+        }
+      } else {
+        solos.push(p);
+      }
+    }
+
+    return {
+      teamGroups: Array.from(byTeam.values()).sort((a, b) =>
+        a.team.name.localeCompare(b.team.name)
+      ),
+      soloParticipants: solos.sort((a, b) =>
+        (a.user?.name || "").localeCompare(b.user?.name || "")
+      ),
+    };
+  }, [eligible, teams]);
+
+  // Search across team names, member names/emails (for teams), and solo names/emails.
+  const { filteredTeamGroups, filteredSolos } = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return { filteredTeamGroups: teamGroups, filteredSolos: soloParticipants };
+
+    const matchesParticipant = (p: (typeof eligible)[number]) => {
       const name = (p.user?.name || "").toLowerCase();
       const email = (p.user?.email || "").toLowerCase();
       return name.includes(q) || email.includes(q);
-    });
-  }, [eligible, searchQuery]);
+    };
 
+    return {
+      filteredTeamGroups: teamGroups.filter(
+        (g) =>
+          g.team.name.toLowerCase().includes(q) ||
+          g.eligibleMembers.some(matchesParticipant)
+      ),
+      filteredSolos: soloParticipants.filter(matchesParticipant),
+    };
+  }, [teamGroups, soloParticipants, searchQuery]);
+
+  // Selection helpers — selection state is always per-registration-id so the
+  // submit payload stays compatible with the existing backend.
   const toggleOne = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -1390,17 +1458,48 @@ function ManualFinalistDialog({
     });
   };
 
+  const toggleTeam = (regIds: string[]) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const allSelected = regIds.every((id) => next.has(id));
+      if (allSelected) regIds.forEach((id) => next.delete(id));
+      else regIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const allVisibleRegIds = React.useMemo(() => {
+    const ids: string[] = [];
+    for (const g of filteredTeamGroups) for (const m of g.eligibleMembers) ids.push(m.id);
+    for (const s of filteredSolos) ids.push(s.id);
+    return ids;
+  }, [filteredTeamGroups, filteredSolos]);
+
   const toggleAll = () => {
-    if (selected.size === filtered.length) {
+    if (allVisibleRegIds.every((id) => selected.has(id))) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filtered.map((p) => p.id)));
+      setSelected(new Set(allVisibleRegIds));
     }
   };
 
+  const selectedTeamCount = React.useMemo(
+    () =>
+      teamGroups.filter(
+        (g) =>
+          g.eligibleMembers.length > 0 &&
+          g.eligibleMembers.every((m) => selected.has(m.id))
+      ).length,
+    [teamGroups, selected]
+  );
+  const selectedSoloCount = React.useMemo(
+    () => soloParticipants.filter((s) => selected.has(s.id)).length,
+    [soloParticipants, selected]
+  );
+
   const handleSubmit = async () => {
     if (selected.size === 0) {
-      toast.error("Select at least one applicant.");
+      toast.error("Select at least one team or applicant.");
       return;
     }
 
@@ -1415,7 +1514,16 @@ function ManualFinalistDialog({
         phaseId: phase.id,
         selections,
       });
-      toast.success(`${selections.length} finalist${selections.length !== 1 ? "s" : ""} added.`);
+      const parts: string[] = [];
+      if (selectedTeamCount > 0)
+        parts.push(`${selectedTeamCount} team${selectedTeamCount !== 1 ? "s" : ""}`);
+      if (selectedSoloCount > 0)
+        parts.push(`${selectedSoloCount} solo`);
+      toast.success(
+        `Added ${selections.length} finalist${selections.length !== 1 ? "s" : ""}${
+          parts.length ? ` (${parts.join(", ")})` : ""
+        }.`
+      );
       onOpenChange(false);
     } catch (err) {
       toast.error(
@@ -1448,91 +1556,190 @@ function ManualFinalistDialog({
         </div>
 
         {/* Selection stats */}
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="text-muted-foreground">
-            {eligible.length} eligible applicant{eligible.length !== 1 ? "s" : ""}
+            {teamGroups.length} team{teamGroups.length !== 1 ? "s" : ""}
+            {" · "}
+            {soloParticipants.length} solo
           </span>
           {selected.size > 0 && (
             <Badge variant="default" className="gap-1">
               <Check className="h-3 w-3" />
-              {selected.size} selected
+              {selectedTeamCount > 0 &&
+                `${selectedTeamCount} team${selectedTeamCount !== 1 ? "s" : ""}`}
+              {selectedTeamCount > 0 && selectedSoloCount > 0 && " + "}
+              {selectedSoloCount > 0 &&
+                `${selectedSoloCount} solo`}
+              {" "}({selected.size} applicant{selected.size !== 1 ? "s" : ""})
             </Badge>
           )}
         </div>
 
-        {/* Applicant Table */}
+        {/* Team / Solo list */}
         <div className="flex-1 overflow-y-auto min-h-0 border rounded-lg">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-          ) : filtered.length === 0 ? (
+          ) : filteredTeamGroups.length === 0 && filteredSolos.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center px-4">
               <Users className="h-8 w-8 text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">
                 {eligible.length === 0
                   ? "No eligible applicants found. Make sure participants are accepted or confirmed."
-                  : "No applicants match your search."}
+                  : "No teams or applicants match your search."}
               </p>
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-background border-b">
-                <tr className="text-left">
-                  <th className="p-3 w-10">
-                    <input
-                      type="checkbox"
-                      checked={filtered.length > 0 && selected.size === filtered.length}
-                      onChange={toggleAll}
-                      className="rounded border-border"
-                    />
-                  </th>
-                  <th className="p-3 font-medium text-muted-foreground">Applicant</th>
-                  <th className="p-3 font-medium text-muted-foreground">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => {
-                  const isSelected = selected.has(p.id);
-                  return (
-                    <tr
-                      key={p.id}
-                      onClick={() => toggleOne(p.id)}
-                      className={cn(
-                        "border-b last:border-0 cursor-pointer transition-colors",
-                        isSelected
-                          ? "bg-primary/5"
-                          : "hover:bg-muted/30"
-                      )}
-                    >
-                      <td className="p-3">
+            <div className="divide-y">
+              {/* Select-all header */}
+              {allVisibleRegIds.length > 0 && (
+                <div className="flex items-center gap-3 p-3 bg-muted/30 sticky top-0 z-10">
+                  <input
+                    type="checkbox"
+                    checked={
+                      allVisibleRegIds.length > 0 &&
+                      allVisibleRegIds.every((id) => selected.has(id))
+                    }
+                    onChange={toggleAll}
+                    className="rounded border-border"
+                  />
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Select all visible
+                  </span>
+                </div>
+              )}
+
+              {/* Teams */}
+              {filteredTeamGroups.length > 0 && (
+                <div>
+                  <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/20">
+                    Teams ({filteredTeamGroups.length})
+                  </div>
+                  {filteredTeamGroups.map((g) => {
+                    const memberIds = g.eligibleMembers.map((m) => m.id);
+                    const allSelected =
+                      memberIds.length > 0 &&
+                      memberIds.every((id) => selected.has(id));
+                    const someSelected =
+                      !allSelected && memberIds.some((id) => selected.has(id));
+                    const leader = g.team.members?.find((m) => m.isLeader);
+                    return (
+                      <div
+                        key={g.team.id}
+                        className={cn(
+                          "border-b last:border-0 transition-colors",
+                          allSelected ? "bg-primary/5" : "hover:bg-muted/30"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleTeam(memberIds)}
+                          className="w-full flex items-start gap-3 p-3 text-left"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            ref={(el) => {
+                              if (el) el.indeterminate = someSelected;
+                            }}
+                            onChange={() => toggleTeam(memberIds)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="rounded border-border mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Users className="h-4 w-4 text-primary shrink-0" />
+                              <p className="font-medium truncate">
+                                {g.team.name}
+                              </p>
+                              <Badge variant="outline" className="text-[10px]">
+                                {g.eligibleMembers.length} eligible
+                                {g.team.members &&
+                                g.team.members.length !== g.eligibleMembers.length
+                                  ? ` / ${g.team.members.length} total`
+                                  : ""}
+                              </Badge>
+                            </div>
+                            <ul className="mt-1.5 ml-6 space-y-0.5">
+                              {g.eligibleMembers.map((m) => {
+                                const isLeader = m.userId === leader?.user?.id;
+                                return (
+                                  <li
+                                    key={m.id}
+                                    className="text-xs text-muted-foreground flex items-center gap-1.5"
+                                  >
+                                    <span className="font-medium text-foreground/80">
+                                      {m.user?.name || "Unknown"}
+                                    </span>
+                                    {isLeader && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-[9px] px-1 py-0 h-3.5"
+                                      >
+                                        Lead
+                                      </Badge>
+                                    )}
+                                    <span className="truncate">
+                                      · {m.user?.email}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Solos */}
+              {filteredSolos.length > 0 && (
+                <div>
+                  <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/20">
+                    Solo ({filteredSolos.length})
+                  </div>
+                  {filteredSolos.map((p) => {
+                    const isSelected = selected.has(p.id);
+                    return (
+                      <button
+                        type="button"
+                        key={p.id}
+                        onClick={() => toggleOne(p.id)}
+                        className={cn(
+                          "w-full border-b last:border-0 cursor-pointer transition-colors flex items-center gap-3 p-3 text-left",
+                          isSelected ? "bg-primary/5" : "hover:bg-muted/30"
+                        )}
+                      >
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleOne(p.id)}
+                          onClick={(e) => e.stopPropagation()}
                           className="rounded border-border"
                         />
-                      </td>
-                      <td className="p-3">
-                        <div>
-                          <p className="font-medium">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">
                             {p.user?.name || "Unknown"}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground truncate">
                             {p.user?.email || ""}
                           </p>
                         </div>
-                      </td>
-                      <td className="p-3">
-                        <Badge variant="outline" className="text-[10px] capitalize">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] capitalize"
+                        >
                           {p.status}
                         </Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
