@@ -209,6 +209,10 @@ interface PhaseFinalist {
   selectedBy: string | null;
   applicantName: string;
   applicantEmail: string;
+  /** Team this finalist represents, when the hackathon has teams enabled and
+   *  the user is on a team. Null for solo finalists. */
+  teamName: string | null;
+  teamMemberCount: number;
   sourcePhaseName: string | null;
   sourceCampus: string | null;
 }

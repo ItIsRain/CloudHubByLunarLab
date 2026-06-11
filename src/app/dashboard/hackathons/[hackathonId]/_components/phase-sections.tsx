@@ -1267,7 +1267,7 @@ export function FinalistsSection({
             <thead>
               <tr className="border-b text-left">
                 <th className="pb-2 font-medium text-muted-foreground">Rank</th>
-                <th className="pb-2 font-medium text-muted-foreground">Applicant</th>
+                <th className="pb-2 font-medium text-muted-foreground">Team / Applicant</th>
                 <th className="pb-2 font-medium text-muted-foreground">Source</th>
                 <th className="pb-2 font-medium text-muted-foreground">Score</th>
                 <th className="pb-2 font-medium text-muted-foreground">Award</th>
@@ -1287,10 +1287,24 @@ export function FinalistsSection({
                       #{f.rank || "-"}
                     </td>
                     <td className="py-2.5 pr-4">
-                      <div>
-                        <p className="font-medium">{f.applicantName}</p>
-                        <p className="text-xs text-muted-foreground">{f.applicantEmail}</p>
-                      </div>
+                      {f.teamName ? (
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-primary shrink-0" />
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{f.teamName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {f.teamMemberCount} member{f.teamMemberCount !== 1 ? "s" : ""}
+                              {" · rep: "}
+                              {f.applicantName}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="font-medium">{f.applicantName}</p>
+                          <p className="text-xs text-muted-foreground">{f.applicantEmail}</p>
+                        </div>
+                      )}
                     </td>
                     <td className="py-2.5 pr-4">
                       {f.sourcePhaseName ? (

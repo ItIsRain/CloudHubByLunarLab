@@ -117,7 +117,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Look up competition_winners for these registrations to merge award labels
     const finalistRegIds = (finalists || []).map((f) => f.registration_id as string);
-    let winnerAwardMap: Record<string, { awardLabel: string; trackName: string | null }> = {};
+    const winnerAwardMap: Record<string, { awardLabel: string; trackName: string | null }> = {};
     if (finalistRegIds.length > 0) {
       const { data: winners } = await supabase
         .from("competition_winners")
@@ -136,6 +136,59 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Look up the team each finalist's user belongs to (within THIS hackathon)
+    // so the table can render team-level rows for team-based competitions.
+    // Solo finalists (no team) keep their personal name/email.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const normalizeJoin = (val: any) => (Array.isArray(val) ? val[0] : val) ?? null;
+    const finalistUserIds = [...new Set(
+      (finalists || [])
+        .map((f) => {
+          const reg = normalizeJoin(f.registration);
+          return reg?.user_id as string | undefined;
+        })
+        .filter(Boolean)
+    )] as string[];
+
+    const userTeamMap: Record<string, { name: string; memberCount: number }> = {};
+    if (finalistUserIds.length > 0) {
+      const { data: teamMemberships } = await supabase
+        .from("team_members")
+        .select("user_id, team:teams!team_members_team_id_fkey(id, hackathon_id, name)")
+        .in("user_id", finalistUserIds);
+
+      const teamIdsForUser: Record<string, string> = {};
+      const teamNames: Record<string, string> = {};
+      for (const tm of teamMemberships || []) {
+        const team = normalizeJoin((tm as Record<string, unknown>).team);
+        if (team && team.hackathon_id === hackathonId) {
+          const userId = (tm as Record<string, unknown>).user_id as string;
+          teamIdsForUser[userId] = team.id as string;
+          teamNames[team.id as string] = team.name as string;
+        }
+      }
+
+      const teamIds = [...new Set(Object.values(teamIdsForUser))];
+      const memberCounts: Record<string, number> = {};
+      if (teamIds.length > 0) {
+        const { data: allMembers } = await supabase
+          .from("team_members")
+          .select("team_id")
+          .in("team_id", teamIds);
+        for (const row of allMembers || []) {
+          const tid = (row as Record<string, unknown>).team_id as string;
+          memberCounts[tid] = (memberCounts[tid] ?? 0) + 1;
+        }
+      }
+
+      for (const [userId, teamId] of Object.entries(teamIdsForUser)) {
+        userTeamMap[userId] = {
+          name: teamNames[teamId] ?? "",
+          memberCount: memberCounts[teamId] ?? 0,
+        };
+      }
+    }
+
     const data = (finalists || []).map((f) => {
       const reg = f.registration as unknown as Record<string, unknown> | null;
       const applicant = reg?.applicant as unknown as Record<string, unknown> | null;
@@ -145,6 +198,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const resolvedAwardLabel = (f.award_label as string | null)
         || winnerAward?.awardLabel
         || null;
+      const userId = reg?.user_id as string | undefined;
+      const team = userId ? userTeamMap[userId] : null;
       return {
         id: f.id,
         phaseId: f.phase_id,
@@ -158,6 +213,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         selectedBy: f.selected_by,
         applicantName: applicant?.name || "Unknown",
         applicantEmail: applicant?.email || "",
+        teamName: team?.name || null,
+        teamMemberCount: team?.memberCount || 0,
         sourcePhaseName: srcPhase?.name || null,
         sourceCampus: srcPhase?.campus_filter || null,
       };
