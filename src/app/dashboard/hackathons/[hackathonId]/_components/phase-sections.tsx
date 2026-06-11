@@ -1380,6 +1380,12 @@ function ManualFinalistDialog({
   // their userId appears in team.members[].user.id. Participants without a
   // team show up as "Solo" rows so a single-person submission is still
   // selectable when teams are enabled.
+  //
+  // Each team has a single "rep" registration id — the leader's, or the first
+  // eligible member if the leader is missing/ineligible. This matches the
+  // backend's `resolveAssignablePool(teamsEnabled=true)` behavior: one
+  // representative registration per team, so the team is judged as one unit
+  // and only one finalist row is written per team.
   const { teamGroups, soloParticipants } = React.useMemo(() => {
     const userIdToTeamId = new Map<string, string>();
     for (const team of teams) {
@@ -1416,10 +1422,24 @@ function ManualFinalistDialog({
       }
     }
 
+    const groups = Array.from(byTeam.values())
+      .map((g) => {
+        const leaderUserId = g.team.members?.find((m) => m.isLeader)?.user?.id;
+        const leaderReg = g.eligibleMembers.find(
+          (m) => m.userId === leaderUserId
+        );
+        const repRegId = leaderReg?.id ?? g.eligibleMembers[0]?.id ?? null;
+        return { ...g, repRegId };
+      })
+      .filter((g) => g.repRegId !== null)
+      .sort((a, b) => a.team.name.localeCompare(b.team.name));
+
     return {
-      teamGroups: Array.from(byTeam.values()).sort((a, b) =>
-        a.team.name.localeCompare(b.team.name)
-      ),
+      teamGroups: groups as Array<{
+        team: import("@/lib/types").Team;
+        eligibleMembers: typeof eligible;
+        repRegId: string;
+      }>,
       soloParticipants: solos.sort((a, b) =>
         (a.user?.name || "").localeCompare(b.user?.name || "")
       ),
@@ -1447,8 +1467,9 @@ function ManualFinalistDialog({
     };
   }, [teamGroups, soloParticipants, searchQuery]);
 
-  // Selection helpers — selection state is always per-registration-id so the
-  // submit payload stays compatible with the existing backend.
+  // Selection state holds ONE registration id per team (the rep) plus one id
+  // per selected solo. This keeps the phase_finalists table aligned with the
+  // rest of the team-aware pipeline (one row per team, judged as one unit).
   const toggleOne = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -1458,19 +1479,9 @@ function ManualFinalistDialog({
     });
   };
 
-  const toggleTeam = (regIds: string[]) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      const allSelected = regIds.every((id) => next.has(id));
-      if (allSelected) regIds.forEach((id) => next.delete(id));
-      else regIds.forEach((id) => next.add(id));
-      return next;
-    });
-  };
-
   const allVisibleRegIds = React.useMemo(() => {
     const ids: string[] = [];
-    for (const g of filteredTeamGroups) for (const m of g.eligibleMembers) ids.push(m.id);
+    for (const g of filteredTeamGroups) ids.push(g.repRegId);
     for (const s of filteredSolos) ids.push(s.id);
     return ids;
   }, [filteredTeamGroups, filteredSolos]);
@@ -1484,12 +1495,7 @@ function ManualFinalistDialog({
   };
 
   const selectedTeamCount = React.useMemo(
-    () =>
-      teamGroups.filter(
-        (g) =>
-          g.eligibleMembers.length > 0 &&
-          g.eligibleMembers.every((m) => selected.has(m.id))
-      ).length,
+    () => teamGroups.filter((g) => selected.has(g.repRegId)).length,
     [teamGroups, selected]
   );
   const selectedSoloCount = React.useMemo(
@@ -1617,33 +1623,25 @@ function ManualFinalistDialog({
                     Teams ({filteredTeamGroups.length})
                   </div>
                   {filteredTeamGroups.map((g) => {
-                    const memberIds = g.eligibleMembers.map((m) => m.id);
-                    const allSelected =
-                      memberIds.length > 0 &&
-                      memberIds.every((id) => selected.has(id));
-                    const someSelected =
-                      !allSelected && memberIds.some((id) => selected.has(id));
+                    const isSelected = selected.has(g.repRegId);
                     const leader = g.team.members?.find((m) => m.isLeader);
                     return (
                       <div
                         key={g.team.id}
                         className={cn(
                           "border-b last:border-0 transition-colors",
-                          allSelected ? "bg-primary/5" : "hover:bg-muted/30"
+                          isSelected ? "bg-primary/5" : "hover:bg-muted/30"
                         )}
                       >
                         <button
                           type="button"
-                          onClick={() => toggleTeam(memberIds)}
+                          onClick={() => toggleOne(g.repRegId)}
                           className="w-full flex items-start gap-3 p-3 text-left"
                         >
                           <input
                             type="checkbox"
-                            checked={allSelected}
-                            ref={(el) => {
-                              if (el) el.indeterminate = someSelected;
-                            }}
-                            onChange={() => toggleTeam(memberIds)}
+                            checked={isSelected}
+                            onChange={() => toggleOne(g.repRegId)}
                             onClick={(e) => e.stopPropagation()}
                             className="rounded border-border mt-0.5"
                           />
