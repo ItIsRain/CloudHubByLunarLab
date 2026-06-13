@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useDropzone } from "react-dropzone";
+import { useDropzone, type FileRejection } from "react-dropzone";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, ImageIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,9 +28,14 @@ interface ImageUploadProps {
 }
 
 const defaultDescriptions: Record<string, string> = {
-  square: "Recommended: 512 × 512px. PNG, JPG or WebP, max 5MB.",
-  video: "Recommended: 1920 × 1080px (16:9). PNG, JPG or WebP, max 5MB.",
-  banner: "Recommended: 1920 × 640px (3:1). PNG, JPG or WebP, max 5MB.",
+  square: "Recommended: 512 × 512px. PNG, JPG, WebP or GIF, max 10MB.",
+  video: "Recommended: 1920 × 1080px (16:9). PNG, JPG, WebP or GIF, max 10MB.",
+  banner: "Recommended: 1920 × 640px (3:1). PNG, JPG, WebP or GIF, max 10MB.",
+};
+
+/** Accepted image formats — kept in sync with the /api/upload allowlist. */
+const ACCEPTED_IMAGE_TYPES: Record<string, string[]> = {
+  "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif"],
 };
 
 export function ImageUpload({
@@ -39,7 +44,7 @@ export function ImageUpload({
   onRemove,
   label = "Upload Image",
   description,
-  maxSize = 5 * 1024 * 1024,
+  maxSize = 10 * 1024 * 1024,
   aspectRatio = "banner",
   className,
   folder,
@@ -164,9 +169,26 @@ export function ImageUpload({
     [folder, maxSize, onChange, uploadToCdn]
   );
 
+  // Without this, react-dropzone silently discards files it doesn't accept
+  // (e.g. HEIC from an iPhone, AVIF, SVG) — onDrop never fires, so the upload
+  // "does nothing" with no feedback. Surface a clear reason instead.
+  const onDropRejected = useCallback((rejections: FileRejection[]) => {
+    const firstError = rejections[0]?.errors?.[0];
+    if (firstError?.code === "file-invalid-type") {
+      setError(
+        "Unsupported image format. Please use PNG, JPG, WebP or GIF (HEIC, AVIF and SVG are not supported — convert to JPG first)."
+      );
+    } else if (firstError?.code === "too-many-files") {
+      setError("Please select a single image file.");
+    } else {
+      setError(firstError?.message || "That file couldn't be used. Please try a different image.");
+    }
+  }, []);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp"] },
+    onDropRejected,
+    accept: ACCEPTED_IMAGE_TYPES,
     maxFiles: 1,
     multiple: false,
     disabled: isUploading,

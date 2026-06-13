@@ -479,6 +479,11 @@ export function RichTextEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        // StarterKit v3 bundles Link and Underline. We register our own
+        // configured versions below, so disable the bundled ones to avoid
+        // "Duplicate extension names" warnings.
+        link: false,
+        underline: false,
       }),
       Placeholder.configure({ placeholder }),
       Image.configure({

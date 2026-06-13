@@ -419,9 +419,10 @@ export default function HackathonDetailPage() {
           can never slide under it. */}
       <div className="relative min-h-[420px] sm:min-h-[480px] lg:min-h-[500px] overflow-hidden">
         <Image
-          src={hackathon.coverImage || "/placeholder-hackathon.jpg"}
+          src={hackathon.coverImage || "/placeholder-hackathon.svg"}
           alt={hackathon.name}
           fill
+          sizes="100vw"
           className="object-cover"
           priority
         />

@@ -146,6 +146,7 @@ const VideoPlayer = React.memo(function VideoPlayer({ videoId }: { videoId: stri
             src={thumbnailUrl}
             alt="Video thumbnail"
             fill
+            sizes="(max-width: 768px) 100vw, 50vw"
             className="object-cover"
             priority
           />

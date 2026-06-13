@@ -235,7 +235,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
                 }}
                 aspectRatio="banner"
                 label="Upload cover image"
-                description="Recommended: 1920 x 640px (3:1). PNG, JPG or WebP, max 5MB."
+                description="Recommended: 1920 x 640px (3:1). PNG, JPG, WebP or GIF, max 10MB."
                 folder="cloudhub/hackathons"
               />
             </div>
@@ -256,7 +256,7 @@ export function SettingsTab({ hackathon, hackathonId, isOwner = true, collaborat
                 }}
                 aspectRatio="square"
                 label="Upload logo"
-                description="Recommended: 512 x 512px. PNG, JPG or WebP, max 5MB."
+                description="Recommended: 512 x 512px. PNG, JPG, WebP or GIF, max 10MB."
                 folder="cloudhub/hackathons"
                 className="max-w-[240px]"
               />
