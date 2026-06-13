@@ -6,6 +6,7 @@ import { checkHackathonAccess, canManage } from "@/lib/check-hackathon-access";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { writeAuditLog } from "@/lib/audit";
 import type { FormField } from "@/lib/types";
+import crypto from "crypto";
 
 /**
  * POST /api/hackathons/[hackathonId]/import
@@ -67,7 +68,7 @@ export async function POST(
     // Parse body
     const body = await request.json();
     const newFields: FormField[] = Array.isArray(body.newFields) ? body.newFields : [];
-    const rows: { name: string; email: string; formData: Record<string, unknown> }[] =
+    const rows: { name: string; email?: string; formData: Record<string, unknown> }[] =
       Array.isArray(body.rows) ? body.rows : [];
 
     if (rows.length === 0) {
@@ -75,6 +76,28 @@ export async function POST(
     }
     if (rows.length > 5000) {
       return NextResponse.json({ error: "Maximum 5000 rows per import" }, { status: 400 });
+    }
+
+    // Email is optional. A row only needs a name OR an email to be usable.
+    // For name-only rows, mint a unique, non-deliverable placeholder address
+    // (.invalid is RFC-2606 reserved and never resolves) so each applicant
+    // still gets their own profile + registration keyed by their name — which
+    // is what the judging and assignment views display. The email never gets
+    // used for delivery; these accounts can't be signed into.
+    const usableRows = rows.filter(
+      (r) => (r.name && r.name.trim()) || (r.email && r.email.trim())
+    );
+    for (const r of usableRows) {
+      if (!r.email || !r.email.trim()) {
+        r.email = `noemail-${crypto.randomUUID()}@import.invalid`;
+      }
+    }
+
+    if (usableRows.length === 0) {
+      return NextResponse.json(
+        { error: "No rows with a name or email to import" },
+        { status: 400 }
+      );
     }
 
     // ── Step 1: Merge new fields into hackathon.registration_fields ──
@@ -119,7 +142,7 @@ export async function POST(
     // ── Step 2: Resolve emails → user IDs ───────────────────────────
 
     const emailToUserId = new Map<string, string>();
-    const uniqueEmails = [...new Set(rows.map((r) => r.email.trim().toLowerCase()))];
+    const uniqueEmails = [...new Set(usableRows.map((r) => (r.email as string).trim().toLowerCase()))];
 
     // Batch-fetch existing profiles
     // Process in chunks to avoid hitting query-string limits
@@ -147,7 +170,7 @@ export async function POST(
     for (const email of emailsWithoutProfile) {
       try {
         // Find the name from the first matching row
-        const row = rows.find((r) => r.email.trim().toLowerCase() === email);
+        const row = usableRows.find((r) => (r.email as string).trim().toLowerCase() === email);
         const name = row?.name ?? email.split("@")[0];
 
         // Create auth user with a random password (they'll use magic link / OAuth)
@@ -229,8 +252,8 @@ export async function POST(
       is_draft: boolean;
     }[] = [];
 
-    for (const row of rows) {
-      const email = row.email.trim().toLowerCase();
+    for (const row of usableRows) {
+      const email = (row.email as string).trim().toLowerCase();
       const userId = emailToUserId.get(email);
 
       if (!userId) {
@@ -298,7 +321,7 @@ export async function POST(
           skipped,
           errorCount: errors.length,
           newFieldCount: newFields.length,
-          totalRows: rows.length,
+          totalRows: usableRows.length,
         },
       },
       request

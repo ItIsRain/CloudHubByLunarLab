@@ -419,7 +419,10 @@ export function ImportApplicantsDialog({
   const mappedFieldCount = mappings.filter(
     (m) => m.target.kind === "new" || m.target.kind === "existing"
   ).length;
-  const canImport = hasName && hasEmail;
+  // Only a Name mapping is required. Email is optional — rows without an
+  // email are imported under a non-deliverable placeholder address so the
+  // applicant still gets a profile + registration keyed by their name.
+  const canImport = hasName;
 
   // ── AI Assist ────────────────────────────────────────────────────
   // Sends every column that's still mapped to a new field to Claude Haiku
@@ -568,7 +571,8 @@ export function ImportApplicantsDialog({
         return { name, email, formData };
       });
 
-      const validRows = rows.filter((r) => r.name && r.email);
+      // Email is optional; only a name is required to import an applicant.
+      const validRows = rows.filter((r) => r.name);
       const skippedCount = rows.length - validRows.length;
 
       setImportStatus(`Importing ${validRows.length} applicants...`);
@@ -631,9 +635,10 @@ export function ImportApplicantsDialog({
                       </p>
                       <ul className="list-disc pl-4 space-y-1 text-xs">
                         <li>
-                          The file must include <strong>Name</strong> and{" "}
-                          <strong>Email</strong> columns (used to identify each
-                          applicant).
+                          The file must include a <strong>Name</strong> column.
+                          An <strong>Email</strong> column is optional — rows
+                          without an email are still imported under the
+                          applicant&apos;s name.
                         </li>
                         <li>
                           All other columns (Age, University, etc.) will be
@@ -735,8 +740,8 @@ export function ImportApplicantsDialog({
                     </Badge>
                   )}
                   {!hasEmail && (
-                    <Badge variant="warning" className="gap-1">
-                      <AlertTriangle className="h-3 w-3" /> Email not mapped
+                    <Badge variant="muted" className="gap-1">
+                      <Info className="h-3 w-3" /> Email optional
                     </Badge>
                   )}
                   <Badge variant="outline">
@@ -925,7 +930,7 @@ export function ImportApplicantsDialog({
             <div className="flex items-center gap-3">
               {!canImport && (
                 <p className="text-xs text-destructive">
-                  Map both Name and Email before importing
+                  Map a Name column before importing
                 </p>
               )}
               <Button
