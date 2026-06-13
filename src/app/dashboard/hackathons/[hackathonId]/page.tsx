@@ -20,6 +20,7 @@ import {
   Trophy,
   Megaphone,
   Mail,
+  Award,
   BarChart3,
   Columns3,
   Settings,
@@ -64,6 +65,7 @@ const PhasesTab = dynamic(() => import("./_components/phases-tab").then(m => m.P
 const EmailTemplatesTab = dynamic(() => import("./_components/email-templates-tab").then(m => m.EmailTemplatesTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 const WinnersTab = dynamic(() => import("./_components/winners-tab").then(m => m.WinnersTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 const ScoreReviewTab = dynamic(() => import("./_components/score-review-tab").then(m => m.ScoreReviewTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
+const CertificatesTab = dynamic(() => import("./_components/certificates-tab").then(m => m.CertificatesTab), { loading: () => <div className="shimmer rounded-xl h-96" /> });
 
 const statusConfig: Record<
   string,
@@ -103,6 +105,7 @@ const tabs: TabDef[] = [
   { value: "sponsors", label: "Sponsors", icon: Handshake },
   { value: "prizes", label: "Prizes", icon: Gift },
   { value: "winners", label: "Winners", icon: Trophy },
+  { value: "certificates", label: "Certificates", icon: Award },
   { value: "faq", label: "FAQ", icon: HelpCircle },
   { value: "announcements", label: "Announcements", icon: Megaphone },
   { value: "emails", label: "Emails", icon: Mail },
@@ -364,6 +367,9 @@ function HackathonDashboardContent() {
             </TabsContent>
             <TabsContent value="winners">
               <WinnersTab hackathon={hackathon} hackathonId={hackathonId} />
+            </TabsContent>
+            <TabsContent value="certificates">
+              <CertificatesTab hackathon={hackathon} hackathonId={hackathonId} />
             </TabsContent>
             <TabsContent value="faq">
               <FAQTab hackathon={hackathon} hackathonId={hackathonId} />

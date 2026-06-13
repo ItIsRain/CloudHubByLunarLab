@@ -46,6 +46,7 @@ const ALLOWED_FOLDERS = new Set([
   "cloudhub/events",
   "cloudhub/hackathons",
   "cloudhub/blog",
+  "cloudhub/certificates",
 ]);
 
 // Submission file fields upload to cloudhub/submissions/<hackathonId>. Allow
