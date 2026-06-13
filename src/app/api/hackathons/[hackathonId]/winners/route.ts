@@ -4,6 +4,87 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
 import { checkHackathonAccess, canManage, type HackathonRole } from "@/lib/check-hackathon-access";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/**
+ * For each winner, look up the team (if any) that the winner's underlying
+ * registration belongs to in THIS hackathon. This lets the UI render team
+ * names + member counts for team-based competitions while solo entries fall
+ * back to the individual's name. Mutates winners[].registration.team in place.
+ */
+async function enrichWinnersWithTeams(
+  supabase: SupabaseClient,
+  hackathonId: string,
+  winners: Record<string, unknown>[]
+): Promise<void> {
+  if (!winners.length) return;
+
+  // Collect user ids from the FK-joined registrations.
+  const normalizeJoin = (v: unknown) =>
+    Array.isArray(v) ? (v[0] as Record<string, unknown> | undefined) : (v as Record<string, unknown> | null);
+
+  const userIds: string[] = [];
+  for (const w of winners) {
+    const reg = normalizeJoin(w.registration);
+    const uid = reg?.user_id as string | undefined;
+    if (uid) userIds.push(uid);
+  }
+  if (!userIds.length) return;
+
+  // Pull each user's team membership (filtered to teams in this hackathon).
+  const { data: memberships } = await supabase
+    .from("team_members")
+    .select(
+      "user_id, team_id, is_leader, team:teams!team_members_team_id_fkey(id, name, hackathon_id)"
+    )
+    .in("user_id", userIds);
+
+  const userTeam: Record<
+    string,
+    { id: string; name: string; isLeader: boolean }
+  > = {};
+  const teamIds = new Set<string>();
+  for (const m of memberships || []) {
+    const row = m as Record<string, unknown>;
+    const team = normalizeJoin(row.team);
+    if (!team || team.hackathon_id !== hackathonId) continue;
+    const tid = team.id as string;
+    userTeam[row.user_id as string] = {
+      id: tid,
+      name: (team.name as string) || "Unnamed team",
+      isLeader: row.is_leader === true,
+    };
+    teamIds.add(tid);
+  }
+
+  // Member counts so the UI can render "Team Foo · 4 members".
+  const memberCounts: Record<string, number> = {};
+  if (teamIds.size > 0) {
+    const { data: allMembers } = await supabase
+      .from("team_members")
+      .select("team_id")
+      .in("team_id", [...teamIds]);
+    for (const row of allMembers || []) {
+      const tid = (row as Record<string, unknown>).team_id as string;
+      memberCounts[tid] = (memberCounts[tid] ?? 0) + 1;
+    }
+  }
+
+  for (const w of winners) {
+    const reg = normalizeJoin(w.registration);
+    if (!reg) continue;
+    const uid = reg.user_id as string | undefined;
+    const t = uid ? userTeam[uid] : null;
+    reg.team = t
+      ? {
+          id: t.id,
+          name: t.name,
+          memberCount: memberCounts[t.id] ?? 1,
+          repIsLeader: t.isLeader,
+        }
+      : null;
+  }
+}
 
 /**
  * Authenticate and authorize the request, returning the supabase client
@@ -84,7 +165,10 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ data: winners ?? [] });
+    const winnersList = (winners ?? []) as Record<string, unknown>[];
+    await enrichWinnersWithTeams(supabase, hackathonId, winnersList);
+
+    return NextResponse.json({ data: winnersList });
   } catch (err) {
     console.error(err);
     return NextResponse.json(
@@ -250,6 +334,9 @@ export async function POST(
         { status: 500 }
       );
     }
+
+    const insertedList = (winners ?? []) as Record<string, unknown>[];
+    await enrichWinnersWithTeams(supabase, hackathonId, insertedList);
 
     // Notify each winner
     const { data: hackInfo } = await supabase
@@ -445,7 +532,10 @@ export async function PATCH(
       );
     }
 
-    return NextResponse.json({ data: winner });
+    const patched = [winner as Record<string, unknown>];
+    await enrichWinnersWithTeams(supabase, hackathonId, patched);
+
+    return NextResponse.json({ data: patched[0] });
   } catch (err) {
     console.error(err);
     return NextResponse.json(

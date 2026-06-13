@@ -1,6 +1,14 @@
 import { fetchJson } from "@/lib/fetch-json";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
+export interface WinnerTeam {
+  id: string;
+  name: string;
+  memberCount: number;
+  /** Whether the representative registration is the team leader. */
+  repIsLeader: boolean;
+}
+
 export interface WinnerRegistration {
   id: string;
   user_id: string;
@@ -13,6 +21,12 @@ export interface WinnerRegistration {
     email: string | null;
     avatar: string | null;
   } | null;
+  /**
+   * Team this registration belongs to in this hackathon. Present when the
+   * competition is team-based and the user is on a team; null for solo entries
+   * and for individual-only hackathons.
+   */
+  team?: WinnerTeam | null;
 }
 
 export interface WinnerTrack {
@@ -149,6 +163,17 @@ export interface PublicWinner {
     name: string | null;
     username: string | null;
     avatar: string | null;
+  } | null;
+  /** The team this winner belongs to, when the competition is team-based. */
+  team: {
+    id: string;
+    name: string;
+    members: Array<{
+      id: string;
+      name: string | null;
+      username: string | null;
+      avatar: string | null;
+    }>;
   } | null;
 }
 

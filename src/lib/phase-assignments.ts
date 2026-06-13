@@ -38,11 +38,16 @@ export async function resolveAssignablePool(
   const quotaFieldId = screeningConfig.quotaFieldId as string | undefined;
   const campusFilter = phase.campus_filter;
 
+  // "approved" is the status set by the screening pipeline when an applicant
+  // passes screening rules — without it here, screened-in registrants fall out
+  // of the pool entirely and downstream phases report "no advanced applicants
+  // from the source phase". Keep this in sync with the rest of the platform
+  // (announcements, register, rsvp, teams/match all use this same set).
   const { data: registrations, error: regError } = await supabase
     .from("hackathon_registrations")
     .select("id, user_id, form_data")
     .eq("hackathon_id", hackathonId)
-    .in("status", ["accepted", "eligible", "confirmed"]);
+    .in("status", ["accepted", "approved", "confirmed", "eligible"]);
 
   if (regError) {
     return { ok: false, status: 400, message: "Failed to fetch registrations" };

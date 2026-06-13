@@ -788,16 +788,24 @@ export default function HackathonDetailPage() {
                                 ) : (
                                   <Trophy className="h-4 w-4 text-amber-500 shrink-0" />
                                 )}
-                                {w.participant && (
+                                {w.team ? (
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarFallback className="text-[9px] bg-primary/10 text-primary">
+                                      {w.team.name.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                ) : w.participant ? (
                                   <Avatar className="h-6 w-6">
                                     <AvatarImage src={w.participant.avatar ?? undefined} />
                                     <AvatarFallback className="text-[9px]">
                                       {(w.participant.name ?? "?").charAt(0)}
                                     </AvatarFallback>
                                   </Avatar>
-                                )}
+                                ) : null}
                                 <div className="min-w-0">
-                                  <p className="text-sm font-medium truncate">{w.participant?.name ?? "Anonymous"}</p>
+                                  <p className="text-sm font-medium truncate">
+                                    {w.team?.name ?? w.participant?.name ?? "Anonymous"}
+                                  </p>
                                   <p className="text-[10px] text-muted-foreground truncate">{w.awardLabel}</p>
                                 </div>
                               </div>
@@ -1349,8 +1357,53 @@ export default function HackathonDetailPage() {
                                         <Award className="h-3 w-3 mr-1" />
                                         {winner.awardLabel}
                                       </Badge>
-                                      {/* Participant */}
-                                      {winner.participant && (
+                                      {/* Team or Participant */}
+                                      {winner.team ? (
+                                        <div className="mt-1">
+                                          <div className="flex items-center gap-2">
+                                            <Avatar className="h-7 w-7">
+                                              <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                                                {winner.team.name.charAt(0).toUpperCase()}
+                                              </AvatarFallback>
+                                            </Avatar>
+                                            <div className="min-w-0">
+                                              <p className="text-sm font-medium truncate">
+                                                {winner.team.name}
+                                              </p>
+                                              <p className="text-[11px] text-muted-foreground">
+                                                Team of {winner.team.members.length}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          {winner.team.members.length > 0 && (
+                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                              {winner.team.members.map((m) => (
+                                                <span
+                                                  key={m.id}
+                                                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/40 rounded-full px-2 py-0.5"
+                                                >
+                                                  <Avatar className="h-3.5 w-3.5">
+                                                    <AvatarImage src={m.avatar ?? undefined} />
+                                                    <AvatarFallback className="text-[8px]">
+                                                      {(m.name ?? "?").charAt(0)}
+                                                    </AvatarFallback>
+                                                  </Avatar>
+                                                  {m.username ? (
+                                                    <Link
+                                                      href={`/profile/${m.username}`}
+                                                      className="hover:text-primary hover:underline"
+                                                    >
+                                                      {m.name ?? `@${m.username}`}
+                                                    </Link>
+                                                  ) : (
+                                                    <span>{m.name ?? "Anonymous"}</span>
+                                                  )}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : winner.participant ? (
                                         <div className="flex items-center gap-2 mt-1">
                                           <Avatar className="h-7 w-7">
                                             <AvatarImage src={winner.participant.avatar ?? undefined} />
@@ -1372,7 +1425,7 @@ export default function HackathonDetailPage() {
                                             )}
                                           </div>
                                         </div>
-                                      )}
+                                      ) : null}
                                       {/* Score */}
                                       {winner.finalScore != null && (
                                         <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">

@@ -19,6 +19,7 @@ import {
   ChevronDown,
   X,
   User as UserIcon,
+  Users,
   Loader2,
   ShieldCheck,
   Grid3X3,
@@ -53,6 +54,7 @@ import {
   type CompetitionWinner,
 } from "@/hooks/use-winners";
 import { useHackathonParticipants } from "@/hooks/use-hackathon-participants";
+import { useHackathonTeams } from "@/hooks/use-teams";
 import { toast } from "sonner";
 
 // ── Types ────────────────────────────────────────────────
@@ -101,10 +103,22 @@ const textareaClasses =
 
 // ── Helper Functions ─────────────────────────────────────
 
-function getWinnerDisplayName(winner: CompetitionWinner): string {
+function getWinnerIndividualName(winner: CompetitionWinner): string {
   const user = winner.registration?.user;
   if (!user) return "Unknown Participant";
   return user.name || user.username || user.email || "Unknown";
+}
+
+/**
+ * Primary display name for a winner. For a team-based win, prefer the team
+ * name — that's what the organizer picked in the selection dialog and what
+ * downstream surfaces (email blasts, public page) communicate. For solo
+ * entries (no team) fall back to the individual's name.
+ */
+function getWinnerDisplayName(winner: CompetitionWinner): string {
+  const team = winner.registration?.team;
+  if (team?.name) return team.name;
+  return getWinnerIndividualName(winner);
 }
 
 function getWinnerInitials(winner: CompetitionWinner): string {
@@ -510,21 +524,42 @@ function TrackFormDialog({
 
 // ── Add Winner Dialog ────────────────────────────────────
 
+// Statuses considered finalist-eligible for winner selection. This mirrors
+// the rest of the platform: anyone who passed screening ("approved"),
+// was manually accepted, confirmed registration, or marked eligible can
+// still be picked as a winner. Casting a narrower net (e.g. only "accepted")
+// silently hides legitimate finalists.
+const WINNER_ELIGIBLE_STATUSES = new Set([
+  "accepted",
+  "approved",
+  "confirmed",
+  "eligible",
+]);
+
 function AddWinnerDialog({
   open,
   onOpenChange,
+  hackathon,
   hackathonId,
   tracks,
   selectedTrackId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  hackathon: Hackathon;
   hackathonId: string;
   tracks: AwardTrack[];
   selectedTrackId: string | null;
 }) {
   const addWinner = useAddWinner(hackathonId);
-  const { data: participantsData } = useHackathonParticipants(hackathonId, "accepted");
+  // Pull every potential finalist (no server status filter) and let the
+  // dialog narrow client-side, so "approved" registrations from screening
+  // surface alongside manually-accepted ones.
+  const { data: participantsData, isLoading: participantsLoading } =
+    useHackathonParticipants(open ? hackathonId : undefined);
+  const { data: teamsData, isLoading: teamsLoading } = useHackathonTeams(
+    open ? hackathonId : undefined
+  );
 
   const [search, setSearch] = React.useState("");
   const [chosenTrackId, setChosenTrackId] = React.useState<string | null>(selectedTrackId);
@@ -547,19 +582,124 @@ function AddWinnerDialog({
   }, [open, selectedTrackId, tracks]);
 
   const participants = participantsData?.data ?? [];
+  const teams = teamsData?.data ?? [];
+  const isLoading = participantsLoading || teamsLoading;
 
-  const filtered = React.useMemo(() => {
-    if (!search.trim()) return participants;
-    const q = search.toLowerCase();
-    return participants.filter((p) => {
+  // Team-based competitions surface awards as TEAMS (with members listed
+  // underneath). Solo entrants in a team-based competition, and every
+  // entrant in an individual-only competition, surface as individuals.
+  // This mirrors the team/solo grouping used by ManualFinalistDialog and
+  // the auto-assign-winners endpoint so winners stay in sync across the
+  // pipeline.
+  const teamsEnabled = hackathon.teamsEnabled;
+
+  const eligibleParticipants = React.useMemo(
+    () => participants.filter((p) => WINNER_ELIGIBLE_STATUSES.has(p.status)),
+    [participants]
+  );
+
+  const { teamGroups, soloParticipants } = React.useMemo(() => {
+    if (!teamsEnabled) {
+      // Individual-only competition: every participant is solo. No grouping.
+      return {
+        teamGroups: [] as Array<{
+          team: import("@/lib/types").Team;
+          eligibleMembers: typeof eligibleParticipants;
+          repRegId: string;
+        }>,
+        soloParticipants: eligibleParticipants
+          .slice()
+          .sort((a, b) =>
+            (a.user?.name || "").localeCompare(b.user?.name || "")
+          ),
+      };
+    }
+
+    const userIdToTeamId = new Map<string, string>();
+    for (const team of teams) {
+      for (const m of team.members ?? []) {
+        if (m.user?.id) userIdToTeamId.set(m.user.id, team.id);
+      }
+    }
+
+    const byTeam = new Map<
+      string,
+      {
+        team: import("@/lib/types").Team;
+        eligibleMembers: typeof eligibleParticipants;
+      }
+    >();
+    const solos: typeof eligibleParticipants = [];
+
+    for (const p of eligibleParticipants) {
+      const teamId = userIdToTeamId.get(p.userId);
+      if (teamId) {
+        const team = teams.find((t) => t.id === teamId);
+        if (!team) {
+          solos.push(p);
+          continue;
+        }
+        const existing = byTeam.get(teamId);
+        if (existing) existing.eligibleMembers.push(p);
+        else byTeam.set(teamId, { team, eligibleMembers: [p] });
+      } else {
+        solos.push(p);
+      }
+    }
+
+    const groups = Array.from(byTeam.values())
+      .map((g) => {
+        // Pick the team leader's registration as the rep so the winner
+        // record's `registration_id` mirrors what the rest of the team
+        // pipeline (assignments, finalists, auto-assign-winners) treats
+        // as the team's representative.
+        const leaderUserId = g.team.members?.find((m) => m.isLeader)?.user?.id;
+        const leaderReg = g.eligibleMembers.find(
+          (m) => m.userId === leaderUserId
+        );
+        const repRegId = leaderReg?.id ?? g.eligibleMembers[0]?.id ?? null;
+        return { ...g, repRegId };
+      })
+      .filter(
+        (g): g is typeof g & { repRegId: string } => g.repRegId !== null
+      )
+      .sort((a, b) => a.team.name.localeCompare(b.team.name));
+
+    return {
+      teamGroups: groups,
+      soloParticipants: solos.sort((a, b) =>
+        (a.user?.name || "").localeCompare(b.user?.name || "")
+      ),
+    };
+  }, [eligibleParticipants, teams, teamsEnabled]);
+
+  const { filteredTeamGroups, filteredSolos } = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return { filteredTeamGroups: teamGroups, filteredSolos: soloParticipants };
+
+    const matchesParticipant = (p: (typeof eligibleParticipants)[number]) => {
       const name = (p.user?.name || "").toLowerCase();
-      return name.includes(q);
-    });
-  }, [participants, search]);
+      const email = (p.user?.email || "").toLowerCase();
+      return name.includes(q) || email.includes(q);
+    };
+
+    return {
+      filteredTeamGroups: teamGroups.filter(
+        (g) =>
+          g.team.name.toLowerCase().includes(q) ||
+          g.eligibleMembers.some(matchesParticipant)
+      ),
+      filteredSolos: soloParticipants.filter(matchesParticipant),
+    };
+  }, [teamGroups, soloParticipants, eligibleParticipants, search]);
 
   const handleSubmit = async () => {
     if (!selectedRegId) {
-      toast.error("Please select a participant.");
+      toast.error(
+        teamsEnabled
+          ? "Please select a team or solo applicant."
+          : "Please select a participant."
+      );
       return;
     }
     if (!awardLabel.trim()) {
@@ -584,13 +724,20 @@ function AddWinnerDialog({
     }
   };
 
+  const nothingMatches =
+    !isLoading &&
+    filteredTeamGroups.length === 0 &&
+    filteredSolos.length === 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Winner</DialogTitle>
           <DialogDescription>
-            Select a finalist and assign an award.
+            {teamsEnabled
+              ? "Pick a finalist team (or solo applicant) and assign an award."
+              : "Pick a finalist and assign an award."}
           </DialogDescription>
         </DialogHeader>
 
@@ -637,56 +784,166 @@ function AddWinnerDialog({
             />
           </div>
 
-          {/* Participant Search */}
+          {/* Team / Participant Search */}
           <div className="space-y-2">
             <label className="text-sm font-medium">
-              Select Participant
+              {teamsEnabled ? "Select Team or Applicant" : "Select Participant"}
             </label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name..."
+                placeholder={
+                  teamsEnabled
+                    ? "Search by team or member name..."
+                    : "Search by name or email..."
+                }
                 className="pl-9"
               />
             </div>
-            <div className="max-h-48 overflow-y-auto rounded-xl border border-input">
-              {filtered.length === 0 ? (
+            <div className="max-h-72 overflow-y-auto rounded-xl border border-input">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : nothingMatches ? (
                 <div className="p-4 text-center text-sm text-muted-foreground">
-                  No participants found
+                  {eligibleParticipants.length === 0
+                    ? "No eligible finalists yet. Accept or approve participants first."
+                    : "No teams or applicants match your search."}
                 </div>
               ) : (
-                filtered.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setSelectedRegId(p.id)}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/50 transition-colors text-sm",
-                      selectedRegId === p.id && "bg-primary/10 border-l-2 border-primary"
-                    )}
-                  >
-                    <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium shrink-0">
-                      {p.user?.name
-                        ? p.user.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .toUpperCase()
-                            .slice(0, 2)
-                        : "?"}
+                <div className="divide-y">
+                  {/* Teams */}
+                  {filteredTeamGroups.length > 0 && (
+                    <div>
+                      <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/20 sticky top-0 z-10">
+                        Teams ({filteredTeamGroups.length})
+                      </div>
+                      {filteredTeamGroups.map((g) => {
+                        const isSelected = selectedRegId === g.repRegId;
+                        const leader = g.team.members?.find((m) => m.isLeader);
+                        return (
+                          <button
+                            type="button"
+                            key={g.team.id}
+                            onClick={() => setSelectedRegId(g.repRegId)}
+                            className={cn(
+                              "w-full text-left transition-colors block",
+                              isSelected
+                                ? "bg-primary/5 border-l-2 border-primary"
+                                : "hover:bg-muted/30"
+                            )}
+                          >
+                            <div className="flex items-start gap-3 p-3">
+                              <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                                <Users className="h-4 w-4 text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-medium truncate">
+                                    {g.team.name}
+                                  </p>
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {g.eligibleMembers.length} eligible
+                                    {g.team.members &&
+                                    g.team.members.length !==
+                                      g.eligibleMembers.length
+                                      ? ` / ${g.team.members.length} total`
+                                      : ""}
+                                  </Badge>
+                                </div>
+                                <ul className="mt-1.5 space-y-0.5">
+                                  {g.eligibleMembers.map((m) => {
+                                    const isLeader =
+                                      m.userId === leader?.user?.id;
+                                    return (
+                                      <li
+                                        key={m.id}
+                                        className="text-xs text-muted-foreground flex items-center gap-1.5"
+                                      >
+                                        <span className="font-medium text-foreground/80">
+                                          {m.user?.name || "Unknown"}
+                                        </span>
+                                        {isLeader && (
+                                          <Badge
+                                            variant="secondary"
+                                            className="text-[9px] px-1 py-0 h-3.5"
+                                          >
+                                            Lead
+                                          </Badge>
+                                        )}
+                                        {m.user?.email && (
+                                          <span className="truncate">
+                                            · {m.user.email}
+                                          </span>
+                                        )}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </div>
+                              {isSelected && (
+                                <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-1" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">
-                        {p.user?.name || "Unknown"}
-                      </p>
+                  )}
+
+                  {/* Solo */}
+                  {filteredSolos.length > 0 && (
+                    <div>
+                      {teamsEnabled && (
+                        <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/20 sticky top-0 z-10">
+                          Solo ({filteredSolos.length})
+                        </div>
+                      )}
+                      {filteredSolos.map((p) => {
+                        const isSelected = selectedRegId === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setSelectedRegId(p.id)}
+                            className={cn(
+                              "w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors text-sm",
+                              isSelected &&
+                                "bg-primary/5 border-l-2 border-primary"
+                            )}
+                          >
+                            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium shrink-0">
+                              {p.user?.name
+                                ? p.user.name
+                                    .split(" ")
+                                    .map((n) => n[0])
+                                    .join("")
+                                    .toUpperCase()
+                                    .slice(0, 2)
+                                : "?"}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium truncate">
+                                {p.user?.name || "Unknown"}
+                              </p>
+                              {p.user?.email && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {p.user.email}
+                                </p>
+                              )}
+                            </div>
+                            {isSelected && (
+                              <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
-                    {selectedRegId === p.id && (
-                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                    )}
-                  </button>
-                ))
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -780,6 +1037,9 @@ function WinnerRow({
   const isPending =
     updateWinner.isPending || removeWinner.isPending;
 
+  const team = winner.registration?.team;
+  const individualName = getWinnerIndividualName(winner);
+
   return (
     <motion.tr
       initial={{ opacity: 0, y: 5 }}
@@ -792,15 +1052,22 @@ function WinnerRow({
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium shrink-0">
-            {getWinnerInitials(winner)}
+          <div
+            className={cn(
+              "w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium shrink-0",
+              team ? "bg-primary/10 text-primary" : "bg-muted"
+            )}
+          >
+            {team ? <Users className="h-4 w-4" /> : getWinnerInitials(winner)}
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium truncate">
               {getWinnerDisplayName(winner)}
             </p>
             <p className="text-xs text-muted-foreground truncate">
-              {winner.registration?.user?.email || ""}
+              {team
+                ? `Team of ${team.memberCount} · Rep: ${individualName}`
+                : winner.registration?.user?.email || ""}
             </p>
           </div>
         </div>
@@ -878,6 +1145,7 @@ function WinnerRow({
 // ── Winner Summary Card ──────────────────────────────────
 
 function WinnerSummaryCard({ winner }: { winner: CompetitionWinner }) {
+  const team = winner.registration?.team;
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -894,6 +1162,11 @@ function WinnerSummaryCard({ winner }: { winner: CompetitionWinner }) {
           <h4 className="font-display font-bold text-sm mb-1">
             {getWinnerDisplayName(winner)}
           </h4>
+          {team && (
+            <p className="text-[11px] text-muted-foreground mb-1">
+              Team of {team.memberCount} · {getWinnerIndividualName(winner)}
+            </p>
+          )}
           {winner.final_score != null && (
             <p className="text-xs font-mono text-primary">
               Score: {Number(winner.final_score).toFixed(2)}
@@ -1516,6 +1789,7 @@ export function WinnersTab({ hackathon, hackathonId }: WinnersTabProps) {
       <AddWinnerDialog
         open={showAddWinnerDialog}
         onOpenChange={setShowAddWinnerDialog}
+        hackathon={hackathon}
         hackathonId={hackathonId}
         tracks={tracks}
         selectedTrackId={

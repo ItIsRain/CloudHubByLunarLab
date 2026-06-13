@@ -202,7 +202,7 @@ export async function GET(
         .from("hackathon_registrations")
         .select("form_data")
         .eq("hackathon_id", hackathonId)
-        .in("status", ["accepted", "eligible"]);
+        .in("status", ["accepted", "approved", "confirmed", "eligible"]);
 
       if (registrations) {
         const campusCounts: Record<string, number> = {};
@@ -234,7 +234,7 @@ export async function GET(
         .from("hackathon_registrations")
         .select("*", { count: "exact", head: true })
         .eq("hackathon_id", hackathonId)
-        .in("status", ["accepted", "eligible"]);
+        .in("status", ["accepted", "approved", "confirmed", "eligible"]);
 
       for (const p of phasesWithoutCampus) {
         applicantCounts[(p as Record<string, unknown>).id as string] =

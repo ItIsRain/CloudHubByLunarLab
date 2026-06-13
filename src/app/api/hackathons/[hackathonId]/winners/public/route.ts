@@ -74,17 +74,74 @@ export async function GET(
       );
     }
 
+    // For team-based competitions, look up each winner's team so the public
+    // page can render team names + members rather than just the individual.
+    // Solo entries (no team) fall back to the participant block.
+    const winnerRows = (winners ?? []) as Record<string, unknown>[];
+    const normalizeJoin = (v: unknown) =>
+      Array.isArray(v) ? (v[0] as Record<string, unknown> | undefined) : (v as Record<string, unknown> | null);
+
+    const userIds: string[] = [];
+    for (const w of winnerRows) {
+      const reg = normalizeJoin(w.registration);
+      const uid = reg?.user_id as string | undefined;
+      if (uid) userIds.push(uid);
+    }
+
+    const userTeam: Record<string, { id: string; name: string }> = {};
+    const teamIds = new Set<string>();
+    if (userIds.length > 0) {
+      const { data: memberships } = await supabase
+        .from("team_members")
+        .select(
+          "user_id, team_id, team:teams!team_members_team_id_fkey(id, name, hackathon_id)"
+        )
+        .in("user_id", userIds);
+      for (const m of memberships || []) {
+        const row = m as Record<string, unknown>;
+        const team = normalizeJoin(row.team);
+        if (!team || team.hackathon_id !== hackathonId) continue;
+        const tid = team.id as string;
+        userTeam[row.user_id as string] = {
+          id: tid,
+          name: (team.name as string) || "Unnamed team",
+        };
+        teamIds.add(tid);
+      }
+    }
+
+    const teamMembers: Record<
+      string,
+      Array<{ id: string; name: string | null; username: string | null; avatar: string | null }>
+    > = {};
+    if (teamIds.size > 0) {
+      const { data: allMembers } = await supabase
+        .from("team_members")
+        .select(
+          "team_id, user_id, is_leader, user:profiles!team_members_user_id_fkey(id, name, username, avatar)"
+        )
+        .in("team_id", [...teamIds]);
+      for (const m of allMembers || []) {
+        const row = m as Record<string, unknown>;
+        const tid = row.team_id as string;
+        const u = normalizeJoin(row.user);
+        if (!u) continue;
+        (teamMembers[tid] ||= []).push({
+          id: u.id as string,
+          name: (u.name as string | null) ?? null,
+          username: (u.username as string | null) ?? null,
+          avatar: (u.avatar as string | null) ?? null,
+        });
+      }
+    }
+
     // Strip sensitive data — only return public-safe fields
-    const publicWinners = (winners ?? []).map((w) => {
-      const reg = Array.isArray(w.registration)
-        ? w.registration[0]
-        : w.registration;
-      const user = reg
-        ? Array.isArray(reg.user)
-          ? reg.user[0]
-          : reg.user
-        : null;
-      const track = Array.isArray(w.track) ? w.track[0] : w.track;
+    const publicWinners = winnerRows.map((w) => {
+      const reg = normalizeJoin(w.registration);
+      const user = reg ? normalizeJoin(reg.user) : null;
+      const track = normalizeJoin(w.track);
+      const uid = reg?.user_id as string | undefined;
+      const team = uid ? userTeam[uid] : null;
 
       return {
         id: w.id,
@@ -105,6 +162,13 @@ export async function GET(
               name: user.name,
               username: user.username,
               avatar: user.avatar,
+            }
+          : null,
+        team: team
+          ? {
+              id: team.id,
+              name: team.name,
+              members: teamMembers[team.id] || [],
             }
           : null,
       };
