@@ -37,7 +37,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "img-src 'self' data: blob: https://*.supabase.co https://api.dicebear.com https://images.unsplash.com https://img.youtube.com https://res.cloudinary.com",
               "font-src 'self' https://fonts.gstatic.com",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://res.cloudinary.com",
               "frame-src https://www.youtube.com https://youtube.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",

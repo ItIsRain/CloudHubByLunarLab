@@ -124,12 +124,15 @@ export default function CertificateVerifyClient() {
               <div className="h-2 bg-gradient-to-r from-primary via-accent to-primary" />
 
               <CardContent className="p-8">
-                {/* Certificate icon and type */}
-                <div className="text-center mb-6">
+                {/* Certificate icon and type — stack vertically so the
+                    type badge sits directly under the icon. The original
+                    `text-center` + `inline-flex` icon caused the inline
+                    Badge to sit beside the icon on wider viewports. */}
+                <div className="flex flex-col items-center mb-6">
                   {(() => {
                     const Icon = typeIcons[cert.type] || Award;
                     return (
-                      <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-4">
+                      <div className="flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-4">
                         <Icon className="h-10 w-10 text-primary" />
                       </div>
                     );

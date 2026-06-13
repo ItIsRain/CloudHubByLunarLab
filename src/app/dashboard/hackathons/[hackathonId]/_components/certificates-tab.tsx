@@ -580,18 +580,100 @@ function SendDialog({
 
   const participants = participantsData?.data ?? [];
   const teams = teamsData?.data ?? [];
+  const teamsEnabled = hackathon.teamsEnabled;
 
-  const filtered = React.useMemo(() => {
+  // For "Pick specific": team-based comps surface TEAMS (with members listed
+  // underneath); solo / individual-only comps surface participants directly.
+  // Mirrors AddWinnerDialog so the same mental model applies everywhere.
+  // The participants API zeroes `user.email` for the public-safe profile
+  // shape, so don't filter on email here — the bulk-send endpoint joins
+  // the real address from `profiles` server-side. Status alone gates who
+  // is eligible to receive a certificate.
+  const eligible = React.useMemo(
+    () =>
+      participants.filter((p) =>
+        ["accepted", "approved", "confirmed", "eligible"].includes(p.status)
+      ),
+    [participants]
+  );
+
+  const { teamGroups, soloParticipants } = React.useMemo(() => {
+    if (!teamsEnabled) {
+      return {
+        teamGroups: [] as Array<{
+          team: import("@/lib/types").Team;
+          members: typeof eligible;
+          memberRegIds: string[];
+        }>,
+        soloParticipants: eligible
+          .slice()
+          .sort((a, b) =>
+            (a.user?.name || "").localeCompare(b.user?.name || "")
+          ),
+      };
+    }
+
+    const userIdToTeamId = new Map<string, string>();
+    for (const team of teams) {
+      for (const m of team.members ?? []) {
+        if (m.user?.id) userIdToTeamId.set(m.user.id, team.id);
+      }
+    }
+
+    const byTeam = new Map<
+      string,
+      { team: import("@/lib/types").Team; members: typeof eligible }
+    >();
+    const solos: typeof eligible = [];
+
+    for (const p of eligible) {
+      const teamId = userIdToTeamId.get(p.userId);
+      if (teamId) {
+        const team = teams.find((t) => t.id === teamId);
+        if (!team) {
+          solos.push(p);
+          continue;
+        }
+        const existing = byTeam.get(teamId);
+        if (existing) existing.members.push(p);
+        else byTeam.set(teamId, { team, members: [p] });
+      } else {
+        solos.push(p);
+      }
+    }
+
+    const groups = Array.from(byTeam.values())
+      .map((g) => ({
+        ...g,
+        memberRegIds: g.members.map((m) => m.id),
+      }))
+      .sort((a, b) => a.team.name.localeCompare(b.team.name));
+
+    return {
+      teamGroups: groups,
+      soloParticipants: solos.sort((a, b) =>
+        (a.user?.name || "").localeCompare(b.user?.name || "")
+      ),
+    };
+  }, [eligible, teams, teamsEnabled]);
+
+  const { filteredTeamGroups, filteredSolos } = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-    return participants.filter((p) => {
-      if (!p.user?.email) return false;
-      if (!q) return true;
-      const n = (p.user.name || "").toLowerCase();
-      const e = (p.user.email || "").toLowerCase();
-      const t = (p.teamName || "").toLowerCase();
-      return n.includes(q) || e.includes(q) || t.includes(q);
-    });
-  }, [participants, search]);
+    if (!q) return { filteredTeamGroups: teamGroups, filteredSolos: soloParticipants };
+    const matchesPerson = (p: (typeof eligible)[number]) => {
+      const n = (p.user?.name || "").toLowerCase();
+      const e = (p.user?.email || "").toLowerCase();
+      return n.includes(q) || e.includes(q);
+    };
+    return {
+      filteredTeamGroups: teamGroups.filter(
+        (g) =>
+          g.team.name.toLowerCase().includes(q) ||
+          g.members.some(matchesPerson)
+      ),
+      filteredSolos: soloParticipants.filter(matchesPerson),
+    };
+  }, [teamGroups, soloParticipants, search]);
 
   const recipientEstimate = React.useMemo(() => {
     if (audience === "all") {
@@ -613,6 +695,20 @@ function SendDialog({
     setSelectedRegIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+  };
+
+  /** Add or remove every member's registration id of a team. */
+  const toggleTeam = (memberRegIds: string[]) => {
+    setSelectedRegIds((prev) => {
+      const set = new Set(prev);
+      const allOn = memberRegIds.every((id) => set.has(id));
+      if (allOn) {
+        for (const id of memberRegIds) set.delete(id);
+      } else {
+        for (const id of memberRegIds) set.add(id);
+      }
+      return [...set];
+    });
   };
 
   const buildPayload = (): CertAudience | null => {
@@ -756,56 +852,149 @@ function SendDialog({
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name, email, or team…"
+                  placeholder={
+                    teamsEnabled
+                      ? "Search by team, name, or email…"
+                      : "Search by name or email…"
+                  }
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-9"
                 />
               </div>
-              <div className="max-h-64 overflow-y-auto rounded-xl border border-input divide-y">
-                {filtered.length === 0 ? (
+              <div className="max-h-72 overflow-y-auto rounded-xl border border-input divide-y">
+                {filteredTeamGroups.length === 0 && filteredSolos.length === 0 ? (
                   <div className="p-4 text-center text-sm text-muted-foreground">
-                    No participants match.
+                    {eligible.length === 0
+                      ? "No eligible participants yet. Accept or approve participants first."
+                      : teamsEnabled
+                        ? "No teams or applicants match."
+                        : "No participants match."}
                   </div>
                 ) : (
-                  filtered.map((p) => {
-                    const on = selectedRegIds.includes(p.id);
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => toggleRegId(p.id)}
-                        className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/30",
-                          on && "bg-primary/5"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={on}
-                          readOnly
-                          className="rounded border-input"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">
-                            {p.user?.name || "Unknown"}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {p.user?.email}
-                            {p.teamName ? ` · ${p.teamName}` : ""}
-                          </p>
+                  <>
+                    {/* Teams */}
+                    {filteredTeamGroups.length > 0 && (
+                      <div>
+                        <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/20 sticky top-0 z-10">
+                          Teams ({filteredTeamGroups.length})
                         </div>
-                        <Badge variant="outline" className="text-[10px] capitalize">
-                          {p.status}
-                        </Badge>
-                      </button>
-                    );
-                  })
+                        {filteredTeamGroups.map((g) => {
+                          const allOn = g.memberRegIds.every((id) =>
+                            selectedRegIds.includes(id)
+                          );
+                          const someOn =
+                            !allOn &&
+                            g.memberRegIds.some((id) => selectedRegIds.includes(id));
+                          return (
+                            <div
+                              key={g.team.id}
+                              className={cn(
+                                "border-b last:border-0 transition-colors",
+                                allOn || someOn ? "bg-primary/5" : "hover:bg-muted/30"
+                              )}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => toggleTeam(g.memberRegIds)}
+                                className="w-full flex items-start gap-3 p-3 text-left"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={allOn}
+                                  ref={(el) => {
+                                    if (el) el.indeterminate = someOn;
+                                  }}
+                                  readOnly
+                                  className="rounded border-input mt-0.5"
+                                />
+                                <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                                  <Users className="h-4 w-4 text-primary" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="font-medium truncate">{g.team.name}</p>
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {g.members.length} member
+                                      {g.members.length === 1 ? "" : "s"}
+                                    </Badge>
+                                  </div>
+                                  <ul className="mt-1.5 space-y-0.5">
+                                    {g.members.map((m) => (
+                                      <li
+                                        key={m.id}
+                                        className="text-xs text-muted-foreground flex items-center gap-1.5"
+                                      >
+                                        <span className="font-medium text-foreground/80">
+                                          {m.user?.name || "Unknown"}
+                                        </span>
+                                        {m.user?.username && (
+                                          <span className="truncate">
+                                            · @{m.user.username}
+                                          </span>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Solo */}
+                    {filteredSolos.length > 0 && (
+                      <div>
+                        {teamsEnabled && (
+                          <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/20 sticky top-0 z-10">
+                            Solo ({filteredSolos.length})
+                          </div>
+                        )}
+                        {filteredSolos.map((p) => {
+                          const on = selectedRegIds.includes(p.id);
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => toggleRegId(p.id)}
+                              className={cn(
+                                "w-full flex items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/30",
+                                on && "bg-primary/5"
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                readOnly
+                                className="rounded border-input"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate">
+                                  {p.user?.name || "Unknown"}
+                                </p>
+                                {p.user?.username && (
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    @{p.user.username}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge variant="outline" className="text-[10px] capitalize">
+                                {p.status}
+                              </Badge>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
                 Selected: <strong>{selectedRegIds.length}</strong>
-                {teams.length > 0 && " · Tip: search by team name to bulk-select"}
+                {teamsEnabled && teamGroups.length > 0 &&
+                  " · Clicking a team selects every member"}
               </p>
             </div>
           )}

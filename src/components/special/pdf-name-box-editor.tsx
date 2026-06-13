@@ -79,7 +79,17 @@ export function PdfNameBoxEditor({
         (pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
           "/pdfjs/pdf.worker.min.mjs";
 
-        const loadingTask = pdfjs.getDocument({ url: pdfUrl, withCredentials: false });
+        // Cloudinary doesn't send permissive CORS headers for raw resources,
+        // so pdf.js's direct fetch fails with "Failed to fetch" in the
+        // browser. Route Cloudinary URLs through our same-origin proxy
+        // (`/api/proxy/pdf?url=...`) which streams the bytes back with
+        // matching headers.
+        const isCloudinary = /^https:\/\/res\.cloudinary\.com\//.test(pdfUrl);
+        const sourceUrl = isCloudinary
+          ? `/api/proxy/pdf?url=${encodeURIComponent(pdfUrl)}`
+          : pdfUrl;
+
+        const loadingTask = pdfjs.getDocument({ url: sourceUrl, withCredentials: false });
         const pdf = await loadingTask.promise;
         if (cancelled) return;
 
