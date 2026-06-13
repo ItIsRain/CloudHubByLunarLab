@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/fix-standalone.mjs",
     "start": "next start",
+    "start:standalone": "node .next/standalone/server.js",
     "lint": "eslint",
     "copy-pdfjs-worker": "node -e \"require('fs').mkdirSync('public/pdfjs',{recursive:true});require('fs').copyFileSync('node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs','public/pdfjs/pdf.worker.min.mjs');console.log('Copied pdfjs worker to public/pdfjs/');\"",
     "postinstall": "npm run copy-pdfjs-worker"
