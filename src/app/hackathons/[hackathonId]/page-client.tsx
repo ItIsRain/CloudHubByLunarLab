@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -183,6 +183,12 @@ export default function HackathonDetailPage() {
   const registrationStatus = regData?.registration?.status;
   const rsvpStatus = regData?.registration?.rsvp_status;
   const registerMutation = useRegisterForHackathon();
+  // `?invite=...` from a late-registration link — when present, we forward it
+  // to the registration POST so the API bypasses the closed-registration gate
+  // for this single user. The token is opaque (random base64url) so leaking
+  // it here is the same as the user pasting the URL.
+  const searchParams = useSearchParams();
+  const lateInviteToken = searchParams?.get("invite") ?? null;
   const cancelMutation = useCancelHackathonRegistration();
   const saveDraftMutation = useSaveHackathonDraft();
   const editMutation = useEditHackathonRegistration();
@@ -666,7 +672,7 @@ export default function HackathonDetailPage() {
                           )}
                         </Button>
                       </div>
-                    ) : (hackathon.status === "published" || hackathon.status === "registration-open") ? (
+                    ) : (hackathon.status === "published" || hackathon.status === "registration-open" || !!lateInviteToken) ? (
                       <Button size="sm" onClick={() => {
                         if (!isAuthenticated) { toast.error("Please sign in to register"); return; }
                         // If hackathon has custom registration fields, open the form dialog
@@ -681,7 +687,9 @@ export default function HackathonDetailPage() {
                         {registerMutation.isPending ? (
                           <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                         ) : null}
-                        Register Now
+                        {lateInviteToken && !(hackathon.status === "published" || hackathon.status === "registration-open")
+                          ? "Register with Invite"
+                          : "Register Now"}
                       </Button>
                     ) : null}
                 </div>
@@ -1777,7 +1785,7 @@ export default function HackathonDetailPage() {
                 // Submitting a draft → use PATCH to finalize
                 await editMutation.mutateAsync({ hackathonId: hackathon.id, formData });
               } else {
-                await registerMutation.mutateAsync({ hackathonId: hackathon.id, formData, consent });
+                await registerMutation.mutateAsync({ hackathonId: hackathon.id, formData, consent, inviteToken: lateInviteToken });
               }
               setRegistrationDialogOpen(false);
               toast.success("Application submitted! You'll be notified once it's reviewed.");
@@ -1875,6 +1883,7 @@ export default function HackathonDetailPage() {
                   await registerMutation.mutateAsync({
                     hackathonId: hackathon.id,
                     consent: directConsent,
+                    inviteToken: lateInviteToken,
                   });
                   setConsentDialogOpen(false);
                   toast.success("Successfully registered for the competition!");

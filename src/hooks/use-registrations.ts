@@ -127,15 +127,22 @@ export function useRegisterForHackathon() {
       hackathonId,
       formData,
       consent,
+      inviteToken,
     }: {
       hackathonId: string;
       formData?: Record<string, unknown>;
       consent?: { dataProcessing: boolean; marketing: boolean; thirdParty: boolean };
+      /**
+       * Optional late-registration invite token from `?invite=...` on the
+       * hackathon URL. When present, the API bypasses the closed-registration
+       * gate for this single registration.
+       */
+      inviteToken?: string | null;
     }) => {
       const res = await fetch(`/api/hackathons/${hackathonId}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formData, consent }),
+        body: JSON.stringify({ formData, consent, inviteToken: inviteToken || undefined }),
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));

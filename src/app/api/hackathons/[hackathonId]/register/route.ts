@@ -80,9 +80,10 @@ export async function POST(
       return NextResponse.json({ error: "Rate limit exceeded. Try again later." }, { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } });
     }
 
-    // Parse optional form_data and consent from request body
+    // Parse optional form_data, consent, and late-registration invite token.
     let formData: Record<string, unknown> = {};
     let consent: { dataProcessing?: boolean; marketing?: boolean; thirdParty?: boolean } | undefined;
+    let inviteToken: string | null = null;
     try {
       const body = await request.json();
       if (body && typeof body.formData === "object" && body.formData !== null) {
@@ -90,6 +91,9 @@ export async function POST(
       }
       if (body && typeof body.consent === "object" && body.consent !== null) {
         consent = body.consent as { dataProcessing?: boolean; marketing?: boolean; thirdParty?: boolean };
+      }
+      if (body && typeof body.inviteToken === "string" && body.inviteToken.length > 0) {
+        inviteToken = body.inviteToken;
       }
     } catch {
       // No body or invalid JSON — that's fine, form_data is optional
@@ -120,13 +124,89 @@ export async function POST(
       );
     }
 
-    // Verify registration window is open
+    // Verify registration window is open — UNLESS the caller passed a valid
+    // late-registration invite token. Tokens are issued by the organizer and
+    // let a specific user register after registration has closed, without
+    // reopening it for everyone. We claim the token here (under the admin
+    // client so RLS doesn't block the writes) and skip the timeline gate
+    // when the claim succeeds.
+    let bypassRegistrationWindow = false;
+    let lateInviteId: string | null = null;
+    if (inviteToken) {
+      const admin = getSupabaseAdminClient();
+      const { data: invite } = await admin
+        .from("late_registration_invites")
+        .select("id, hackathon_id, email, max_uses, uses, expires_at, revoked_at")
+        .eq("token", inviteToken)
+        .maybeSingle();
+
+      if (!invite || invite.hackathon_id !== hackathonId) {
+        return NextResponse.json(
+          { error: "This invite link is invalid for this competition." },
+          { status: 403 }
+        );
+      }
+      if (invite.revoked_at) {
+        return NextResponse.json({ error: "This invite has been revoked." }, { status: 403 });
+      }
+      if (
+        invite.expires_at &&
+        new Date(invite.expires_at as string).getTime() < Date.now()
+      ) {
+        return NextResponse.json({ error: "This invite has expired." }, { status: 403 });
+      }
+      if (
+        invite.email &&
+        (user.email ?? "").toLowerCase() !== String(invite.email).toLowerCase()
+      ) {
+        return NextResponse.json(
+          { error: "This invite is locked to a different email address." },
+          { status: 403 }
+        );
+      }
+      if ((invite.uses as number) >= (invite.max_uses as number)) {
+        return NextResponse.json(
+          { error: "This invite has already been used the maximum number of times." },
+          { status: 403 }
+        );
+      }
+
+      // Atomic-ish claim: insert into claims (UNIQUE invite_id+user_id),
+      // increment `uses`. Both are best-effort under the admin client.
+      const { error: claimErr } = await admin
+        .from("late_registration_invite_claims")
+        .insert({ invite_id: invite.id, user_id: user.id });
+      if (claimErr && claimErr.code !== "23505") {
+        // Anything other than the "already claimed by this user" duplicate
+        // is treated as a hard failure.
+        console.error("Late invite claim failed:", claimErr);
+        return NextResponse.json({ error: "Could not claim invite" }, { status: 500 });
+      }
+      if (!claimErr) {
+        // First-time claim — bump the counter. (Repeat claims by the same
+        // user don't burn an additional use, which lets them resume the
+        // registration form if they bail mid-way.)
+        await admin
+          .from("late_registration_invites")
+          .update({ uses: (invite.uses as number) + 1 })
+          .eq("id", invite.id);
+      }
+
+      bypassRegistrationWindow = true;
+      lateInviteId = invite.id as string;
+    }
+
     const timeline = await getHackathonTimeline(supabase, hackathonId);
-    if (timeline && !canRegister(timeline)) {
+    if (!bypassRegistrationWindow && timeline && !canRegister(timeline)) {
       return NextResponse.json(
         { error: getPhaseMessage(timeline, "register") },
         { status: 403 }
       );
+    }
+    if (bypassRegistrationWindow && lateInviteId) {
+      // Stamp the registration so the organizer can see which late invite
+      // produced it (handy for audit + revenue/cost attribution).
+      formData._late_invite_id = lateInviteId;
     }
 
     // Check if a registration already exists (e.g. previously cancelled)
