@@ -2,92 +2,84 @@
 /**
  * Post-build fixer for `output: 'standalone'` deployments.
  *
- * Next.js ships the standalone build with a minimal Node server but does NOT
- * copy `.next/static` (JS chunks, CSS) or `public/` (favicons, images, the
- * pdfjs worker we host ourselves) into the standalone bundle. Running the
- * server without them produces the symptoms we saw on prod:
+ * Next.js 15/16 standalone output is incomplete in two well-known ways:
+ *   1. It doesn't copy `.next/static` or `public/` — those are needed by the
+ *      runtime server but documented as "your responsibility to copy".
+ *   2. It silently drops some files from `.next/server/app/` for route
+ *      groups (e.g. `(auth)`) and certain route patterns, producing
+ *      `InvariantError: The client reference manifest for route "/X" does
+ *      not exist` at runtime → PM2 restart loop.
  *
- *   - `InvariantError: The client reference manifest for route "/X" does not
- *     exist` — chunks missing
- *   - `Failed to load static file for page: /500 ENOENT` — error fallback
- *     missing
+ * Symmetric error: `Failed to load static file for page: /500 ENOENT
+ * ...pages/500.html` — App-Router-only apps don't have a Pages 500 page,
+ * but the runtime still looks for one as a fallback in some flows.
  *
- * We also defensively mirror any client-reference-manifest files into the
- * standalone tree. Next has long-standing bugs where route-group manifests
- * (e.g. our `(auth)` group) don't always make it across.
+ * Strategy:
+ *   * Mirror the entire `.next/server` tree into standalone (not just
+ *     manifests — overwrites are fine, contents are deterministic).
+ *   * Mirror `.next/static` and `public/`.
+ *   * Drop a minimal `pages/500.html` stub if Next didn't generate one,
+ *     so the ENOENT fallback doesn't bomb the worker.
  *
- * Cross-platform on Node ≥ 16.7 thanks to `fs.cpSync({recursive: true})`.
+ * Idempotent. Cross-platform on Node ≥ 16.7 thanks to `fs.cpSync`.
  */
-import { existsSync, cpSync, readdirSync, statSync, mkdirSync } from "node:fs";
-import { join, dirname, relative } from "node:path";
+import {
+  existsSync,
+  cpSync,
+  mkdirSync,
+  writeFileSync,
+} from "node:fs";
+import { join, relative } from "node:path";
 
 const PROJECT_ROOT = process.cwd();
-const STANDALONE = join(PROJECT_ROOT, ".next", "standalone");
-const NEXT_STATIC = join(PROJECT_ROOT, ".next", "static");
-const PUBLIC_DIR = join(PROJECT_ROOT, "public");
-const SERVER_APP = join(PROJECT_ROOT, ".next", "server", "app");
+const NEXT_DIR = join(PROJECT_ROOT, ".next");
+const STANDALONE = join(NEXT_DIR, "standalone");
+const STANDALONE_NEXT = join(STANDALONE, ".next");
 
 if (!existsSync(STANDALONE)) {
-  console.log("[fix-standalone] .next/standalone not found — skipping.");
-  console.log("[fix-standalone] (only relevant when next.config has output: 'standalone')");
+  console.log(
+    "[fix-standalone] .next/standalone not found — skipping. " +
+      "(Only relevant when next.config has output: 'standalone'.)"
+  );
   process.exit(0);
 }
 
-function copyDir(src, dest, label) {
+function mirror(src, dest, label) {
   if (!existsSync(src)) {
-    console.warn(`[fix-standalone] ${label} not found at ${src} — skipping.`);
+    console.warn(`[fix-standalone] ${label}: source missing at ${src} — skipping.`);
     return;
   }
-  mkdirSync(dirname(dest), { recursive: true });
+  mkdirSync(dest, { recursive: true });
   cpSync(src, dest, { recursive: true, force: true });
-  console.log(`[fix-standalone] copied ${label} → ${relative(PROJECT_ROOT, dest)}`);
+  console.log(
+    `[fix-standalone] mirrored ${label}: ${relative(PROJECT_ROOT, src)} → ${relative(PROJECT_ROOT, dest)}`
+  );
 }
 
-// 1. .next/static → standalone/.next/static
-copyDir(NEXT_STATIC, join(STANDALONE, ".next", "static"), ".next/static");
+// 1. Whole .next/server tree → standalone/.next/server
+//    This catches all client-reference-manifest.js, route-group manifests,
+//    page chunks, and the pages/ fallback dir Next sometimes needs.
+mirror(join(NEXT_DIR, "server"), join(STANDALONE_NEXT, "server"), ".next/server");
 
-// 2. public → standalone/public
-copyDir(PUBLIC_DIR, join(STANDALONE, "public"), "public");
+// 2. .next/static → standalone/.next/static (JS chunks, CSS, fonts)
+mirror(join(NEXT_DIR, "static"), join(STANDALONE_NEXT, "static"), ".next/static");
 
-// 3. Belt-and-suspenders: walk .next/server/app and copy any
-//    *_client-reference-manifest.js files that aren't already in standalone.
-//    Next.js sometimes drops manifests for route groups like `(auth)`.
-function walkAndCopyManifests(srcDir) {
-  if (!existsSync(srcDir)) return;
-  const stack = [srcDir];
-  let copied = 0;
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-        continue;
-      }
-      if (!entry.name.endsWith("_client-reference-manifest.js")) continue;
-      const rel = relative(PROJECT_ROOT, full);
-      const destPath = join(STANDALONE, rel);
-      if (existsSync(destPath)) {
-        const srcSize = statSync(full).size;
-        const dstSize = statSync(destPath).size;
-        if (srcSize === dstSize) continue;
-      }
-      mkdirSync(dirname(destPath), { recursive: true });
-      cpSync(full, destPath, { force: true });
-      copied++;
-    }
-  }
-  if (copied > 0) {
-    console.log(`[fix-standalone] synced ${copied} client-reference-manifest file(s)`);
-  }
+// 3. public/ → standalone/public (favicons, /pdfjs worker, images)
+mirror(join(PROJECT_ROOT, "public"), join(STANDALONE, "public"), "public");
+
+// 4. Minimal pages/500.html stub if Next didn't write one. App Router apps
+//    don't generate it, but the runtime sometimes looks for it as the last
+//    error fallback and ENOENTs the worker if it's missing.
+const pagesDir = join(STANDALONE_NEXT, "server", "pages");
+const fivehundred = join(pagesDir, "500.html");
+if (!existsSync(fivehundred)) {
+  mkdirSync(pagesDir, { recursive: true });
+  writeFileSync(
+    fivehundred,
+    `<!doctype html><html><head><meta charset="utf-8"><title>500 — Internal Server Error</title></head><body><h1>500 — Internal Server Error</h1><p>Sorry, something went wrong. Please try again in a moment.</p></body></html>`,
+    "utf8"
+  );
+  console.log("[fix-standalone] wrote fallback pages/500.html");
 }
-
-walkAndCopyManifests(SERVER_APP);
 
 console.log("[fix-standalone] done.");

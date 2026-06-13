@@ -34,40 +34,41 @@ echo "==> Installing dependencies..."
 # committing the lockfile).
 npm ci || npm install
 
-echo "==> Building (next build + standalone fixer)..."
-# `npm run build` chains `next build && node scripts/fix-standalone.mjs`.
-# The fixer copies:
-#   - .next/static          → .next/standalone/.next/static
-#   - public/               → .next/standalone/public
-#   - any *_client-reference-manifest.js the standalone output dropped
-#     (route groups like `(auth)` are the usual victim)
+echo "==> Building..."
 npm run build
 
-echo "==> Failsafe asset sync..."
-# Defensive: covers the case where the deploy was triggered on a commit
-# that doesn't yet have scripts/fix-standalone.mjs. `-T` treats the
-# destination as the directory itself instead of a parent, so re-runs
-# don't produce .next/static/static/ etc.
-mkdir -p .next/standalone/.next/static
-cp -rT .next/static .next/standalone/.next/static
-mkdir -p .next/standalone/public
-cp -rT public .next/standalone/public
+echo "==> Running standalone fixer (mirrors .next/server + .next/static + public)..."
+# Explicit invocation so even if package.json's `build` script wasn't yet
+# updated to chain the fixer, we still get the missing manifest copies +
+# 500.html stub. Idempotent — safe to re-run.
+if [ -f scripts/fix-standalone.mjs ]; then
+  node scripts/fix-standalone.mjs
+else
+  echo "WARN — scripts/fix-standalone.mjs not in repo; falling back to manual copies."
+  mkdir -p .next/standalone/.next/static
+  cp -rT .next/static .next/standalone/.next/static
+  mkdir -p .next/standalone/public
+  cp -rT public .next/standalone/public
+  mkdir -p .next/standalone/.next/server
+  cp -rT .next/server .next/standalone/.next/server
+fi
 
 echo "==> Wiring runtime env..."
 # The standalone server runs from its own subtree and does NOT inherit
 # .env.local from the project root. Copy it in fresh on every deploy.
 cp .env.local .next/standalone/.env.local
 
-echo "==> Restarting PM2..."
-if pm2 describe "$APP_NAME" >/dev/null 2>&1; then
-  # Zero-downtime swap: old worker keeps serving until the new one is ready.
-  PORT="$APP_PORT" NODE_ENV=production pm2 reload "$APP_NAME" --update-env
-else
-  PORT="$APP_PORT" NODE_ENV=production pm2 start .next/standalone/server.js \
-    --name "$APP_NAME" \
-    --cwd "$APP_DIR" \
-    --update-env
-fi
+echo "==> Restarting PM2 (clean stop + start)..."
+# A `pm2 reload` of an already-crashing worker just hot-swaps the same
+# busted process; do a hard stop + delete + start so we know the new
+# binaries are picked up cleanly.
+pm2 stop "$APP_NAME" >/dev/null 2>&1 || true
+pm2 delete "$APP_NAME" >/dev/null 2>&1 || true
+
+PORT="$APP_PORT" NODE_ENV=production pm2 start .next/standalone/server.js \
+  --name "$APP_NAME" \
+  --cwd "$APP_DIR" \
+  --update-env
 
 pm2 save
 
