@@ -16,7 +16,16 @@ import {
   Plus,
   ChevronDown,
   X,
+  Sparkles,
 } from "lucide-react";
+import {
+  detectFieldType as smartDetect,
+  isNameHeader as smartIsNameHeader,
+  isEmailHeader as smartIsEmailHeader,
+  slugifyHeader,
+  type DetectResult,
+} from "@/lib/csv-detect";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +56,12 @@ interface ColumnMapping {
   /** Auto-detected type (for the "new" preset). */
   detectedType: FormFieldType;
   detectedOptions?: FormFieldOption[];
+  /** 0..1 — surfaced as a tooltip/badge for uncertain columns. */
+  detectionConfidence: number;
+  /** Human-readable explanation of why this type was chosen. */
+  detectionReason: string;
+  /** Set true after an AI pass changes the type/options. */
+  aiAssisted?: boolean;
 }
 
 interface ImportResult {
@@ -88,61 +103,15 @@ const IMPORTABLE_TYPES: FormFieldType[] = [
 ];
 
 // ── Field Type Detection ────────────────────────────────────────────
+// The heavy logic lives in `@/lib/csv-detect` so the dialog stays focused on
+// UI. Aliases preserve the existing identifiers used below.
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const URL_RE = /^https?:\/\/.+/i;
-const PHONE_RE = /^[\d+\-().\s]{7,20}$/;
-const DATE_RE = /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/;
 const NUMBER_RE = /^-?\d+(\.\d+)?$/;
-
-function detectFieldType(
-  header: string,
-  values: string[]
-): { type: FormFieldType; options?: FormFieldOption[] } {
-  const nonEmpty = values.filter((v) => v.trim().length > 0);
-  if (nonEmpty.length === 0) return { type: "text" };
-
-  const h = header.toLowerCase();
-  if (h.includes("email")) return { type: "email" };
-  if (h.includes("phone") || h.includes("mobile")) return { type: "phone" };
-  if (h.includes("url") || h.includes("website") || h.includes("github") || h.includes("linkedin") || h.includes("link"))
-    return { type: "url" };
-  if (h.includes("date") || h.includes("dob") || h.includes("birth")) return { type: "date" };
-
-  const sample = nonEmpty.slice(0, 50);
-  if (sample.every((v) => EMAIL_RE.test(v.trim()))) return { type: "email" };
-  if (sample.every((v) => URL_RE.test(v.trim()))) return { type: "url" };
-  if (sample.every((v) => PHONE_RE.test(v.trim()))) return { type: "phone" };
-  if (sample.every((v) => DATE_RE.test(v.trim()))) return { type: "date" };
-  if (sample.every((v) => NUMBER_RE.test(v.trim()))) return { type: "number" };
-
-  const unique = new Set(nonEmpty.map((v) => v.trim()));
-  if (unique.size <= 15 && unique.size < nonEmpty.length * 0.5) {
-    const options: FormFieldOption[] = [...unique]
-      .sort()
-      .map((v) => ({ label: v, value: v.toLowerCase().replace(/\s+/g, "_") }));
-    return { type: "select", options };
-  }
-
-  const avgLen = nonEmpty.reduce((sum, v) => sum + v.length, 0) / nonEmpty.length;
-  if (avgLen > 120) return { type: "textarea" };
-
-  return { type: "text" };
-}
-
-function isNameHeader(h: string): boolean {
-  const l = h.toLowerCase().trim();
-  return l === "name" || l === "full name" || l === "fullname" || l === "applicant name" || l === "participant name";
-}
-
-function isEmailHeader(h: string): boolean {
-  const l = h.toLowerCase().trim();
-  return l === "email" || l === "email address" || l === "e-mail" || l === "applicant email";
-}
-
-function slugify(header: string): string {
-  return header.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
-}
+const detectFieldType = (header: string, values: string[]): DetectResult =>
+  smartDetect(header, values);
+const isNameHeader = smartIsNameHeader;
+const isEmailHeader = smartIsEmailHeader;
+const slugify = slugifyHeader;
 
 // ── Example CSV ─────────────────────────────────────────────────────
 
@@ -288,12 +257,21 @@ function MappingRow({
       </div>
 
       {/* Detected badge (desktop only) */}
-      <Badge
-        variant="muted"
-        className="text-[10px] shrink-0 hidden sm:inline-flex"
+      <div
+        className="shrink-0 hidden sm:flex flex-col items-end gap-0.5"
+        title={mapping.detectionReason}
       >
-        {FIELD_TYPE_LABELS[mapping.detectedType]}
-      </Badge>
+        <Badge
+          variant={mapping.aiAssisted ? "default" : "muted"}
+          className="text-[10px] gap-1"
+        >
+          {mapping.aiAssisted && <Sparkles className="h-2.5 w-2.5" />}
+          {FIELD_TYPE_LABELS[mapping.detectedType]}
+        </Badge>
+        {mapping.detectionConfidence < 0.7 && !mapping.aiAssisted && (
+          <span className="text-[9px] text-amber-600 leading-none">uncertain</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -317,6 +295,7 @@ export function ImportApplicantsDialog({
   const [error, setError] = React.useState<string | null>(null);
   const [dragActive, setDragActive] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
+  const [aiAssistRunning, setAiAssistRunning] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Reset on open/close
@@ -369,7 +348,8 @@ export function ImportApplicantsDialog({
           // Build initial mappings with auto-detection
           const initialMappings: ColumnMapping[] = headerRow.map((h, colIdx) => {
             const colValues = dataRows.map((r) => r[colIdx] ?? "");
-            const { type, options } = detectFieldType(h, colValues);
+            const detection = detectFieldType(h, colValues);
+            const { type, options, confidence, reason } = detection;
             const nameMatch = isNameHeader(h);
             const emailMatch = isEmailHeader(h);
 
@@ -392,6 +372,8 @@ export function ImportApplicantsDialog({
               target,
               detectedType: type,
               detectedOptions: options,
+              detectionConfidence: confidence,
+              detectionReason: reason,
             };
           });
 
@@ -438,6 +420,102 @@ export function ImportApplicantsDialog({
     (m) => m.target.kind === "new" || m.target.kind === "existing"
   ).length;
   const canImport = hasName && hasEmail;
+
+  // ── AI Assist ────────────────────────────────────────────────────
+  // Sends every column that's still mapped to a new field to Claude Haiku
+  // for a second-opinion classification. Only columns whose target is still
+  // `kind: "new"` are sent — name/email and existing-field mappings are
+  // assumed already-correct from the local detector + user edits.
+
+  const handleAiAssist = React.useCallback(async () => {
+    const targets = mappings.filter(
+      (m): m is ColumnMapping & { target: { kind: "new"; fieldId: string; label: string; type: FormFieldType; options?: FormFieldOption[] } } =>
+        m.target.kind === "new"
+    );
+    if (targets.length === 0) {
+      toast.info("Nothing to classify — every column is already mapped.");
+      return;
+    }
+
+    setAiAssistRunning(true);
+    try {
+      const res = await fetch("/api/csv/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          columns: targets.map((m) => ({
+            header: m.csvHeader,
+            samples: m.sampleValues,
+            localGuess: m.detectedType,
+          })),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || "AI assist failed");
+      }
+      const list = (json.classifications as Array<{
+        header: string;
+        type: FormFieldType;
+        options?: string[];
+        reason?: string;
+      }>) || [];
+      const byHeader = new Map(list.map((c) => [c.header, c]));
+
+      let changed = 0;
+      setMappings((prev) =>
+        prev.map((m) => {
+          if (m.target.kind !== "new") return m;
+          const ai = byHeader.get(m.csvHeader);
+          if (!ai || !IMPORTABLE_TYPES.includes(ai.type)) return m;
+
+          const sameType = ai.type === m.target.type;
+          const optionsFromAi = ai.options?.length
+            ? ai.options.map((v) => ({
+                label: v,
+                value: v.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
+              }))
+            : undefined;
+
+          if (sameType && !optionsFromAi) return m;
+          changed += 1;
+          return {
+            ...m,
+            target: {
+              ...m.target,
+              type: ai.type,
+              options: optionsFromAi ?? m.target.options,
+            },
+            detectedType: ai.type,
+            detectedOptions: optionsFromAi ?? m.detectedOptions,
+            detectionConfidence: 0.95,
+            detectionReason: ai.reason || "Refined by Claude Haiku",
+            aiAssisted: true,
+          };
+        })
+      );
+
+      if (changed === 0) {
+        toast.success("AI agrees with the local detector — no changes.");
+      } else {
+        toast.success(`AI refined ${changed} column${changed === 1 ? "" : "s"}.`);
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "AI assist failed"
+      );
+    } finally {
+      setAiAssistRunning(false);
+    }
+  }, [mappings]);
+
+  const lowConfidenceCount = React.useMemo(
+    () =>
+      mappings.filter(
+        (m) => m.target.kind === "new" && m.detectionConfidence < 0.7
+      ).length,
+    [mappings]
+  );
 
   // ── Import ───────────────────────────────────────────────────────
 
@@ -664,6 +742,28 @@ export function ImportApplicantsDialog({
                   <Badge variant="outline">
                     {mappedFieldCount} field{mappedFieldCount !== 1 ? "s" : ""} mapped
                   </Badge>
+                  {lowConfidenceCount > 0 && (
+                    <Badge variant="warning" className="gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {lowConfidenceCount} uncertain
+                    </Badge>
+                  )}
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 h-7 text-xs"
+                      onClick={handleAiAssist}
+                      disabled={aiAssistRunning}
+                    >
+                      {aiAssistRunning ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5" />
+                      )}
+                      {aiAssistRunning ? "Asking Claude…" : "Refine with AI"}
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Mapping description */}
