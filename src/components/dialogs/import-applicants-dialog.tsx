@@ -13,9 +13,7 @@ import {
   ArrowRight,
   ArrowLeft,
   Info,
-  Plus,
   ChevronDown,
-  X,
   Sparkles,
 } from "lucide-react";
 import {
@@ -31,7 +29,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,7 +139,6 @@ function MappingRow({
   onChange: (updated: ColumnMapping) => void;
 }) {
   const { target } = mapping;
-  const isFixed = target.kind === "name" || target.kind === "email";
   const isNew = target.kind === "new";
 
   // Current selection value for the dropdown

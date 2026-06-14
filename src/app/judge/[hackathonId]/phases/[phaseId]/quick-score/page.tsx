@@ -13,9 +13,9 @@ import {
   Eye,
   FileText,
   Flag,
+  Info,
   Loader2,
   MessageSquare,
-  SkipForward,
   ThumbsDown,
   ThumbsUp,
   Trophy,
@@ -89,7 +89,8 @@ function QuickScoreContent() {
 
   const phase = phaseData?.data;
   const assignments = assignmentsData?.data || [];
-  const existingScores = scoresData?.data || [];
+  // Stable reference — avoids recomputing the score map on every render.
+  const existingScores = React.useMemo(() => scoresData?.data ?? [], [scoresData]);
 
   // Build a map: registrationId -> existing score
   const scoreMap = React.useMemo(() => {
@@ -99,6 +100,14 @@ function QuickScoreContent() {
     }
     return m;
   }, [existingScores]);
+
+  // Field-definition lookup for the grid previews — built ONCE per phase
+  // instead of rebuilt for every applicant card on every render.
+  const registrationFieldMap = React.useMemo(() => {
+    const m = new Map<string, RegistrationField>();
+    for (const f of phase?.registrationFields ?? []) m.set(f.id, f);
+    return m;
+  }, [phase?.registrationFields]);
 
   // ── State ──
   const [viewMode, setViewMode] = React.useState<ViewMode>("grid");
@@ -211,11 +220,20 @@ function QuickScoreContent() {
     | undefined;
   const currentRegId = currentAssignment?.registrationId;
 
+  // Keep a ref to the latest scores so re-initialisation fires only when the
+  // selected applicant (or view) changes — NOT on every background scores
+  // refetch (e.g. on window refocus), which would otherwise overwrite a
+  // judge's in-progress, unsaved scores.
+  const scoreMapRef = React.useRef(scoreMap);
+  React.useEffect(() => {
+    scoreMapRef.current = scoreMap;
+  }, [scoreMap]);
+
   // Initialize scores from existing score when switching assignment
   React.useEffect(() => {
-    if (!currentRegId || !phase || viewMode !== "judging") return;
+    if (!currentRegId || viewMode !== "judging") return;
 
-    const existing = scoreMap.get(currentRegId);
+    const existing = scoreMapRef.current.get(currentRegId);
     if (existing) {
       const scoreObj: Record<string, number> = {};
       const feedbackObj: Record<string, string> = {};
@@ -239,7 +257,7 @@ function QuickScoreContent() {
     setJudgingStep("review");
     setTimerSeconds(0);
     setTimerRunning(true);
-  }, [currentRegId, phase, scoreMap, viewMode]);
+  }, [currentRegId, viewMode]);
 
   // Timer
   React.useEffect(() => {
@@ -612,10 +630,7 @@ function QuickScoreContent() {
                   {}) as Record<string, unknown>;
 
                 // Extract a summary from form_data for the card preview
-                const fieldMap = phase.registrationFields
-                  ? new Map(phase.registrationFields.map((f) => [f.id, f]))
-                  : new Map<string, { label: string; order: number }>();
-                const previewFields = getPreviewFields(formData, fieldMap);
+                const previewFields = getPreviewFields(formData, registrationFieldMap);
 
                 // Resolve display name: team name (team submission) → person name
                 // → project name → form_data → fallback.
@@ -762,13 +777,14 @@ function QuickScoreContent() {
       <main className="min-h-screen bg-background pt-20 pb-16">
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
           {/* Top bar */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <button
               onClick={handleBackToGrid}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to All Applicants
+              <span className="sm:hidden">Back</span>
+              <span className="hidden sm:inline">Back to All Applicants</span>
             </button>
 
             <div className="flex items-center gap-4">
@@ -802,7 +818,7 @@ function QuickScoreContent() {
           </div>
 
           {/* Step indicator */}
-          <div className="flex items-center gap-2 mb-6">
+          <div className="flex flex-wrap items-center gap-2 mb-6">
             <button
               onClick={() => setJudgingStep("review")}
               className={cn(
@@ -845,9 +861,9 @@ function QuickScoreContent() {
                   <Card className="mb-6">
                     <CardContent className="p-6 sm:p-8">
                       {/* Applicant header */}
-                      <div className="flex items-center justify-between mb-6">
-                        <div>
-                          <h2 className="font-display text-lg font-bold">
+                      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+                        <div className="min-w-0">
+                          <h2 className="font-display text-lg font-bold break-words">
                             {applicantName}
                           </h2>
                           <p className="text-sm text-muted-foreground mt-0.5">
@@ -923,9 +939,9 @@ function QuickScoreContent() {
                   <Card className="mb-6">
                     <CardContent className="p-6 sm:p-8">
                       {/* Applicant header */}
-                      <div className="flex items-center justify-between mb-6">
-                        <div>
-                          <h2 className="font-display text-lg font-bold">
+                      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+                        <div className="min-w-0">
+                          <h2 className="font-display text-lg font-bold break-words">
                             {applicantName}
                           </h2>
                           <p className="text-sm text-muted-foreground mt-0.5">
@@ -1077,8 +1093,8 @@ function QuickScoreContent() {
                     </Button>
                   </div>
 
-                  {/* Keyboard shortcuts help */}
-                  <div className="mt-6 text-center">
+                  {/* Keyboard shortcuts help (desktop only) */}
+                  <div className="mt-6 text-center hidden sm:block">
                     <p className="text-xs text-muted-foreground">
                       <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">
                         Enter
@@ -1125,6 +1141,17 @@ function FormDataDisplay({
   blindReview: boolean;
   registrationFields?: RegistrationField[];
 }) {
+  // Build a map of field ID -> field definition for proper labels. Computed
+  // unconditionally, BEFORE the early return below, so the hook order stays
+  // stable across renders (rules of hooks). It only depends on the fields.
+  const fieldMap = React.useMemo(() => {
+    const map = new Map<string, RegistrationField>();
+    for (const f of registrationFields || []) {
+      map.set(f.id, f);
+    }
+    return map;
+  }, [registrationFields]);
+
   if (!registration) {
     return (
       <div className="flex flex-col items-center py-8 text-muted-foreground">
@@ -1135,15 +1162,6 @@ function FormDataDisplay({
   }
 
   const formData = (registration.form_data || {}) as Record<string, unknown>;
-
-  // Build a map of field ID -> field definition for proper labels
-  const fieldMap = React.useMemo(() => {
-    const map = new Map<string, RegistrationField>();
-    for (const f of registrationFields || []) {
-      map.set(f.id, f);
-    }
-    return map;
-  }, [registrationFields]);
 
   // Filter out internal fields (starting with _) and empty values
   // Sort by field definition order if available
@@ -1377,6 +1395,7 @@ function CriteriaSlider({
   const max = criteria.maxScore;
   const scoreValue = value ?? 0;
   const percentage = max > 0 ? (scoreValue / max) * 100 : 0;
+  const [showGuide, setShowGuide] = React.useState(false);
 
   const scoreButtons = Array.from({ length: max + 1 }, (_, i) => i);
 
@@ -1388,16 +1407,21 @@ function CriteriaSlider({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{criteria.name}</p>
+          <p className="text-sm font-medium break-words">{criteria.name}</p>
           {criteria.description && (
-            <p className="text-xs text-muted-foreground truncate">
-              {criteria.description}
-            </p>
+            <button
+              type="button"
+              onClick={() => setShowGuide((v) => !v)}
+              className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Info className="h-3 w-3 shrink-0" />
+              {showGuide ? "Hide scoring guide" : "Scoring guide"}
+            </button>
           )}
         </div>
-        <div className="flex items-center gap-2 ml-4">
+        <div className="flex items-center gap-2 shrink-0">
           {criteria.weight > 0 && (
             <Badge variant="outline" className="text-[10px]">
               {criteria.weight}%
@@ -1416,6 +1440,13 @@ function CriteriaSlider({
           <span className="text-xs text-muted-foreground">/{max}</span>
         </div>
       </div>
+
+      {/* Full scoring rubric (Level 1–3 guidance), collapsed by default */}
+      {showGuide && criteria.description && (
+        <div className="mb-3 rounded-lg border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground whitespace-pre-line">
+          {criteria.description}
+        </div>
+      )}
 
       {/* Score buttons */}
       <div className="flex gap-1.5">
@@ -1564,7 +1595,7 @@ function extractNameFromFormData(
 
 function getPreviewFields(
   formData: Record<string, unknown>,
-  fieldMap: Map<string, { label: string; order: number }>
+  fieldMap: ReadonlyMap<string, { label: string; order: number }>
 ): [string, string, string][] {
   return Object.entries(formData)
     .filter(
