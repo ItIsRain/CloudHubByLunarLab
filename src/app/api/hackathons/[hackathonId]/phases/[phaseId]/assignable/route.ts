@@ -70,6 +70,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       hackathonId,
       hackathon,
       {
+        id: phase.id as string,
         campus_filter: (phase.campus_filter as string | null) ?? null,
         source_phase_ids: (phase.source_phase_ids as string[] | null) ?? null,
       },

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authenticateRequest, assertScope } from "@/lib/api-auth";
 import { UUID_RE } from "@/lib/constants";
@@ -111,7 +110,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Enrich with reviewer data from phase_reviewers (no FK, manual lookup)
     const reviewerIds = [...new Set((assignments || []).map((a) => a.reviewer_id))];
-    let reviewerMap: Record<string, { id: string; user_id: string; name: string; email: string; status: string }> = {};
+    const reviewerMap: Record<string, { id: string; user_id: string; name: string; email: string; status: string }> = {};
     if (reviewerIds.length > 0) {
       const { data: reviewerRows } = await supabase
         .from("phase_reviewers")
@@ -137,7 +136,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }).filter(Boolean)
     )] as string[];
 
-    let profileMap: Record<string, { id: string; name: string; email: string }> = {};
+    const profileMap: Record<string, { id: string; name: string; email: string }> = {};
     if (registrationUserIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
@@ -153,7 +152,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // ── Submission enrichment for submission-mode phases ──
     const isSubmissionMode = (phase as Record<string, unknown>).evaluation_mode === "submission";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let submissionMap: Record<string, any> = {};
+    const submissionMap: Record<string, any> = {};
     // user_id -> their team name. Resolved for ALL views (organizer + reviewer)
     // so team-based phases display the team name instead of a member's name.
     const userTeamNameMap: Record<string, string> = {};
@@ -212,7 +211,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Map to camelCase for the frontend
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let responseData = (assignments || []).map((a) => {
       const reg = normalizeJoin(a.registration);
 
@@ -397,6 +395,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       hackathonId,
       hackathon,
       {
+        id: phase.id as string,
         campus_filter: (phase.campus_filter as string | null) ?? null,
         source_phase_ids: (phase.source_phase_ids as string[] | null) ?? null,
       },

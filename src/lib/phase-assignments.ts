@@ -27,7 +27,7 @@ export async function resolveAssignablePool(
   supabase: SupabaseClient,
   hackathonId: string,
   hackathon: { screening_config?: Record<string, unknown> | null },
-  phase: { campus_filter: string | null; source_phase_ids: string[] | null },
+  phase: { id: string; campus_filter: string | null; source_phase_ids: string[] | null },
   // When the hackathon is team-based, the pool collapses to ONE representative
   // registration per team (the team leader, or any eligible member) so the team
   // is judged as a single unit — one assignment, one score, one decision.
@@ -80,10 +80,14 @@ export async function resolveAssignablePool(
       return { ok: false, status: 500, message: "Failed to verify source phase advancement" };
     }
 
+    // Finalists may be recorded under a source phase (advanced FROM it) OR
+    // directly under THIS phase — the "promote top N / hand-pick into the
+    // final" flow stores phase_finalists under the downstream phase id. Both
+    // count as eligible to be reviewed here.
     const { data: finalists } = await supabase
       .from("phase_finalists")
       .select("registration_id")
-      .in("phase_id", sourcePhaseIds);
+      .in("phase_id", [...sourcePhaseIds, phase.id]);
 
     const advancedRegIds = new Set<string>();
     for (const d of advanceDecisions || []) advancedRegIds.add(d.registration_id as string);
